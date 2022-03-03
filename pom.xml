@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?><project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>org.knime.maven</groupId>
+		<artifactId>ap.parent</artifactId>
+		<version>4.6.0</version>
+	</parent>
+
+	<groupId>org.knime</groupId>
+	<artifactId>conda</artifactId>
+	<version>${revision}${changelist}</version>
+	<packaging>pom</packaging>
+
+	<properties>
+		<revision>4.6.0</revision>
+		<changelist>-SNAPSHOT</changelist>
+		<feature-branch-extension.branchListProperty>git.branch</feature-branch-extension.branchListProperty>
+		<feature-branch-extension.appendArtifactoryProperties>false</feature-branch-extension.appendArtifactoryProperties>
+	</properties>
+
+	<modules>
+		<module>org.knime.conda</module>
+		<module>org.knime.features.conda</module>
+		<module>org.knime.update.conda</module>
+	</modules>
+
+	<!-- List all repositories required for compilation here. The variables are defined in knime-maven-parent/pom.xml. -->
+	<repositories>
+		<repository>
+			<id>p2-knime-core</id>
+			<layout>p2</layout>
+			<url>${knime.core.p2}</url>
+		</repository>
+		<repository>
+			<id>p2-knime-shared</id>
+			<layout>p2</layout>
+			<url>${knime.shared.p2}</url>
+		</repository>
+		<repository>
+			<id>p2-knime-tp</id>
+			<layout>p2</layout>
+			<url>${knime.tp.p2}</url>
+		</repository>
+	</repositories>
+
+</project><!-- vim: set shiftwidth=4 expandtab smarttab: -->

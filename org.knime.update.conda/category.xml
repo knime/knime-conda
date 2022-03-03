@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<site>
+   <feature id="org.knime.features.conda" version="0.0.0">
+       <category name="knime-conda" />
+   </feature>
+   <feature id="org.knime.features.conda.source" version="0.0.0">
+       <category name="knime-conda" />
+   </feature>
+
+   <category-def name="knime-conda" label="Build artifacts from knime-conda">
+       <description>Build artifacts from knime-conda</description>
+   </category-def>
+</site>

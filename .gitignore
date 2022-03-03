@@ -1,0 +1,5 @@
+**/bin/
+**/target/
+**/build/
+**/.flattened-pom.xml
+**/CHANGELOG.md

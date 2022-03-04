@@ -48,8 +48,6 @@
  */
 package org.knime.conda;
 
-import static org.knime.conda.CondaEnvironmentChangeNotifier.notifyEnvironmentCreated;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -62,17 +60,21 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.SystemUtils;
+import org.knime.conda.Conda.CondaEnvironmentChangeListener.ChangeEvent;
 import org.knime.core.node.NodeLogger;
 import org.knime.core.util.FileUtil;
+import org.knime.core.util.PathUtils;
 import org.knime.core.util.Version;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -80,8 +82,6 @@ import org.yaml.snakeyaml.Yaml;
 import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-
-// TODO(benjamin) use CondaException everywhere?!
 
 /**
  * Interface to an external Conda installation.
@@ -97,6 +97,8 @@ public final class Conda {
      */
     public static final String ROOT_ENVIRONMENT_NAME = "base";
 
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(Conda.class);
+
     private static final Version CONDA_MINIMUM_VERSION = new Version(4, 6, 2);
 
     private static final Version CONDA_ENV_EXPORT_FROM_HISTORY_MINIMUM_VERSION = new Version(4, 7, 12);
@@ -108,6 +110,8 @@ public final class Conda {
     private static final Pattern CHANNEL_SEPARATOR = Pattern.compile("::");
 
     private static final Pattern VERSION_BUILD_SEPARATOR = Pattern.compile("=");
+
+    private static final Set<CondaEnvironmentChangeListener> ENV_CHANGE_LISTENERS = new HashSet<>();
 
     /**
      * Converts a version string of the form "conda &ltmajor&gt.&ltminor&gt.&ltmicro&gt" into a {@link Version} object.
@@ -122,6 +126,63 @@ public final class Conda {
             return new Version(condaVersionString);
         } catch (final Exception ex) {
             throw new IllegalArgumentException(ex.getMessage(), ex);
+        }
+    }
+
+    /**
+     * Register an {@link CondaEnvironmentChangeListener} that is notified if a conda environment has changed.
+     *
+     * @param listener
+     */
+    public static synchronized void registerEnvironmentChangeListener(final CondaEnvironmentChangeListener listener) {
+        ENV_CHANGE_LISTENERS.add(listener);
+    }
+
+    /**
+     * Remove an {@link CondaEnvironmentChangeListener} that was registered with
+     * {@link #registerEnvironmentChangeListener(CondaEnvironmentChangeListener)} before.
+     *
+     * @param listener
+     */
+    public static synchronized void removeEnvironmentChangeListener(final CondaEnvironmentChangeListener listener) {
+        ENV_CHANGE_LISTENERS.remove(listener);
+    }
+
+    /** Notify the listeners that the environment has changed */
+    private static void notifyEnvironmentChanged(final ChangeEvent event) {
+        for (var l : ENV_CHANGE_LISTENERS) {
+            l.environmentChanged(event);
+        }
+    }
+
+    /** The interface for a listener that is notified if environments are deleted or overwritten. */
+    @FunctionalInterface
+    public static interface CondaEnvironmentChangeListener {
+
+        /**
+         * Called if the environment with the given name has been changed by any instance of the {@link Conda} class.
+         * This means that the environment has been overwritten, deleted or the packages in the environment changed.
+         *
+         * @param event a {@link ChangeEvent} object that describes the change of a Conda environment
+         */
+        void environmentChanged(final ChangeEvent event);
+
+        /** An event describing the change of a Conda environment. */
+        public static class ChangeEvent {
+
+            // NB: We could add attributes to the change event if we
+            // want to describe the change better in the future.
+
+            private final String m_envName;
+
+            private ChangeEvent(final String envName) {
+                m_envName = envName;
+            }
+
+            /** @return the name of the environment that was changed */
+            public String getEnvName() {
+                return m_envName;
+            }
         }
     }
 
@@ -234,7 +295,7 @@ public final class Conda {
         }
         try {
             if (!executablePath.toFile().exists()) {
-                NodeLogger.getLogger(Conda.class)
+                LOGGER
                     .debug("Specified Conda executable at '" + executablePath.toFile().getPath() + "' does not exist.");
                 throw new IOException("The given path does not point to a valid Conda installation.\nPlease point to "
                     + "the root directory of your local Conda installation.");
@@ -276,8 +337,8 @@ public final class Conda {
             version = condaVersionStringToVersion(versionString);
         } catch (final Exception ex) {
             // Skip test if we can't identify version.
-            NodeLogger.getLogger(Conda.class).warn("Could not detect installed Conda version. Please note that a "
-                + "minimum version of " + CONDA_MINIMUM_VERSION + " is required.", ex);
+            LOGGER.warn("Could not detect installed Conda version. Please note that a " + "minimum version of "
+                + CONDA_MINIMUM_VERSION + " is required.", ex);
             return;
         }
         if (version.compareTo(CONDA_MINIMUM_VERSION) < 0) {
@@ -407,7 +468,7 @@ public final class Conda {
             final Version version = condaVersionStringToVersion(versionString);
             return version.compareTo(CONDA_ENV_EXPORT_FROM_HISTORY_MINIMUM_VERSION) >= 0;
         } catch (final Exception ex) {
-            NodeLogger.getLogger(Conda.class).debug("Could not detect installed Conda version.", ex);
+            LOGGER.debug("Could not detect installed Conda version.", ex);
             return false;
         }
     }
@@ -464,25 +525,18 @@ public final class Conda {
             createEnvironmentFromFile(pathToFile, environmentName, false, monitor);
         } catch (IOException ex) {
             failure = ex;
-        } catch (CondaCanceledExecutionException ex) {
-            // TODO(benjamin) the environmentName can be null or empty
-            notifyEnvironmentCreated(new CondaEnvironmentIdentifier(environmentName, null), false, false);
-            throw ex;
         }
-        // Check if environment creation was successful. Fail if not.
 
+        // Check if environment creation was successful. Fail if not.
         final List<CondaEnvironmentIdentifier> environments = getEnvironments();
         for (final CondaEnvironmentIdentifier environment : environments) {
             if (Objects.equals(environmentName, environment.getName())) {
-                notifyEnvironmentCreated(environment, false, true);
                 return environment;
             }
         }
         if (failure == null) {
             failure = new IOException("Failed to create Conda environment.");
         }
-        // TODO(benjamin) the environmentName can be null or empty
-        notifyEnvironmentCreated(new CondaEnvironmentIdentifier(environmentName, null), false, false);
         throw failure;
     }
 
@@ -547,12 +601,20 @@ public final class Conda {
             yaml.dump(entries, writer);
         }
 
-        createEnvironmentFromFile(environmentFile.getPath(), null, true, monitor);
+        try {
+            createEnvironmentFromFile(environmentFile.getPath(), null, true, monitor);
+        } finally {
+            // Notify listeners that the environment has changed
+            notifyEnvironmentChanged(new ChangeEvent(environmentName));
+        }
         return environmentFile;
     }
 
     /**
      * {@code conda env create --file <pathToFile> [--name <optionalEnvironmentName>] [--force]}
+     * </p>
+     * NOTE: This method does not call {@link #notifyEnvironmentChanged(String)}. Please call it afterwards if an
+     * environment was changed.
      */
     private void createEnvironmentFromFile(final String pathToFile, final String optionalEnvironmentName,
         final boolean overwriteExistingEnvironment, final CondaEnvironmentCreationMonitor monitor)
@@ -566,31 +628,51 @@ public final class Conda {
             arguments.add("--force");
         }
         arguments.add(JSON);
-        try {
-            callCondaAndMonitorExecution(monitor, arguments.toArray(new String[0]));
-            // TODO(benjamin) environment identifier?
-            notifyEnvironmentCreated(null, overwriteExistingEnvironment, true);
-        } catch (IOException|CondaCanceledExecutionException ex) {
-            // TODO(benjamin) environment identifier?
-            notifyEnvironmentCreated(null, overwriteExistingEnvironment, false);
-            throw ex;
-        }
+        callCondaAndMonitorExecution(monitor, arguments.toArray(new String[0]));
     }
 
     /**
      * Delete the conda environment with the given name. E.g. {@code conda env remove -n <name>}. The operation will not
-     * be canceled if the thread is interrupted.
+     * be canceled if the thread is interrupted. After the conda command the directory on the file system will be
+     * deleted if it still exists.
      *
      * @param environmentName the name of the environment
      * @throws IOException if running the command failed.
      */
     public void deleteEnvironment(final String environmentName) throws IOException {
-        callCondaAndAwaitTermination(new CondaExecutionMonitor() {
-            @Override
-            protected synchronized boolean isCanceledOrInterrupted() {
-                return false;
+        try {
+            try {
+                // Try the correct way: call conda env remove -n <env_name>
+                callCondaAndAwaitTermination(new CondaExecutionMonitor() {
+                    @Override
+                    protected synchronized boolean isCanceledOrInterrupted() {
+                        return false;
+                    }
+                }, "env", "remove", "-n", environmentName);
+            } catch (final Exception ex) {
+                LOGGER.warn("Could not delete the incomplete environment using 'conda env remove -n <env_name>'. "
+                    + "The environment will still be deleted by deleting the directory.", ex);
+            } finally {
+                // Try deleting the directory of the environment (on Windows it still exists after conda env remove)
+                // Note: Using the first value of the envs_dirs list is correct:
+                //
+                // $ conda config --describe envs_dirs                                                                                                                                                                                               (bug/AP-16688-conda-cleanup-after-cancel-on-windows *$)
+                // # # envs_dirs (sequence: primitive)
+                // # #   aliases: envs_path
+                // # #   env var string delimiter: ':'
+                // # #   The list of directories to search for named environments. When
+                // # #   creating a new named environment, the environment will be placed in
+                // # #   the first writable location.
+                // # #
+                // # envs_dirs: []
+
+                final var envPath = Path.of(getEnvsDirs().get(0), environmentName);
+                PathUtils.deleteDirectoryIfExists(envPath);
             }
-        }, "env", "remove", "-n", environmentName);
+        } finally {
+            // After everything: Notify that the environment has changed
+            notifyEnvironmentChanged(new ChangeEvent(environmentName));
+        }
     }
 
     /**

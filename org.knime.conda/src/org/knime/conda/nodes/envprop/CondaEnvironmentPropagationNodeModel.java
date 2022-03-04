@@ -344,16 +344,6 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
                 } catch (final CondaCanceledExecutionException ex) {
                     handleCanceledEnvCreation(conda, environmentName, envBackup);
                     throw ex;
-                } finally {
-                    // If a new environment has been created (either overwriting an existing environment or
-                    // "overwriting" a previously non-existent environment), the entries in the kernel queue that
-                    // reference the old environment are rendered obsolete and therefore need to be invalidated. The
-                    // same is true in case the environment creation failed, which likely leaves the environment in a
-                    // corrupt state and also needs to be reflected by the queue.
-                    // Unfortunately, clearing only the entries of the queue that reference the old environment is not
-                    // straightforwardly done in the queue's current implementation, therefore we need to clear the
-                    // entire queue for now.
-                    PythonKernelQueue.clear();
                 }
             }
         }
@@ -485,30 +475,9 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
         // here to override the original cause of why the environment creation was terminated. So only log them and let
         // the node report the original cause to the runtime.
 
-        // Try the correct way: call conda env remove -n <env_name>
+        // Delete the environment
         try {
             conda.deleteEnvironment(environmentName);
-        } catch (final Exception ex) { // NOSONAR See above.
-            LOGGER.warn("Could not delete the incomplete environment using 'conda env remove -n <env_name>'. "
-                + "The environment will still be deleted by deleting the directory.", ex);
-        }
-
-        // Try deleting the directory of the environment (on Windows it still exists after conda env remove)
-        try {
-            // Note: Using the first value of the envs_dirs list is correct:
-            //
-            // $ conda config --describe envs_dirs                                                                                                                                                                                               (bug/AP-16688-conda-cleanup-after-cancel-on-windows *$)
-            // # # envs_dirs (sequence: primitive)
-            // # #   aliases: envs_path
-            // # #   env var string delimiter: ':'
-            // # #   The list of directories to search for named environments. When
-            // # #   creating a new named environment, the environment will be placed in
-            // # #   the first writable location.
-            // # #
-            // # envs_dirs: []
-
-            final var envPath = Path.of(conda.getEnvsDirs().get(0), environmentName);
-            PathUtils.deleteDirectoryIfExists(envPath);
         } catch (final Exception ex) { // NOSONAR See above.
             LOGGER.warn("Deleting the environment directory failed.", ex);
         }

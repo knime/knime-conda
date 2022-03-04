@@ -72,6 +72,7 @@ import org.knime.conda.CondaEnvironmentPropagation.CondaEnvironmentSpec;
 import org.knime.conda.CondaEnvironmentPropagation.CondaEnvironmentType;
 import org.knime.conda.CondaPackageSpec;
 import org.knime.conda.nodes.envprop.CondaEnvironmentPropagationNodeFactory.DefaultCondaEnvironmentSelector;
+import org.knime.conda.prefs.CondaPreferences;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.ExecutionMonitor;
@@ -91,7 +92,6 @@ import org.knime.core.node.port.flowvariable.FlowVariablePortObjectSpec;
 import org.knime.core.node.workflow.NodeContext;
 import org.knime.core.util.Pair;
 import org.knime.core.util.PathUtils;
-import org.knime.python2.prefs.PythonPreferences;
 
 /**
  * @author Marcel Wiedenmann, KNIME GmbH, Konstanz, Germany
@@ -514,7 +514,7 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
     }
 
     static Conda createConda() throws InvalidSettingsException {
-        final String condaInstallationPath = PythonPreferences.getCondaInstallationPath();
+        final var condaInstallationPath = CondaPreferences.getCondaInstallationDirectory();
         try {
             return new Conda(condaInstallationPath, false);
         } catch (final IOException ex) {

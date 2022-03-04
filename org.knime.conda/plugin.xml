@@ -29,4 +29,19 @@
             extension="org.knime.conda.CondaEnvironmentPropagation$CondaEnvironmentType$CondaEnvironmentTypeExtension">
       </VariableType>
    </extension>
+   <extension
+         point="org.eclipse.ui.preferencePages">
+      <page
+            category="org.knime.workbench.ui.preferences"
+            class="org.knime.conda.prefs.CondaPreferencePage"
+            id="org.knime.conda.CondaPreferencePage"
+            name="Conda">
+      </page>
+   </extension>
+   <extension
+         point="org.eclipse.core.runtime.preferences">
+      <initializer
+            class="org.knime.conda.prefs.CondaPreferenceInitializer">
+      </initializer>
+   </extension>
 </plugin>

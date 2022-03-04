@@ -71,6 +71,7 @@ import org.knime.conda.CondaEnvironmentPropagation;
 import org.knime.conda.CondaEnvironmentPropagation.CondaEnvironmentSpec;
 import org.knime.conda.CondaEnvironmentPropagation.CondaEnvironmentType;
 import org.knime.conda.CondaPackageSpec;
+import org.knime.conda.nodes.envprop.CondaEnvironmentPropagationNodeFactory.DefaultCondaEnvironmentSelector;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.ExecutionMonitor;
@@ -90,8 +91,6 @@ import org.knime.core.node.port.flowvariable.FlowVariablePortObjectSpec;
 import org.knime.core.node.workflow.NodeContext;
 import org.knime.core.util.Pair;
 import org.knime.core.util.PathUtils;
-import org.knime.python2.PythonVersion;
-import org.knime.python2.kernel.PythonKernelQueue;
 import org.knime.python2.prefs.PythonPreferences;
 
 /**
@@ -127,6 +126,8 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
      * Lazily populated upon the first execution of an instance of this class.
      */
     private static /* final */ PlatformCondaPackageFilter platformPackageFilter;
+
+    static final List<DefaultCondaEnvironmentSelector> DEFAULT_ENV_SELECTORS = new ArrayList<>(1);
 
     static SettingsModelString createCondaEnvironmentNameModel() {
         return new SettingsModelString(CFG_KEY_CONDA_ENV, CondaEnvironmentIdentifier.PLACEHOLDER_CONDA_ENV.getName());
@@ -274,27 +275,9 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
      */
     private void autoConfigureOnSourceMachine(final Conda conda, final List<CondaEnvironmentIdentifier> environments)
         throws InvalidSettingsException {
-        final PythonVersion pythonVersion = PythonPreferences.getPythonVersionPreference();
-        final String environmentDirectory = pythonVersion == PythonVersion.PYTHON2 //
-            ? PythonPreferences.getPython2CondaEnvironmentDirectoryPath() //
-            : PythonPreferences.getPython3CondaEnvironmentDirectoryPath();
-        if (CondaEnvironmentIdentifier.PLACEHOLDER_CONDA_ENV.getDirectoryPath().equals(environmentDirectory)) {
-            throw new InvalidSettingsException("Please make sure Conda is properly configured in the Preferences "
-                + "of the KNIME Python Integration.\nThen select the Conda environment to propagate via the "
-                + "configuration dialog of this node.");
-        }
 
-        final Optional<String> environmentNameOpt = environments.stream() //
-            .filter(e -> e.getDirectoryPath().equals(environmentDirectory)) //
-            .map(CondaEnvironmentIdentifier::getName) //
-            .findFirst();
-        final String environmentName;
-        if (environmentNameOpt.isPresent()) {
-            environmentName = environmentNameOpt.get();
-        } else if (!environments.isEmpty()) {
-            // Environment selected in the Preferences does not exist anymore, default to first environment in the list.
-            environmentName = environments.get(0).getName();
-        } else {
+        // Check if an environment is available at all
+        if (environments.isEmpty()) {
             throw new InvalidSettingsException("No Conda environment available for propagation." //
                 + "\nNote that Conda's \"" + Conda.ROOT_ENVIRONMENT_NAME + "\" environment cannot be propagated "
                 + "because it is not allowed to be overwritten." //
@@ -302,6 +285,22 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
                 + "\nPlease create at least one additional Conda environment before using this node." //
                 + "\nThen select the environment to propagate via the configuration dialog of the node.");
         }
+
+        // Loop over the DEFAULT_ENV_SELECTORS and let them select the default
+        String environmentName = null;
+        for (int i = 0; i < DEFAULT_ENV_SELECTORS.size() && environmentName == null; i++) {
+            final Optional<CondaEnvironmentIdentifier> selectedEnv =
+                DEFAULT_ENV_SELECTORS.get(i).selectDefaultEnvironment(environments);
+            if (selectedEnv.isPresent()) {
+                environmentName = selectedEnv.get().getName();
+            }
+        }
+
+        // If no default environment selected: Default to first environment in the list
+        if (environmentName == null) {
+            environmentName = environments.get(0).getName();
+        }
+
         m_environmentNameModel.setStringValue(environmentName);
 
         List<CondaPackageSpec> packages;

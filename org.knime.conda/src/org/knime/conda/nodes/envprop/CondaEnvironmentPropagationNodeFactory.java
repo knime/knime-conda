@@ -47,6 +47,10 @@
  */
 package org.knime.conda.nodes.envprop;
 
+import java.util.List;
+import java.util.Optional;
+
+import org.knime.conda.CondaEnvironmentIdentifier;
 import org.knime.core.node.NodeDialogPane;
 import org.knime.core.node.NodeFactory;
 import org.knime.core.node.NodeView;
@@ -55,6 +59,30 @@ import org.knime.core.node.NodeView;
  * @author Marcel Wiedenmann, KNIME GmbH, Konstanz, Germany
  */
 public final class CondaEnvironmentPropagationNodeFactory extends NodeFactory<CondaEnvironmentPropagationNodeModel> {
+
+    /** Provides a function to select an default environment from a list of environments. */
+    @FunctionalInterface
+    public interface DefaultCondaEnvironmentSelector {
+        /**
+         * Select a default environment from a list of environments. The default environment will be selected by default
+         * in the Conda Environment Propagation node.
+         *
+         * @param environments the list of all selectable environments
+         * @return the environment to select by default or {@code Optional#empty()} if no environment fits
+         */
+        Optional<CondaEnvironmentIdentifier> selectDefaultEnvironment(List<CondaEnvironmentIdentifier> environments);
+    }
+
+    /**
+     * Add a default environment selector. The default environment will be selected by default when opening the dialog
+     * of the Conda Environment Propagation node. Note that the selectors will be considered in the order in which they
+     * are added.
+     *
+     * @param selector a {@link DefaultCondaEnvironmentSelector}
+     */
+    public static void addDefaultCondaEnvironmentSelector(final DefaultCondaEnvironmentSelector selector) {
+        CondaEnvironmentPropagationNodeModel.DEFAULT_ENV_SELECTORS.add(selector);
+    }
 
     @Override
     public CondaEnvironmentPropagationNodeModel createNodeModel() {

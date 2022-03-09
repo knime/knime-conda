@@ -72,6 +72,7 @@ import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.SystemUtils;
 import org.knime.conda.Conda.CondaEnvironmentChangeListener.ChangeEvent;
+import org.knime.conda.prefs.CondaPreferences;
 import org.knime.core.node.NodeLogger;
 import org.knime.core.util.FileUtil;
 import org.knime.core.util.PathUtils;
@@ -195,6 +196,33 @@ public final class Conda {
      * Lazily initialized by {@link #getEnvironments()}.
      */
     private String m_rootPrefix = null;
+
+    /**
+     * Creates an interface to the Conda installation configured on the Conda preference page. Tests the validity and
+     * the functioning of the installation, and throws an {@link IOException} if either of the tests fails.
+     *
+     * @throws IOException If the configured directory does not point to a valid and functioning Conda installation.
+     *             This includes cases where the configured directory or any relevant files within that directory cannot
+     *             be read (and/or possibly executed) by this application.
+     */
+    public Conda() throws IOException {
+        this(true);
+    }
+
+    /**
+     * Creates an interface to the Conda installation configured on the Conda preference page. Optionally, tests the
+     * functioning of the installation. Throws an {@link IOException} if either of the tests fails. Performing the
+     * functionality test is recommended but can be omitted for performance reasons in cases where the functioning of
+     * the installation is known a priori or not strictly required at construction time of this instance.
+     *
+     * @param testInstallation Whether to the test the functioning of the installation.
+     * @throws IOException If the configured directory does not point to a valid and functioning Conda installation.
+     *             This includes cases where the configured directory or any relevant files within that directory cannot
+     *             be read (and/or possibly executed) by this application.
+     */
+    public Conda(final boolean testInstallation) throws IOException {
+        this(CondaPreferences.getCondaInstallationDirectory(), testInstallation);
+    }
 
     /**
      * Creates an interface to the given Conda installation. Tests the validity of the given path and the functioning of

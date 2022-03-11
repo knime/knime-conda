@@ -39,6 +39,11 @@
 			<url>${knime.shared.p2}</url>
 		</repository>
 		<repository>
+			<id>p2-knime-workbench</id>
+			<layout>p2</layout>
+			<url>${knime.workbench.p2}</url>
+		</repository>
+		<repository>
 			<id>p2-knime-tp</id>
 			<layout>p2</layout>
 			<url>${knime.tp.p2}</url>

@@ -72,8 +72,6 @@ public final class CondaPreferences {
 
     private static final String CONDA_BUNDLE_NAME = FrameworkUtil.getBundle(CondaPreferences.class).getSymbolicName();
 
-    private static final IEclipsePreferences INSTANCE_SCOPE_PREFS = InstanceScope.INSTANCE.getNode(CONDA_BUNDLE_NAME);
-
     static final ScopedPreferenceStore PREF_STORE =
         new ScopedPreferenceStore(InstanceScope.INSTANCE, CONDA_BUNDLE_NAME);
 
@@ -87,7 +85,7 @@ public final class CondaPreferences {
      */
     public static String getCondaInstallationDirectory() {
         // Return the instance scope preference if present
-        String condaDir = INSTANCE_SCOPE_PREFS.get(CONDA_DIR_PREF_KEY, null);
+        String condaDir = instanceScopePrefs().get(CONDA_DIR_PREF_KEY, null);
         if (condaDir != null) {
             return condaDir;
         }
@@ -153,6 +151,11 @@ public final class CondaPreferences {
         return condaVersionString;
     }
 
+    /** Get the instance scope preferences for org.knime.conda (will not default to default prefs like PREF_STORE) */
+    private static IEclipsePreferences instanceScopePrefs() {
+        return InstanceScope.INSTANCE.getNode(CONDA_BUNDLE_NAME);
+    }
+
     /** Copy the Conda installation dir from the Python instance preferences if necessary */
     private static void copyCondaPrefFromPython() {
         // CASES:
@@ -160,7 +163,8 @@ public final class CondaPreferences {
         // Configured in Python prefs: Copy to Conda prefs
         // Not configured anywhere: Do noting
 
-        final String condaDirCondaInstance = INSTANCE_SCOPE_PREFS.get(CONDA_DIR_PREF_KEY, null);
+        final IEclipsePreferences condaInstancePrefs = instanceScopePrefs();
+        final String condaDirCondaInstance = condaInstancePrefs.get(CONDA_DIR_PREF_KEY, null);
         if (condaDirCondaInstance != null) {
             return;
         }
@@ -170,14 +174,14 @@ public final class CondaPreferences {
         final String condaDirPythonInstance = pythonInstancePrefs.get(CONDA_DIR_PREF_KEY, null);
         if (condaDirPythonInstance != null) {
             // Use the conda dir from the Python preferences
-            INSTANCE_SCOPE_PREFS.put(CONDA_DIR_PREF_KEY, condaDirPythonInstance);
+            condaInstancePrefs.put(CONDA_DIR_PREF_KEY, condaDirPythonInstance);
             NodeLogger.getLogger(CondaPreferences.class)
                 .info("Copied the path to the conda installation from the Python preferences. Using '"
                     + condaDirPythonInstance + "'.");
 
             // Flush the preference store
             try {
-                INSTANCE_SCOPE_PREFS.flush();
+                condaInstancePrefs.flush();
             } catch (final BackingStoreException ex) {
                 NodeLogger.getLogger(CondaPreferences.class)
                     .warn("Failed to flush the conda preferences with the updated path to conda installation.", ex);

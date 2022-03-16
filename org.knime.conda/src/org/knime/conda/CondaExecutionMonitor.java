@@ -68,7 +68,6 @@ import java.util.function.Function;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.KNIMEConstants;
 import org.knime.core.node.NodeLogger;
-import org.knime.core.util.ThreadPool;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParseException;
@@ -87,34 +86,27 @@ class CondaExecutionMonitor {
 
     void monitorExecution(final Process conda, final boolean hasJsonOutput)
         throws CondaCanceledExecutionException, IOException {
-        Future<?> outputListener = null;
-        Future<?> errorListener = null;
+        final var outputListener = new Thread(() -> parseOutputStream(conda.getInputStream(), hasJsonOutput));
+        final var errorListener = new Thread(() -> parseErrorStream(conda.getErrorStream()));
         try {
-            final ThreadPool pool = KNIMEConstants.GLOBAL_THREAD_POOL;
-            outputListener = pool.enqueue(() -> parseOutputStream(conda.getInputStream(), hasJsonOutput));
-            errorListener = pool.enqueue(() -> parseErrorStream(conda.getErrorStream()));
+            outputListener.start();
+            errorListener.start();
             final int condaExitCode = awaitTermination(conda, this);
             if (condaExitCode != 0) {
                 // Wait for listeners to finish consuming their streams before creating the error message.
                 try {
-                    outputListener.get();
-                    errorListener.get();
+                    outputListener.join();
+                    errorListener.join();
                 } catch (final InterruptedException ex) {
                     Thread.currentThread().interrupt();
                     throw new CondaCanceledExecutionException(ex);
-                } catch (final ExecutionException ex) { // NOSONAR Errors are recorded elsewhere. Nothing to add here.
-                    // Ignore, use whatever error-related output we have so far.
                 }
                 final String errorMessage = createErrorMessage(condaExitCode);
                 throw new IOException(errorMessage);
             }
         } finally {
-            if (outputListener != null) {
-                outputListener.cancel(true);
-            }
-            if (errorListener != null) {
-                errorListener.cancel(true);
-            }
+            outputListener.interrupt();
+            errorListener.interrupt();
         }
     }
 

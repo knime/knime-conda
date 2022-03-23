@@ -1,4 +1,5 @@
-**/bin/
+*.class
+.DS_Store
 **/target/
 **/build/
 **/.flattened-pom.xml

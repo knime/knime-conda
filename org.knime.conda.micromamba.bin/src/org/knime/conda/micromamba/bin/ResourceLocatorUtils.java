@@ -56,6 +56,7 @@ import org.osgi.framework.FrameworkUtil;
 
 /**
  * Utilities to get the path for a resource inside a bundle
+ * 
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  */
 public final class ResourceLocatorUtils {
@@ -63,10 +64,10 @@ public final class ResourceLocatorUtils {
 	}
 
 	/**
-	 * Resolves the location of the given resource inside the base directory of the given
-	 * class's containing bundle. Returns the resolved absolute path.
+	 * Resolves the location of the given resource inside the base directory of the given class's containing bundle.
+	 * Returns the resolved absolute path.
 	 *
-	 * @param clazz The class within whose bundle the resource is located 
+	 * @param clazz The class within whose bundle the resource is located
 	 * @param resourcePath The relative path of the source code directory.
 	 * @return The absolute path to the resource
 	 */
@@ -76,15 +77,16 @@ public final class ResourceLocatorUtils {
 
 			final var url = FileLocator
 					.toFileURL(FileLocator.find(bundle, new org.eclipse.core.runtime.Path(resourcePath), null));
-			
+
 			try {
 				return Paths.get(url.toURI());
 			} catch (URISyntaxException e) {
 				throw new IOException(e);
 			}
 		} catch (IOException ex) {
-			throw new IllegalStateException("Failed to resolve Python source code directory '" + resourcePath
-					+ "' of the bundle of class '" + clazz + "'.", ex);
+			throw new IllegalStateException(
+					String.format("Failed to resolve resource '%s' of the bundle of clas '%s'.", resourcePath, clazz),
+					ex);
 		}
 	}
 }

@@ -54,7 +54,12 @@ import java.nio.file.Path;
  * 
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  */
-public class MicromambaPath {
+public final class MicromambaPath {
+	
+	private MicromambaPath() {
+		
+	}
+	
 	private static String getExtensionForCurrentOS() {
 		String osName = System.getProperty("os.name");
 		if (osName.startsWith("Windows")) {

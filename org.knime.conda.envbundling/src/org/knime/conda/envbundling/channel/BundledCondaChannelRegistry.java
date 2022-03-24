@@ -46,7 +46,7 @@
  * History
  *   Mar 21, 2022 (benjamin): created
  */
-package org.knime.conda.envbundling;
+package org.knime.conda.envbundling.channel;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -60,6 +60,7 @@ import org.eclipse.core.runtime.IExtension;
 import org.eclipse.core.runtime.IExtensionPoint;
 import org.eclipse.core.runtime.IExtensionRegistry;
 import org.eclipse.core.runtime.Platform;
+import org.knime.conda.envbundling.CondaEnvironmentBundlingUtils;
 import org.knime.core.node.NodeLogger;
 import org.osgi.framework.Bundle;
 

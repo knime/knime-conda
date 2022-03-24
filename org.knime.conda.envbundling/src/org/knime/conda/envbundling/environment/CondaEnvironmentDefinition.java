@@ -46,7 +46,7 @@
  * History
  *   Mar 21, 2022 (benjamin): created
  */
-package org.knime.conda.envbundling;
+package org.knime.conda.envbundling.environment;
 
 /**
  * Definition of a Conda environment consisting of a name ({@link #getName()}) and a path to a specification file

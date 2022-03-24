@@ -60,7 +60,7 @@ import org.osgi.framework.Bundle;
  *
  * @author Benjamin Wilhelm, KNIME GmbH, Konstanz, Germany
  */
-final class CondaEnvironmentBundlingUtils {
+public final class CondaEnvironmentBundlingUtils {
 
     private CondaEnvironmentBundlingUtils() {
     }
@@ -73,7 +73,7 @@ final class CondaEnvironmentBundlingUtils {
      * @return the absolute, normalized, local path to the file
      * @throws IOException if resolving the path failed
      */
-    static String getAbsolutePath(final Bundle bundle, final String path) throws IOException {
+    public static String getAbsolutePath(final Bundle bundle, final String path) throws IOException {
         return getAbsolutePath(bundle, new Path(path));
     }
 

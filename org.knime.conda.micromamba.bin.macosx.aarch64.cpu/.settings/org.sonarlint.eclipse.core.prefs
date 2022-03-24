@@ -1,0 +1,6 @@
+autoEnabled=true
+eclipse.preferences.version=1
+idePrefixKey=
+projectKey=org.knime\:knime-conda
+serverId=sonar.knime.com
+sqPrefixKey=org.knime.conda.micromamba.bin.macosx.aarch64.cpu

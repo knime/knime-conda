@@ -56,10 +56,10 @@ import org.osgi.framework.FrameworkUtil;
 
 /**
  * Utilities to get the path for a resource inside a bundle
- * 
+ *
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  */
-public final class ResourceLocatorUtils {
+final class ResourceLocatorUtils {
 	private ResourceLocatorUtils() {
 	}
 

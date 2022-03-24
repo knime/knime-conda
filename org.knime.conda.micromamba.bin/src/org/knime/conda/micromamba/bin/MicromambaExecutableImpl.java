@@ -43,49 +43,36 @@
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
  *
- * History
- *   Feb 3, 2022 (Carsten Haubold, KNIME GmbH, Konstanz, Germany): created
  */
-package org.knime.conda.bin;
+package org.knime.conda.micromamba.bin;
 
-import java.io.IOException;
 import java.nio.file.Path;
 
+import org.knime.conda.micromamba.bin.MicromambaPath;
+
 /**
- * Interface for conda executables that can be used for bundling
- *
+ * The micromamba executable to use for bundling. This is the only implementation of a conda executable we have right
+ * now. To prevent cyclic dependency between the two plugins - needing interface on the implementation side and the
+ * implementation on this side, we put the implementation here instead of in the micromamba package, as we only need a
+ * path from the micromamba.bin plugin.
+ * 
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  */
-public interface CondaExecutable {
-	/**
-	 * Get the {@link Path} to this conda executable
-	 *
-	 * @return The {@link Path} to the conda executable
-	 */
-	Path getPath();
+final class MicromambaExecutableImpl implements MicromambaExecutable {
 
 	/**
-	 * Get the one and only {@link CondaExecutable} to use for KNIME bundled conda environments.
-	 *
-	 * @return the {@link CondaExecutable}
+	 * The singleton instance of the {@link MicromambaExecutableImpl}
 	 */
-	public static CondaExecutable getInstance() {
-		return MicromambaExecutable.INSTANCE;
+	static final MicromambaExecutableImpl INSTANCE = new MicromambaExecutableImpl();
+	
+	private final Path m_path;
+
+	private MicromambaExecutableImpl() {
+		m_path = MicromambaPath.getPath();
 	}
 
-	/**
-	 * Try to run this conda executable.
-	 * 
-	 * @throws IOException if the executable cannot be run
-	 */
-	default void checkExecution() throws IOException {
-		Process p = new ProcessBuilder(getPath().toString(), "--version").start();
-		try {
-			if (p.waitFor() != 0)
-				throw new IOException("Execution check of registered conda executable " + getPath() + " failed");
-		} catch (InterruptedException e) {
-			final var msg = "Got interrupted while checking Conda executable";
-			throw new IOException(msg, e);
-		}
+	@Override
+	public Path getPath() {
+		return m_path;
 	}
 }

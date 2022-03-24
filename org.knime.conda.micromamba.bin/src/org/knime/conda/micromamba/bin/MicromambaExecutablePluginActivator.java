@@ -44,32 +44,42 @@
  * ---------------------------------------------------------------------
  *
  */
-package org.knime.conda.bin;
+package org.knime.conda.micromamba.bin;
 
-import java.nio.file.Path;
+import java.io.IOException;
 
-import org.knime.conda.micromamba.bin.MicromambaPath;
+import org.eclipse.core.runtime.Plugin;
+import org.knime.core.node.NodeLogger;
+import org.osgi.framework.BundleContext;
 
 /**
- * The micromamba executable to use for bundling. This is the only implementation of a conda executable we have right
- * now. To prevent cyclic dependency between the two plugins - needing interface on the implementation side and the
- * implementation on this side, we put the implementation here instead of in the micromamba package, as we only need a
- * path from the micromamba.bin plugin.
- * 
+ * Activator class for the bundled conda executable plugin. Checks that a conda executable is available and executable.
+ *
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  */
-public class MicromambaExecutable implements CondaExecutable {
+public final class MicromambaExecutablePluginActivator extends Plugin {
 
+	private static final NodeLogger LOGGER = NodeLogger.getLogger(MicromambaExecutablePluginActivator.class);
+	
+	private static MicromambaExecutablePluginActivator instance;
+	
 	/**
-	 * The singleton instance of the {@link MicromambaExecutable}
+	 * @return the singleton instance
 	 */
-	public static final MicromambaExecutable INSTANCE = new MicromambaExecutable();
-
-	private MicromambaExecutable() {
+	public static MicromambaExecutablePluginActivator getInstance() {
+		return instance;
 	}
 
 	@Override
-	public Path getPath() {
-		return MicromambaPath.getPath();
+	public void start(final BundleContext context) throws Exception {
+		super.start(context);
+		instance = this;//NOSONAR follows official recommendations
+
+		try {
+			MicromambaExecutable.getInstance().checkExecution();
+		} catch (IOException | IllegalStateException ex) {
+			LOGGER.error(ex.getMessage());
+			throw ex;
+		}
 	}
 }

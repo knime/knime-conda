@@ -51,15 +51,15 @@ import java.nio.file.Path;
 
 /**
  * Path to the installed micromamba executable
- * 
+ *
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  */
-public final class MicromambaPath {
-	
+final class MicromambaPath {
+
 	private MicromambaPath() {
-		
+
 	}
-	
+
 	private static String getExtensionForCurrentOS() {
 		String osName = System.getProperty("os.name");
 		if (osName.startsWith("Windows")) {

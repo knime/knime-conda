@@ -150,7 +150,7 @@ public final class Conda {
     }
 
     /** Notify the listeners that the environment has changed */
-    private static void notifyEnvironmentChanged(final ChangeEvent event) {
+    private static synchronized void notifyEnvironmentChanged(final ChangeEvent event) {
         for (var l : ENV_CHANGE_LISTENERS) {
             l.environmentChanged(event);
         }

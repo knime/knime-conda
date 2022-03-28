@@ -516,7 +516,7 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
     static Conda createConda() throws InvalidSettingsException {
         final var condaInstallationPath = CondaPreferences.getCondaInstallationDirectory();
         try {
-            return new Conda(condaInstallationPath, false);
+            return new Conda(condaInstallationPath);
         } catch (final IOException ex) {
             throw new InvalidSettingsException("Failed to reach out to the Conda installation located at '"
                 + condaInstallationPath + "'.\nPlease make sure Conda is properly configured in the Preferences of "

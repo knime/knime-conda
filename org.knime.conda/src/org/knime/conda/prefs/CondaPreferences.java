@@ -144,6 +144,7 @@ public final class CondaPreferences {
      */
     static String testCondaInstallation(final String condaDirectoryPath) throws Exception {
         final var conda = new Conda(condaDirectoryPath);
+        conda.testInstallation();
         var condaVersionString = conda.getVersionString();
         try {
             condaVersionString = "Conda version: " + Conda.condaVersionStringToVersion(condaVersionString).toString();

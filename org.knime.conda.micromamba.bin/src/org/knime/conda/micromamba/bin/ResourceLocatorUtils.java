@@ -85,7 +85,7 @@ final class ResourceLocatorUtils {
 			}
 		} catch (IOException ex) {
 			throw new IllegalStateException(
-					String.format("Failed to resolve resource '%s' of the bundle of clas '%s'.", resourcePath, clazz),
+					String.format("Failed to resolve resource '%s' of the bundle of class '%s'.", resourcePath, clazz),
 					ex);
 		}
 	}

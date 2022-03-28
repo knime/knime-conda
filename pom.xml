@@ -9,7 +9,7 @@
 	</parent>
 
 	<groupId>org.knime</groupId>
-	<artifactId>conda</artifactId>
+	<artifactId>knime-conda</artifactId>
 	<version>${revision}${changelist}</version>
 	<packaging>pom</packaging>
 
@@ -23,7 +23,15 @@
 
 	<modules>
 		<module>org.knime.conda</module>
+		<module>org.knime.conda.envbundling</module>
+		<module>org.knime.conda.micromamba.bin</module>
+		<module>org.knime.conda.micromamba.bin.linux.amd64.cpu</module>
+		<!-- <module>org.knime.conda.micromamba.bin.macosx.aarch64.cpu</module> -->
+		<module>org.knime.conda.micromamba.bin.macosx.amd64.cpu</module>
+		<module>org.knime.conda.micromamba.bin.windows.amd64.cpu</module>
+		<module>org.knime.conda.tests</module>
 		<module>org.knime.features.conda</module>
+		<module>org.knime.features.conda.bin</module>
 		<module>org.knime.update.conda</module>
 	</modules>
 

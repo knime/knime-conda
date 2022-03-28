@@ -4,7 +4,7 @@
 
 	<parent>
 		<groupId>org.knime</groupId>
-		<artifactId>conda</artifactId>
+		<artifactId>knime-conda</artifactId>
 		<version>${revision}${changelist}</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>

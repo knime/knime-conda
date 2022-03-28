@@ -68,6 +68,8 @@ import org.osgi.service.prefs.BackingStoreException;
  */
 public final class CondaPreferences {
 
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(CondaPreferences.class);
+
     private static final String PYTHON_BUNDLE_NAME = "org.knime.python2";
 
     private static final String CONDA_BUNDLE_NAME = FrameworkUtil.getBundle(CondaPreferences.class).getSymbolicName();
@@ -95,7 +97,7 @@ public final class CondaPreferences {
         final IEclipsePreferences pythonDefaultPrefs = DefaultScope.INSTANCE.getNode(PYTHON_BUNDLE_NAME);
         condaDir = pythonDefaultPrefs.get(CONDA_DIR_PREF_KEY, null);
         if (condaDir != null) {
-            NodeLogger.getLogger(CondaPreferences.class).warn(
+            LOGGER.warn(
                 "Using 'org.knime.python2/condaDirectoryPath' to configure the conda installation directory is deprecated. "
                     + "Please use 'org.knime.conda/condaDirectoryPath'.");
             return condaDir;
@@ -175,16 +177,14 @@ public final class CondaPreferences {
         if (condaDirPythonInstance != null) {
             // Use the conda dir from the Python preferences
             condaInstancePrefs.put(CONDA_DIR_PREF_KEY, condaDirPythonInstance);
-            NodeLogger.getLogger(CondaPreferences.class)
-                .info("Copied the path to the conda installation from the Python preferences. Using '"
-                    + condaDirPythonInstance + "'.");
+            LOGGER.info("Copied the path to the conda installation from the Python preferences. Using '"
+                + condaDirPythonInstance + "'.");
 
             // Flush the preference store
             try {
                 condaInstancePrefs.flush();
             } catch (final BackingStoreException ex) {
-                NodeLogger.getLogger(CondaPreferences.class)
-                    .warn("Failed to flush the conda preferences with the updated path to conda installation.", ex);
+                LOGGER.warn("Failed to flush the conda preferences with the updated path to conda installation.", ex);
             }
 
             // Remove the conda installation dir preference from the Python preferences
@@ -192,8 +192,7 @@ public final class CondaPreferences {
             try {
                 pythonInstancePrefs.flush();
             } catch (final BackingStoreException ex) {
-                NodeLogger.getLogger(CondaPreferences.class)
-                    .warn("Failed to flush the Python preferences with the removed path to conda installation.", ex);
+                LOGGER.warn("Failed to flush the Python preferences with the removed path to conda installation.", ex);
             }
         }
     }
@@ -201,8 +200,7 @@ public final class CondaPreferences {
     /** Initialize the conda installation directory in the default scope */
     private static void initDefaultCondaInstallationDirectory() {
         final var defaultCondaInstallDir = getDefaultCondaInstallationDirectory();
-        NodeLogger.getLogger(CondaPreferences.class)
-            .debug("Initializing default Conda installation directory with '" + defaultCondaInstallDir + "'.");
+        LOGGER.debug("Initializing default Conda installation directory with '" + defaultCondaInstallDir + "'.");
         PREF_STORE.setDefault(CONDA_DIR_PREF_KEY, defaultCondaInstallDir);
     }
 

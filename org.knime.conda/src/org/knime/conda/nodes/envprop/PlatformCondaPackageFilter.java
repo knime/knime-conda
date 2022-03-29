@@ -81,7 +81,7 @@ public final class PlatformCondaPackageFilter {
 
     private static final String OS_WINDOWS = "Windows";
 
-    private static final String THIS_PLUGIN_ID = "org.knime.python2.nodes";
+    private static final String THIS_PLUGIN_ID = "org.knime.conda";
 
     private static final String FILTER_DIRECTORY_NAME = "conda";
 

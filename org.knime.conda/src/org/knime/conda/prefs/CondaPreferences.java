@@ -94,6 +94,8 @@ public final class CondaPreferences {
 
         // Check the Python default preferences
         // The Executor sets the default preferences if configured via an .epf file
+        // See org.knime.product.profiles.ProfileManager in org.knime.product for details on how preferences are set
+        // in the executor (and also the AP if they are provided by the server)
         final IEclipsePreferences pythonDefaultPrefs = DefaultScope.INSTANCE.getNode(PYTHON_BUNDLE_NAME);
         condaDir = pythonDefaultPrefs.get(CONDA_DIR_PREF_KEY, null);
         if (condaDir != null) {

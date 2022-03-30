@@ -82,7 +82,7 @@ public final class CondaEnvironmentRegistry {
 
     private static final String ENVS = "micromamba_envs";
 
-    private final Map<String, Environment> m_environmentsByName;
+    private final Map<String, CondaEnvironment> m_environmentsByName;
 
     private final Path m_envsPath;
 
@@ -102,7 +102,7 @@ public final class CondaEnvironmentRegistry {
         m_rootPath = configAreaPath.resolve(ROOT);
         m_envsPath = configAreaPath.resolve(ENVS);
         m_environmentsByName = parseEnvironments(m_envsPath)//
-            .collect(toMap(Environment::getName, Function.identity(), (i, j) -> i, ConcurrentHashMap::new));
+            .collect(toMap(CondaEnvironment::getName, Function.identity(), (i, j) -> i, ConcurrentHashMap::new));
         m_platform = getPlatform();
     }
 
@@ -118,7 +118,7 @@ public final class CondaEnvironmentRegistry {
         }
     }
 
-    private static Stream<Environment> parseEnvironments(final Path pathToEnvs) {
+    private static Stream<CondaEnvironment> parseEnvironments(final Path pathToEnvs) {
         try {
             return Files.list(pathToEnvs)//
                 .map(CondaEnvironmentRegistry::parseEnvironment);
@@ -129,26 +129,26 @@ public final class CondaEnvironmentRegistry {
         }
     }
 
-    private static Environment parseEnvironment(final Path pathToEnv) {
-        return new Environment(pathToEnv, pathToEnv.getFileName().toString());
+    private static CondaEnvironment parseEnvironment(final Path pathToEnv) {
+        return new CondaEnvironment(pathToEnv, pathToEnv.getFileName().toString());
     }
 
-    private Environment getOrCreateEnvironmentInternal(final String name) {
+    private CondaEnvironment getOrCreateEnvironmentInternal(final String name) {
         return m_environmentsByName.computeIfAbsent(name, this::createEnvironment);
     }
 
-    public static Environment getOrCreateEnvironment(final String name) {
+    public static CondaEnvironment getOrCreateEnvironment(final String name) {
         return InstanceHolder.INSTANCE.getOrCreateEnvironmentInternal(name);
     }
 
-    private Environment createEnvironment(final String name) {
+    private CondaEnvironment createEnvironment(final String name) {
         return CondaEnvironmentDefinitionRegistry.getEnvironmentDefinition(name)//
             .map(this::createEnvironmentFromDefinition)//
             .orElseThrow(() -> new IllegalArgumentException(
                 String.format("There is no environment with the name '%s' registered.", name)));
     }
 
-    private Environment createEnvironmentFromDefinition(final CondaEnvironmentDefinition definition) {
+    private CondaEnvironment createEnvironmentFromDefinition(final CondaEnvironmentDefinition definition) {
         var micromamba = MicromambaExecutable.getInstance();
         final var envName = definition.getName();
         final var envPath = m_envsPath.resolve(envName);
@@ -168,7 +168,7 @@ public final class CondaEnvironmentRegistry {
                     "The creation of the Conda environment '%s' with the command '%s' failed with the exit code %s",
                     envName, extractCommandAsString(processBuilder), exitCode);
             }
-            return new Environment(envPath, envName);
+            return new CondaEnvironment(envPath, envName);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Got interrupted while creating a Conda environment.", ex);
@@ -188,21 +188,5 @@ public final class CondaEnvironmentRegistry {
 
     private static String getChannelsAsString() {
         return BundledCondaChannelRegistry.getChannels().stream().collect(joining(" "));
-    }
-
-    public static final class Environment {
-
-        private final Path m_path;
-
-        private final String m_name;
-
-        Environment(final Path path, final String name) {
-            m_path = path;
-            m_name = name;
-        }
-
-        String getName() {
-            return m_name;
-        }
     }
 }

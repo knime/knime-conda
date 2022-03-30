@@ -48,6 +48,7 @@
  */
 package org.knime.conda.envbundling.environment.management;
 
+import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 
 import java.io.IOException;
@@ -61,6 +62,11 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import org.eclipse.core.runtime.Platform;
+import org.knime.conda.envbundling.channel.BundledCondaChannelRegistry;
+import org.knime.conda.envbundling.environment.CondaEnvironmentDefinition;
+import org.knime.conda.envbundling.environment.CondaEnvironmentDefinitionRegistry;
+import org.knime.conda.micromamba.bin.MicromambaExecutable;
+import org.knime.core.node.NodeLogger;
 
 /**
  * Registry for Conda (TODO or rather micromamba?) environments that are stored in the
@@ -70,21 +76,38 @@ import org.eclipse.core.runtime.Platform;
  */
 public final class CondaEnvironmentRegistry {
 
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(CondaEnvironmentRegistry.class);
+
     private static final String ROOT = "micromamba_root";
 
     private static final String ENVS = "micromamba_envs";
 
     private final Map<String, Environment> m_environmentsByName;
 
+    private final Path m_envsPath;
+
     private final Path m_rootPath;
 
-    private CondaEnvironmentRegistry() throws IOException {
+    private final String m_platform;
+
+    // NOTE: The instance is initialized with the first access
+    private static class InstanceHolder {
+        private static final CondaEnvironmentRegistry INSTANCE = new CondaEnvironmentRegistry();
+    }
+
+    private CondaEnvironmentRegistry() {
         // TODO abstract the location? This would allow to also switch to another location in the future
         // e.g. if we want to run workflows outside of eclipse
         var configAreaPath = getConfigurationAreaPath();
         m_rootPath = configAreaPath.resolve(ROOT);
-        m_environmentsByName = parseEnvironments(configAreaPath.resolve(ENVS))//
+        m_envsPath = configAreaPath.resolve(ENVS);
+        m_environmentsByName = parseEnvironments(m_envsPath)//
             .collect(toMap(Environment::getName, Function.identity(), (i, j) -> i, ConcurrentHashMap::new));
+        m_platform = getPlatform();
+    }
+
+    private static String getPlatform() {
+        return "win-64"; // TODO
     }
 
     private static Path getConfigurationAreaPath() {
@@ -95,17 +118,79 @@ public final class CondaEnvironmentRegistry {
         }
     }
 
-    private static Stream<Environment> parseEnvironments(final Path pathToEnvs) throws IOException {
-        return Files.list(pathToEnvs)//
-            .map(CondaEnvironmentRegistry::parseEnvironment);
-        // TODO do we need some consistency checks?
+    private static Stream<Environment> parseEnvironments(final Path pathToEnvs) {
+        try {
+            return Files.list(pathToEnvs)//
+                .map(CondaEnvironmentRegistry::parseEnvironment);
+            // TODO do we need some consistency checks?
+        } catch (IOException ex) {
+            LOGGER.error("Parsing the installed Conda environments failed.", ex);
+            return null; // TODO or an empty map? what kind of behavior do we want?
+        }
     }
 
     private static Environment parseEnvironment(final Path pathToEnv) {
         return new Environment(pathToEnv, pathToEnv.getFileName().toString());
     }
 
-    private static final class Environment {
+    private Environment getOrCreateEnvironmentInternal(final String name) {
+        return m_environmentsByName.computeIfAbsent(name, this::createEnvironment);
+    }
+
+    public static Environment getOrCreateEnvironment(final String name) {
+        return InstanceHolder.INSTANCE.getOrCreateEnvironmentInternal(name);
+    }
+
+    private Environment createEnvironment(final String name) {
+        return CondaEnvironmentDefinitionRegistry.getEnvironmentDefinition(name)//
+            .map(this::createEnvironmentFromDefinition)//
+            .orElseThrow(() -> new IllegalArgumentException(
+                String.format("There is no environment with the name '%s' registered.", name)));
+    }
+
+    private Environment createEnvironmentFromDefinition(final CondaEnvironmentDefinition definition) {
+        var micromamba = MicromambaExecutable.getInstance();
+        final var envName = definition.getName();
+        final var envPath = m_envsPath.resolve(envName);
+        var processBuilder = new ProcessBuilder(// TODO check if we need to encode everything as URL
+            micromamba.getPath().toString(), "create", //
+            "-p", envPath.toString(), //
+            "-c", getChannelsAsString(), "--override-channels", //
+            "-r", m_rootPath.toString(), //
+            "-f", definition.getPathToSpecs(), //
+            "--platform", m_platform//
+        );
+        try {
+            var process = processBuilder.start();
+            final var exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw createExceptionWithFormat(
+                    "The creation of the Conda environment '%s' with the command '%s' failed with the exit code %s",
+                    envName, extractCommandAsString(processBuilder), exitCode);
+            }
+            return new Environment(envPath, envName);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Got interrupted while creating a Conda environment.", ex);
+        } catch (IOException ex) {
+            throw createExceptionWithFormat("Failed to start creation of Conda environment '%s' with command '%s'",
+                envName, extractCommandAsString(processBuilder));
+        }
+    }
+
+    private static RuntimeException createExceptionWithFormat(final String format, final Object... args) {
+        return new IllegalStateException(String.format(format, args));
+    }
+
+    private static String extractCommandAsString(final ProcessBuilder processBuilder) {
+        return processBuilder.command().stream().collect(joining(" "));
+    }
+
+    private static String getChannelsAsString() {
+        return BundledCondaChannelRegistry.getChannels().stream().collect(joining(" "));
+    }
+
+    public static final class Environment {
 
         private final Path m_path;
 

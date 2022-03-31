@@ -52,7 +52,6 @@ import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -107,22 +106,23 @@ public final class CondaEnvironmentRegistry {
     }
 
     private static String getPlatform() {
-        return "win-64"; // TODO
+        return "win-64"; // TODO add osx-arm64 the other mac and linux
     }
 
     private static Path getConfigurationAreaPath() {
-        try {
-            return Paths.get(Platform.getConfigurationLocation().getURL().toURI());
-        } catch (URISyntaxException ex) {
-            throw new IllegalStateException("Can't create Path to configuration area.", ex);
-        }
+        // TODO replace this hack by something that works on all systems
+        return Paths.get(Platform.getConfigurationLocation().getURL().getPath().substring(1));
     }
 
     private static Stream<CondaEnvironment> parseEnvironments(final Path pathToEnvs) {
         try {
-            return Files.list(pathToEnvs)//
-                .map(CondaEnvironmentRegistry::parseEnvironment);
-            // TODO do we need some consistency checks?
+            if (Files.exists(pathToEnvs)) {
+                return Files.list(pathToEnvs)//
+                        .map(CondaEnvironmentRegistry::parseEnvironment);
+                // TODO do we need some consistency checks?
+            } else {
+                return Stream.empty();
+            }
         } catch (IOException ex) {
             LOGGER.error("Parsing the installed Conda environments failed.", ex);
             return null; // TODO or an empty map? what kind of behavior do we want?
@@ -153,12 +153,12 @@ public final class CondaEnvironmentRegistry {
         final var envName = definition.getName();
         final var envPath = m_envsPath.resolve(envName);
         var processBuilder = new ProcessBuilder(// TODO check if we need to encode everything as URL
-            micromamba.getPath().toString(), "create", //
-            "-p", envPath.toString(), //
-            "-c", getChannelsAsString(), "--override-channels", //
-            "-r", m_rootPath.toString(), //
-            "-f", definition.getPathToSpecs(), //
-            "--platform", m_platform//
+            micromamba.getPath().toString(), "create", // micromamba create
+            "-p", envPath.toString(), // path to the newly created environment
+            "-c", getChannelsAsString(), "--override-channels", // only use the local channels
+            "-r", m_rootPath.toString(), // set the micromamba root
+            "-f", definition.getPathToSpecs(), // set the environemnt definition file
+            "--platform", m_platform// set the current platform (needed for Mac arm64)
         );
         try {
             var process = processBuilder.start();

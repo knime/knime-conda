@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.0"?>
+<fragment>
+   <extension
+         point="org.knime.testing.TestcaseCollector">
+      <TestcaseCollector
+            TestcaseCollector="org.knime.conda.envbundling.CondaTestcaseCollector">
+      </TestcaseCollector>
+   </extension>
+   <extension
+         point="org.knime.conda.envbundling.CondaEnvironmentDefinition">
+      <condaEnv
+            name="org.knime.conda.envbundling.test.env">
+         <specificationFile
+               arch="x86_64"
+               file="envs/env_win-64.yml"
+               os="win32">
+         </specificationFile>
+      </condaEnv>
+   </extension>
+</fragment>

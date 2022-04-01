@@ -71,7 +71,7 @@ import org.osgi.framework.Bundle;
  */
 public final class BundledCondaChannelRegistry {
 
-    private static final String EXT_POINT_ID = "org.knime.conda.envbundling.BundledString";
+    private static final String EXT_POINT_ID = "org.knime.conda.envbundling.BundledCondaChannel";
 
     private static final NodeLogger LOGGER = NodeLogger.getLogger(BundledCondaChannelRegistry.class);
 

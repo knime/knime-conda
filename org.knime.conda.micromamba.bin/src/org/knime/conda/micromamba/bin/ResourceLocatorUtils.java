@@ -49,9 +49,9 @@ package org.knime.conda.micromamba.bin;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 import org.eclipse.core.runtime.FileLocator;
+import org.knime.core.util.FileUtil;
 import org.osgi.framework.FrameworkUtil;
 
 /**
@@ -79,7 +79,7 @@ final class ResourceLocatorUtils {
 					.toFileURL(FileLocator.find(bundle, new org.eclipse.core.runtime.Path(resourcePath), null));
 
 			try {
-				return Paths.get(url.toURI());
+				return FileUtil.resolveToPath(url);
 			} catch (URISyntaxException e) {
 				throw new IOException(e);
 			}

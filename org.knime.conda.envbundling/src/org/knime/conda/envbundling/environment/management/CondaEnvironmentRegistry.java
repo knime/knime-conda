@@ -52,10 +52,11 @@ import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 
 import java.io.IOException;
+import java.lang.ProcessBuilder.Redirect;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -66,6 +67,7 @@ import org.knime.conda.envbundling.environment.CondaEnvironmentDefinition;
 import org.knime.conda.envbundling.environment.CondaEnvironmentDefinitionRegistry;
 import org.knime.conda.micromamba.bin.MicromambaExecutable;
 import org.knime.core.node.NodeLogger;
+import org.knime.core.util.FileUtil;
 
 /**
  * Registry for Conda (TODO or rather micromamba?) environments that are stored in the
@@ -77,11 +79,16 @@ public final class CondaEnvironmentRegistry {
 
     private static final NodeLogger LOGGER = NodeLogger.getLogger(CondaEnvironmentRegistry.class);
 
-    private static final String ROOT = "micromamba_root";
+    private static final String PLUGIN = "org.knime.conda.envbundling";
 
-    private static final String ENVS = "micromamba_envs";
+    private static final String ROOT = "root";
 
-    private final Map<String, CondaEnvironment> m_environmentsByName;
+    private static final String ENVS = "envs";
+
+    private final ConcurrentHashMap<String, CondaEnvironment> m_environmentsByName;
+
+    // For environments in this set it is guaranteed that getOrCreate returns immediately.
+    private final Set<String> m_currentlyExistingEnvNames = ConcurrentHashMap.newKeySet();
 
     private final Path m_envsPath;
 
@@ -91,54 +98,119 @@ public final class CondaEnvironmentRegistry {
 
     // NOTE: The instance is initialized with the first access
     private static class InstanceHolder {
-        private static final CondaEnvironmentRegistry INSTANCE = new CondaEnvironmentRegistry();
+
+        private static final CondaEnvironmentRegistry INSTANCE = createInstance();
+
+        private static final CondaEnvironmentRegistry createInstance() {
+            var configAreaPath = getConfigurationAreaPath();
+            var pluginPath = configAreaPath.resolve(PLUGIN);
+            var rootPath = pluginPath.resolve(ROOT);
+            var envsPath = pluginPath.resolve(ENVS);
+            return new CondaEnvironmentRegistry(rootPath, envsPath, getPlatform());
+        }
+
+        private static Path getConfigurationAreaPath() {
+            try {
+                return FileUtil.resolveToPath(Platform.getConfigurationLocation().getURL());
+            } catch (IOException | URISyntaxException ex) {
+                // TODO instead fall back to temporary directory?
+                throw new IllegalStateException("Failed to create path to configuration area.", ex);
+            }
+        }
+
+        private static String getPlatform() {
+            var os = getOS();
+            var arch = getArch();
+            return os + "-" + arch;
+        }
+
+        private static String getOS() {
+            var os = Platform.getOS();
+            // TODO use switch with pattern matching in Java 17
+            if (Platform.OS_WIN32.equals(os)) {
+                return "win";
+            } else if (Platform.OS_LINUX.equals(os)) {
+                return "linux";
+            } else if (Platform.OS_MACOSX.equals(os)) {
+                return "osx";
+            } else {
+                throw new IllegalStateException("Unsupported OS: " + os);
+            }
+        }
+
+        private static String getArch() {
+            var arch = Platform.getOSArch();
+            // TODO use switch with pattern matching in Java 17
+            if (Platform.ARCH_X86_64.equals(arch)) {
+                return "64";
+            } else if ("aarch64".equals(arch)) { // use constant in Java 17
+                return "arm64";
+            } else {
+                throw new IllegalStateException("Unsupported arch: " + arch);
+            }
+        }
+
     }
 
-    private CondaEnvironmentRegistry() {
-        // TODO abstract the location? This would allow to also switch to another location in the future
-        // e.g. if we want to run workflows outside of eclipse
-        var configAreaPath = getConfigurationAreaPath();
-        m_rootPath = configAreaPath.resolve(ROOT);
-        m_envsPath = configAreaPath.resolve(ENVS);
+    CondaEnvironmentRegistry(final Path rootPath, final Path envsPath, final String platform) {
+        m_rootPath = rootPath;
+        m_envsPath = envsPath;
+        try {
+            Files.createDirectories(m_rootPath);
+            Files.createDirectories(m_envsPath);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to create the folders in the configuration area.", ex);
+        }
         m_environmentsByName = parseEnvironments(m_envsPath)//
             .collect(toMap(CondaEnvironment::getName, Function.identity(), (i, j) -> i, ConcurrentHashMap::new));
-        m_platform = getPlatform();
+        m_currentlyExistingEnvNames.addAll(m_environmentsByName.keySet());
+        m_platform = platform;
     }
 
-    private static String getPlatform() {
-        return "win-64"; // TODO add osx-arm64 the other mac and linux
-    }
-
-    private static Path getConfigurationAreaPath() {
-        // TODO replace this hack by something that works on all systems
-        return Paths.get(Platform.getConfigurationLocation().getURL().getPath().substring(1));
-    }
 
     private static Stream<CondaEnvironment> parseEnvironments(final Path pathToEnvs) {
         try {
             if (Files.exists(pathToEnvs)) {
                 return Files.list(pathToEnvs)//
-                        .map(CondaEnvironmentRegistry::parseEnvironment);
+                    .map(CondaEnvironmentRegistry::parseEnvironment);
                 // TODO do we need some consistency checks?
-            } else {
-                return Stream.empty();
             }
         } catch (IOException ex) {
             LOGGER.error("Parsing the installed Conda environments failed.", ex);
-            return null; // TODO or an empty map? what kind of behavior do we want?
         }
+        return Stream.empty();
     }
 
     private static CondaEnvironment parseEnvironment(final Path pathToEnv) {
         return new CondaEnvironment(pathToEnv, pathToEnv.getFileName().toString());
     }
 
-    private CondaEnvironment getOrCreateEnvironmentInternal(final String name) {
-        return m_environmentsByName.computeIfAbsent(name, this::createEnvironment);
+    CondaEnvironment getOrCreateEnvironmentInternal(final String name) {
+        var environment = m_environmentsByName.computeIfAbsent(name, this::createEnvironment);
+        m_currentlyExistingEnvNames.add(environment.getName());
+        return environment;
     }
 
+    /**
+     * Retrieves the environment with the provided name, creating it if necessary.
+     * This method blocks until the environment is created.
+     * @param name of the required environment
+     * @return the environment for the provided name
+     * @throws IllegalArgumentException if there is no definition available for name
+     * @throws IllegalStateException if environment creation fails
+     */
     public static CondaEnvironment getOrCreateEnvironment(final String name) {
         return InstanceHolder.INSTANCE.getOrCreateEnvironmentInternal(name);
+    }
+
+    /**
+     * Indicates whether the environment with the provided name currently exists.
+     * If this method returns true, {@link #getOrCreateEnvironment(String)} will return immediately
+     * @param name of the required environment
+     * @return true if the environment already exists, false otherwise
+     */
+    public static boolean environmentExists(final String name) {
+        return InstanceHolder.INSTANCE.m_currentlyExistingEnvNames.contains(name);
     }
 
     private CondaEnvironment createEnvironment(final String name) {
@@ -152,14 +224,17 @@ public final class CondaEnvironmentRegistry {
         var micromamba = MicromambaExecutable.getInstance();
         final var envName = definition.getName();
         final var envPath = m_envsPath.resolve(envName);
-        var processBuilder = new ProcessBuilder(// TODO check if we need to encode everything as URL
-            micromamba.getPath().toString(), "create", // micromamba create
-            "-p", envPath.toString(), // path to the newly created environment
+        var processBuilder = new ProcessBuilder(//
+            quote(micromamba.getPath().toString()), "create", // micromamba create
+            "-p", quote(envPath.toString()), // path to the newly created environment
             "-c", getChannelsAsString(), "--override-channels", // only use the local channels
-            "-r", m_rootPath.toString(), // set the micromamba root
-            "-f", definition.getPathToSpecs(), // set the environemnt definition file
-            "--platform", m_platform// set the current platform (needed for Mac arm64)
+            "-r", quote(m_rootPath.toString()), // set the micromamba root
+            "-f", quote(definition.getPathToSpecs()), // set the environemnt definition file
+            "--platform", m_platform, // set the current platform (needed for Mac arm64)
+            "-y"// don't ask for permission
         );
+        processBuilder.redirectOutput(Redirect.INHERIT);
+        processBuilder.redirectError(Redirect.INHERIT);
         try {
             var process = processBuilder.start();
             final var exitCode = process.waitFor();
@@ -173,13 +248,26 @@ public final class CondaEnvironmentRegistry {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Got interrupted while creating a Conda environment.", ex);
         } catch (IOException ex) {
-            throw createExceptionWithFormat("Failed to start creation of Conda environment '%s' with command '%s'",
+            throw createExceptionWithFormat(ex, "Failed to start creation of Conda environment '%s' with command '%s'",
                 envName, extractCommandAsString(processBuilder));
         }
     }
 
+    private static String quote(final String string) {
+        return "\"" + string + "\"";
+    }
+
+    private static String encodeAsUrl(final String localPath) {
+        return Path.of(localPath).toUri().toString();
+    }
+
     private static RuntimeException createExceptionWithFormat(final String format, final Object... args) {
         return new IllegalStateException(String.format(format, args));
+    }
+
+    private static RuntimeException createExceptionWithFormat(final Exception cause, final String format,
+        final Object... args) {
+        return new IllegalStateException(String.format(format, args), cause);
     }
 
     private static String extractCommandAsString(final ProcessBuilder processBuilder) {
@@ -187,6 +275,8 @@ public final class CondaEnvironmentRegistry {
     }
 
     private static String getChannelsAsString() {
-        return BundledCondaChannelRegistry.getChannels().stream().collect(joining(" "));
+        return BundledCondaChannelRegistry.getChannels().stream()//
+            .map(CondaEnvironmentRegistry::encodeAsUrl)//
+            .collect(joining(" "));
     }
 }

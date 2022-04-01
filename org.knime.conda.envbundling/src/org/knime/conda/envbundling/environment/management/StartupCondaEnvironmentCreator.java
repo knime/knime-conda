@@ -44,74 +44,42 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Mar 31, 2022 (Adrian Nembach): created
+ *   Apr 1, 2022 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
  */
 package org.knime.conda.envbundling.environment.management;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
-import org.junit.Before;
-import org.junit.Test;
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.SubMonitor;
+import org.eclipse.core.runtime.jobs.Job;
+import org.knime.conda.envbundling.environment.CondaEnvironmentDefinitionRegistry;
+import org.knime.core.util.IEarlyStartup;
 
 /**
+ * Triggers a thread that causes the creation of all CondaEnvironments for which there is a definition in
+ * {@link CondaEnvironmentDefinitionRegistry} but no environment in {@link CondaEnvironmentRegistry}.
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
-@SuppressWarnings("javadoc")
-public class CondaEnvironmentRegistryTest {
+public final class StartupCondaEnvironmentCreator implements IEarlyStartup {
 
-    private static final String TEST_ENV = "org.knime.conda.envbundling.test.env";
-
-    private CondaEnvironmentRegistry m_registry;
-
-    private Path m_envsPath;
-
-    @Before
-    public void before() throws IOException {
-        var tempFolder = Files.createTempDirectory("micromamba_test");
-        m_envsPath = tempFolder.resolve("envs");
-        m_registry = new CondaEnvironmentRegistry(tempFolder.resolve("root"), m_envsPath, "win-64");
+    @Override
+    public void run() {
+        var envCreationJob =
+            Job.create("Create Conda environments", StartupCondaEnvironmentCreator::createMissingEnvironments);
+        envCreationJob.schedule();
     }
 
-    @Test
-    public void testEnvironmentCreation() throws Exception {
-        long startTime = System.currentTimeMillis();
-        var environment = createTestEnvironment();
-        System.out.println("Environment creation took " + (System.currentTimeMillis() - startTime) + " ms.");
-        assertEquals(TEST_ENV, environment.getName());
-        var expectedPath = m_envsPath.resolve(TEST_ENV);
-        assertEquals(expectedPath, environment.getPath());
-    }
-
-    private CondaEnvironment createTestEnvironment() {
-        return m_registry.getOrCreateEnvironmentInternal(TEST_ENV);
-    }
-
-    @Test
-    public void testBackToBackEnvCreation() throws Exception {
-        createTestEnvironment();
-        long startTime = System.currentTimeMillis();
-        createTestEnvironment();
-        long endTime = System.currentTimeMillis();
-        assertTrue(endTime - startTime < 1);
-    }
-
-    @Test
-    public void testConcurrentEnvRetrieval() throws Exception {//NOSONAR
-        var first = new Thread(() -> createTestEnvironment());
-        var second = new Thread(() -> createTestEnvironment());
-        first.start();
-        // wait a bit for the creation to start
-        Thread.sleep(10);
-        // try to retrieve the same environment concurrently
-        second.start();
-        first.join();
-        second.join(1);
+    private static void createMissingEnvironments(final IProgressMonitor monitor) {
+        final var definitions = CondaEnvironmentDefinitionRegistry.getEnvironmentDefinitions();
+        var subMonitor = SubMonitor.convert(monitor, definitions.size());
+        for (var definition : definitions) {
+            subMonitor.checkCanceled();
+            final var name = definition.getName();
+            subMonitor.setTaskName("Creating environment '" + name + "'.");
+            // TODO make robust against environment creation failures
+            CondaEnvironmentRegistry.getOrCreateEnvironment(name);
+            subMonitor.worked(1);
+        }
     }
 
 }

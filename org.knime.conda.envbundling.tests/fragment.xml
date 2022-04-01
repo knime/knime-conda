@@ -17,5 +17,13 @@
                os="win32">
          </specificationFile>
       </condaEnv>
+      <condaEnv
+            name="org.knime.conda.envbundling.test.env2">
+         <specificationFile
+               arch="x86_64"
+               file="envs/env_win-64.yml"
+               os="win32">
+         </specificationFile>
+      </condaEnv>
    </extension>
 </fragment>

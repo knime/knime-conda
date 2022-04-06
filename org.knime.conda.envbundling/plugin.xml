@@ -3,4 +3,5 @@
 <plugin>
    <extension-point id="BundledCondaChannel" name="BundledCondaChannel" schema="schema/BundledCondaChannel.exsd"/>
    <extension-point id="CondaEnvironmentDefinition" name="CondaEnvironmentDefinition" schema="schema/CondaEnvironmentDefinition.exsd"/>
+   <extension-point id="CondaEnvironment" name="CondaEnvironment" schema="schema/CondaEnvironment.exsd"/>
 </plugin>

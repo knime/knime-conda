@@ -46,14 +46,15 @@
  * History
  *   Mar 21, 2022 (benjamin): created
  */
-package org.knime.conda.envbundling.channel;
+package org.knime.conda.envbundling.environment;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.eclipse.core.runtime.IExtension;
@@ -69,57 +70,89 @@ import org.osgi.framework.Bundle;
  *
  * @author Benjamin Wilhelm, KNIME GmbH, Konstanz, Germany
  */
-public final class BundledCondaChannelRegistry {
+public final class CondaEnvironmentRegistry {
 
-    private static final String EXT_POINT_ID = "org.knime.conda.envbundling.BundledString";
+    private static final String EXT_POINT_ID = "org.knime.conda.envbundling.CondaEnvironment";
 
-    private static final NodeLogger LOGGER = NodeLogger.getLogger(BundledCondaChannelRegistry.class);
+    /**
+     * The name of the folder containing the environment. Each fragment of a plugin which registers a CondaEnvironment
+     * must have this folder at its root.
+     */
+    public static final String ENV_FOLDER_NAME = "env";
+
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(CondaEnvironmentRegistry.class);
 
     // NOTE: The instance is initialized with the first access
     private static class InstanceHolder {
-        private static final BundledCondaChannelRegistry INSTANCE = new BundledCondaChannelRegistry();
+        private static final CondaEnvironmentRegistry INSTANCE = new CondaEnvironmentRegistry();
     }
 
-    private final Set<String> m_channels;
+    private final Map<String, CondaEnvironment> m_environments;
 
-    private BundledCondaChannelRegistry() {
-        m_channels = registerExtensions();
+    private CondaEnvironmentRegistry() {
+        m_environments = registerExtensions();
     }
 
     /**
-     * @return A set of paths to all registered Conda channels.
+     * Get the Conda environment with the given name.
+     *
+     * @param name the unique name of the requested environment
+     * @return the {@link CondaEnvironment} which contains the path to the environment on disk
      */
-    public static Set<String> getChannels() {
-        return InstanceHolder.INSTANCE.m_channels;
+    public static CondaEnvironment getEnvironment(final String name) {
+        return InstanceHolder.INSTANCE.m_environments.get(name);
+    }
+
+    /** @return a map of all environments that are installed. */
+    public static Map<String, CondaEnvironment> getEnvironments() {
+        return InstanceHolder.INSTANCE.m_environments;
     }
 
     /** Loop through extensions and collect them in a Map */
-    private static Set<String> registerExtensions() {
-        final Set<String> channels = new HashSet<>();
+    private static Map<String, CondaEnvironment> registerExtensions() {
+        final Map<String, CondaEnvironment> environments = new HashMap<>();
         final IExtensionRegistry registry = Platform.getExtensionRegistry();
         final IExtensionPoint point = registry.getExtensionPoint(EXT_POINT_ID);
 
         for (final IExtension ext : point.getExtensions()) {
             try {
-                extractChannel(ext).ifPresent(channels::add);
+                extractEnvironment(ext).ifPresent(env -> {
+                    final var name = env.getName();
+                    if (environments.containsKey(name)) {
+                        LOGGER.errorWithFormat(
+                            "An environment with the name '%s' is already registered. Please use an unique environment name.",
+                            name);
+                    } else {
+                        environments.put(env.getName(), env);
+                    }
+                });
             } catch (final Exception e) {
                 LOGGER.error("An exception occurred while registering an extension at extension point '" + EXT_POINT_ID
-                    + "'. Creating Conda environments might fail.", e);
+                    + "'. Using Python nodes that require the environment will fail.", e);
             }
         }
-        return Collections.unmodifiableSet(channels);
+        return Collections.unmodifiableMap(environments);
     }
 
-    /** Extract the {@link String} from the given extension */
-    private static Optional<String> extractChannel(final IExtension extension) {
+    /** Extract the {@link CondaEnvironment} from the given extension */
+    private static Optional<CondaEnvironment> extractEnvironment(final IExtension extension) {
         final String bundleName = extension.getContributor().getName();
+
+        // Get the name of the environment
+        final String name = extension.getLabel();
+        if (name == null || name.isBlank()) {
+            LOGGER.errorWithFormat("The name of the Conda environment defined by the plugin '%s' is missing. "
+                + "Please specify a unique name.", bundleName);
+            return Optional.empty();
+        }
+
+        // Get the path to the environment
         final var bundle = Platform.getBundle(bundleName);
         final Bundle[] fragments = Platform.getFragments(bundle);
 
         if (fragments.length < 1) {
-
             LOGGER.errorWithFormat(
-                "Could not find a platform-specific fragment for the bundled Conda channel in plugin '%s' "
+                "Could not find a platform-specific fragment for the bundled Conda environment in plugin '%s' "
                     + "(operating system: %s, system architecture: %s).",
                 bundle, Platform.getOS(), Platform.getOSArch());
             return Optional.empty();
@@ -129,20 +162,21 @@ public final class BundledCondaChannelRegistry {
             final String unusedFragmentNames =
                 Arrays.stream(fragments).skip(1).map(Bundle::getSymbolicName).collect(Collectors.joining(", "));
             LOGGER.warnWithFormat(
-                "Found %d platform specific fragments for the bundled Conda channel in plugin '%s' "
+                "Found %d platform specific fragments for the bundled Conda environment in plugin '%s' "
                     + "(operating system: %s, system architecture: %s). "
                     + "The fragment '%s' will be used. The fragments [%s] will be ignored.",
                 fragments.length, bundleName, Platform.getOS(), Platform.getOSArch(), usedFragmentName,
                 unusedFragmentNames);
         }
-        final String path;
+        final Path path;
         try {
-            path = CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], "pkgs/").toString();
+            path = CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], ENV_FOLDER_NAME);
         } catch (final IOException ex) {
-            LOGGER.error("Could not find the path to the Conda channel for the plugin '" + bundleName + "'.", ex);
+            LOGGER.error(String.format("Could not find the path to the Conda environment for the plugin '%s'. "
+                + "Did the installation of the plugin fail?", bundleName), ex);
             return Optional.empty();
         }
 
-        return Optional.of(path);
+        return Optional.of(new CondaEnvironment(path, name));
     }
 }

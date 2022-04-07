@@ -44,54 +44,57 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Mar 21, 2022 (benjamin): created
+ *   Mar 30, 2022 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
  */
-package org.knime.conda.envbundling;
+package org.knime.conda.envbundling.environment;
 
-import java.io.IOException;
-
-import org.eclipse.core.runtime.FileLocator;
-import org.eclipse.core.runtime.Path;
-import org.knime.core.util.FileUtil;
-import org.osgi.framework.Bundle;
+import java.nio.file.Path;
+import java.util.Objects;
 
 /**
- * Static utilities for Conda environment bundling.
+ * Represents an installed Conda environment.
  *
- * @author Benjamin Wilhelm, KNIME GmbH, Konstanz, Germany
+ * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
-public final class CondaEnvironmentBundlingUtils {
+public final class CondaEnvironment {
 
-    private CondaEnvironmentBundlingUtils() {
+    private final Path m_path;
+
+    private final String m_name;
+
+    CondaEnvironment(final Path path, final String name) {
+        m_path = path;
+        m_name = name;
     }
 
     /**
-     * Get the absolute, normalized, local path to the file in the specified bundle.
-     *
-     * @param bundle the bundle
-     * @param path path relative to the bundle root
-     * @return the absolute, normalized, local path to the file
-     * @throws IOException if resolving the path failed
+     * @return the name of the environment
      */
-    public static java.nio.file.Path getAbsolutePath(final Bundle bundle, final String path) throws IOException {
-        return getAbsolutePath(bundle, new Path(path));
+    public String getName() {
+        return m_name;
     }
 
     /**
-     * Get the absolute, normalized, local path to the file in the specified bundle.
-     *
-     * @param bundle the bundle
-     * @param path path relative to the bundle root
-     * @return the absolute, normalized, local path to the file
-     * @throws IOException if resolving the path failed
+     * @return the path to the environment
      */
-    static java.nio.file.Path getAbsolutePath(final Bundle bundle, final Path path) throws IOException {
-        final var pkgsUrl = FileLocator.find(bundle, path, null);
-        if (pkgsUrl == null) {
-            throw new IOException(
-                "Could not find the file '" + path + "' in bundle '" + bundle.getSymbolicName() + "'.");
+    public Path getPath() {
+        return m_path;
+    }
+
+    @Override
+    public boolean equals(final Object obj) {
+        if (obj == this) {
+            return true;
+        } else if (obj instanceof CondaEnvironment) {
+            var other = (CondaEnvironment)obj; // TODO use pattern matching in Java 17
+            return m_name.equals(other.m_name) && m_path.equals(other.m_path);
+        } else {
+            return false;
         }
-        final var pkgsFile = FileUtil.getFileFromURL(FileLocator.toFileURL(pkgsUrl));
-        return pkgsFile.toPath().normalize().toAbsolutePath();
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(m_name, m_path);
     }
 }

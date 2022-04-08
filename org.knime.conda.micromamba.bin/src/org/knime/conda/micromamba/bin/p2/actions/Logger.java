@@ -56,7 +56,7 @@ import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
 
 /**
- * Handles logging for
+ * Handles logging for the environemnt p2 ProvisioningActions.
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */

@@ -51,6 +51,8 @@ package org.knime.conda.micromamba.bin.p2.actions;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
+
 /**
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
@@ -65,8 +67,8 @@ final class EnvironmentConfig { // TODO replace with record in Java 17
 
     static EnvironmentConfig createFromArtifactLocation(final String artifactLocation) {
         var artifactPath = Paths.get(artifactLocation);
-        return new EnvironmentConfig(artifactPath.resolve("env"), artifactPath.resolve("pkgs"),
-            artifactPath.resolve("env.yml"));
+        return new EnvironmentConfig(artifactPath.resolve(CondaEnvironmentRegistry.ENV_FOLDER_NAME),
+            artifactPath.resolve("pkgs"), artifactPath.resolve("env.yml"));
     }
 
     EnvironmentConfig(final Path environment, final Path channel, final Path environmentDefinition) {

@@ -151,11 +151,11 @@ final class EnvironmentManager {
 
     private ProcessBuilder createCommand() {
         return new ProcessBuilder(//
-            quote(m_condaExe), "create", // micromamba create
-            "-p", quote(m_config.environment()), // path to the newly created environment
+            m_condaExe.toString(), "create", // micromamba create
+            "-p", m_config.environment().toString(), // path to the newly created environment
             "-c", encodeAsUrl(m_config.channel()), "--override-channels", // only use the local channel
-            "-r", quote(getRootPath()), // set the micromamba root
-            "-f", quote(m_config.environmentDefinition()), // set the environment definition file
+            "-r", getRootPath().toString(), // set the micromamba root
+            "-f", m_config.environmentDefinition().toString(), // set the environment definition file
             "--platform", getPlatform(), // set the current platform (needed for Mac arm64)
             "-y"// don't ask for permission
         );
@@ -167,10 +167,6 @@ final class EnvironmentManager {
 
     private static Path getRootPath() {
         return getCondaExePath().getParent().resolve("root");
-    }
-
-    private static String quote(final Path string) {
-        return "\"" + string.toAbsolutePath().toString() + "\"";
     }
 
     private static String getPlatform() {

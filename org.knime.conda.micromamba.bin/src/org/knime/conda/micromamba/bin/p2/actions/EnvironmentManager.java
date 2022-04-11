@@ -128,13 +128,9 @@ final class EnvironmentManager {
 
     private static String consumeStream(final Supplier<InputStream> streamSupplier) {
         try (var stream = streamSupplier.get()) {
-            if (stream.available() > 0) {
             var writer = new StringWriter();
             IOUtils.copy(stream, writer, StandardCharsets.UTF_8);
             return writer.toString();
-            } else {
-                return "";
-            }
         } catch (IOException ex) {
             Logger.logError(ex, "Failed to consume input stream");
             throw new IllegalStateException(ex);

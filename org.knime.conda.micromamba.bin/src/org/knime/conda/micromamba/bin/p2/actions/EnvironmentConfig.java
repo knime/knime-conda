@@ -51,13 +51,28 @@ package org.knime.conda.micromamba.bin.p2.actions;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
-
 /**
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
-final class EnvironmentConfig { // TODO replace with record in Java 17
+final class EnvironmentConfig { // TODO replace with record in Java 170
+
+    /**
+     * Folder into which the generated environment is written.
+     * Must be the same as in CondaEnvironmentRegistry. Replicated here, so that the provisioning action doesn't have
+     * a dependency to org.knime.conda.envbundling.
+     */
+    private static final String ENV_FOLDER = "env";
+
+    /**
+     * Name of the environment yaml that defines the environment
+     */
+    private static final String ENV_DEFINITION = "env.yml";
+
+    /**
+     * Folder that contains the channel of the environment.
+     */
+    private static final String CHANNEL_FOLDER ="pkgs";
 
     private final Path m_env;
 
@@ -67,8 +82,8 @@ final class EnvironmentConfig { // TODO replace with record in Java 17
 
     static EnvironmentConfig createFromArtifactLocation(final String artifactLocation) {
         var artifactPath = Paths.get(artifactLocation);
-        return new EnvironmentConfig(artifactPath.resolve(CondaEnvironmentRegistry.ENV_FOLDER_NAME),
-            artifactPath.resolve("pkgs"), artifactPath.resolve("env.yml"));
+        return new EnvironmentConfig(artifactPath.resolve(ENV_FOLDER),
+            artifactPath.resolve(CHANNEL_FOLDER), artifactPath.resolve(ENV_DEFINITION));
     }
 
     EnvironmentConfig(final Path environment, final Path channel, final Path environmentDefinition) {

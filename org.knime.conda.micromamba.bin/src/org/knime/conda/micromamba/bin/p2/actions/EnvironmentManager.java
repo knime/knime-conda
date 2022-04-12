@@ -138,6 +138,9 @@ final class EnvironmentManager {
     }
 
     private static void ensureCondaIsExecutable(final Path condaExePath) {
+        // This is just a safety net. In general the p2.inf file of micromamba.bin fragments
+        // for UNIX systems contain a chmod 755 call that sets the executable bit, but
+        // in case that did not work for some reason we have a fallback here.
         var condaExeFile = condaExePath.toFile();
         if (!condaExeFile.canExecute()) {
             Logger.logInfo("CondaExe was not executable, fixing that....");

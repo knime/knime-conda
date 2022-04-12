@@ -1,0 +1,4 @@
+instructions.install=org.eclipse.equinox.p2.touchpoint.eclipse.chmod(\
+                                            targetDir:@artifact,\
+                                            targetFile:bin/micromamba,\
+                                            permissions:755);

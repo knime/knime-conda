@@ -14,4 +14,3 @@ Bundle-ActivationPolicy: lazy
 Automatic-Module-Name: org.knime.conda.micromamba.bin
 Export-Package: org.knime.conda.micromamba.bin,
  org.knime.conda.micromamba.bin.p2.actions
-Bundle-Activator: org.knime.conda.micromamba.bin.MicromambaExecutablePluginActivator

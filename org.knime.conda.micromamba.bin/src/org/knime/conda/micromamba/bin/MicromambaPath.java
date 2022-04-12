@@ -56,23 +56,23 @@ import java.nio.file.Path;
  */
 final class MicromambaPath {
 
-	private MicromambaPath() {
+    private MicromambaPath() {
 
-	}
+    }
 
-	private static String getExtensionForCurrentOS() {
-		String osName = System.getProperty("os.name");
-		if (osName.startsWith("Windows")) {
-			return ".exe";
-		}
-		return "";
-	}
+    private static String getExtensionForCurrentOS() {
+        String osName = System.getProperty("os.name");
+        if (osName.startsWith("Windows")) {
+            return ".exe";
+        }
+        return "";
+    }
 
-	/**
-	 * @return Path to the installed micromamba executable
-	 */
-	public static Path getPath() {
-		return ResourceLocatorUtils.getPathFor(MicromambaPath.class,
-				"bin" + File.separator + "micromamba" + getExtensionForCurrentOS());
-	}
+    /**
+     * @return Path to the installed micromamba executable
+     */
+    public static Path getPath() {
+        return ResourceLocatorUtils.getPathFor(MicromambaPath.class,
+            "bin" + File.separator + "micromamba" + getExtensionForCurrentOS());
+    }
 }

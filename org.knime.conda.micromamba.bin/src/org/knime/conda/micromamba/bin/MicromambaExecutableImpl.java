@@ -48,31 +48,29 @@ package org.knime.conda.micromamba.bin;
 
 import java.nio.file.Path;
 
-import org.knime.conda.micromamba.bin.MicromambaPath;
-
 /**
  * The micromamba executable to use for bundling. This is the only implementation of a conda executable we have right
  * now. To prevent cyclic dependency between the two plugins - needing interface on the implementation side and the
  * implementation on this side, we put the implementation here instead of in the micromamba package, as we only need a
  * path from the micromamba.bin plugin.
- * 
+ *
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  */
 final class MicromambaExecutableImpl implements MicromambaExecutable {
 
-	/**
-	 * The singleton instance of the {@link MicromambaExecutableImpl}
-	 */
-	static final MicromambaExecutableImpl INSTANCE = new MicromambaExecutableImpl();
-	
-	private final Path m_path;
+    /**
+     * The singleton instance of the {@link MicromambaExecutableImpl}
+     */
+    static final MicromambaExecutableImpl INSTANCE = new MicromambaExecutableImpl();
 
-	private MicromambaExecutableImpl() {
-		m_path = MicromambaPath.getPath();
-	}
+    private final Path m_path;
 
-	@Override
-	public Path getPath() {
-		return m_path;
-	}
+    private MicromambaExecutableImpl() {
+        m_path = MicromambaPath.getPath();
+    }
+
+    @Override
+    public Path getPath() {
+        return m_path;
+    }
 }

@@ -57,36 +57,37 @@ import java.nio.file.Path;
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  */
 public interface MicromambaExecutable {
-	/**
-	 * Get the {@link Path} to this conda executable
-	 *
-	 * @return The {@link Path} to the conda executable
-	 */
-	Path getPath();
+    /**
+     * Get the {@link Path} to this conda executable
+     *
+     * @return The {@link Path} to the conda executable
+     */
+    Path getPath();
 
-	/**
-	 * Get the one and only {@link MicromambaExecutable} to use for KNIME bundled conda environments.
-	 *
-	 * @return the {@link MicromambaExecutable}
-	 */
-	public static MicromambaExecutable getInstance() {
-		return MicromambaExecutableImpl.INSTANCE;
-	}
+    /**
+     * Get the one and only {@link MicromambaExecutable} to use for KNIME bundled conda environments.
+     *
+     * @return the {@link MicromambaExecutable}
+     */
+    public static MicromambaExecutable getInstance() {
+        return MicromambaExecutableImpl.INSTANCE;
+    }
 
-	/**
-	 * Try to run this conda executable.
-	 * 
-	 * @throws IOException if the executable cannot be run
-	 */
-	default void checkExecution() throws IOException {
-		Process p = new ProcessBuilder(getPath().toString(), "--version").start();
-		try {
-			if (p.waitFor() != 0)
-				throw new IOException("Execution check of registered conda executable " + getPath() + " failed");
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			final var msg = "Got interrupted while checking Conda executable";
-			throw new IOException(msg, e);
-		}
-	}
+    /**
+     * Try to run this conda executable.
+     *
+     * @throws IOException if the executable cannot be run
+     */
+    default void checkExecution() throws IOException {
+        Process p = new ProcessBuilder(getPath().toString(), "--version").start();
+        try {
+            if (p.waitFor() != 0) {
+                throw new IOException("Execution check of registered conda executable " + getPath() + " failed");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            final var msg = "Got interrupted while checking Conda executable";
+            throw new IOException(msg, e);
+        }
+    }
 }

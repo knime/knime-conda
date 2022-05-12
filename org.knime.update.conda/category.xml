@@ -6,13 +6,6 @@
    <feature id="org.knime.features.conda.source" version="0.0.0">
        <category name="knime-conda" />
    </feature>
-   <feature id="org.knime.features.conda.bin" version="0.0.0">
-       <category name="knime-conda" />
-   </feature>
-   <feature id="org.knime.features.conda.bin.source" version="0.0.0">
-       <category name="knime-conda" />
-    </feature>
-
 
    <category-def name="knime-conda" label="Build artifacts from knime-conda">
        <description>Build artifacts from knime-conda</description>

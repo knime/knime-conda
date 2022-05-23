@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <feature
       id="org.knime.features.conda"
-      label="KNIME Conda"
+      label="KNIME Conda Integration"
       version="4.6.0.qualifier"
       provider-name="KNIME AG, Zurich, Switzerland">
 
    <description>
-      This feature contains the integration with Conda.
+      This feature contains the integration with Conda. The "Conda Environment Propagation" node ensures the existence of a specific configurable Conda environment and propagates the environment to Python, R, or other Conda-aware downstream nodes.
    </description>
 
    <copyright>

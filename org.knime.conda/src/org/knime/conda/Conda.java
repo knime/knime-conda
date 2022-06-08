@@ -354,7 +354,7 @@ public final class Conda {
      */
     public String getVersionString() throws IOException {
         final AtomicReference<String> version = new AtomicReference<>();
-        callCondaAndAwaitTermination(new CondaExecutionMonitor() {
+        callCondaAndAwaitTermination(new CondaExecutionMonitor(true) {
 
             @Override
             protected void handleCustomNonJsonOutput(final String output) {
@@ -375,7 +375,7 @@ public final class Conda {
             m_rootPrefix = getRootPrefix();
         }
         final List<CondaEnvironmentIdentifier> environments = new ArrayList<>();
-        callCondaAndAwaitTermination(new CondaExecutionMonitor() {
+        callCondaAndAwaitTermination(new CondaExecutionMonitor(true) {
 
             @Override
             protected void handleCustomJsonOutput(final TreeNode json) {
@@ -411,7 +411,7 @@ public final class Conda {
 
     private String getRootPrefix() throws IOException {
         final AtomicReference<String> rootPrefix = new AtomicReference<>();
-        callCondaAndAwaitTermination(new CondaExecutionMonitor() {
+        callCondaAndAwaitTermination(new CondaExecutionMonitor(true) {
 
             @Override
             protected void handleCustomJsonOutput(final TreeNode json) {
@@ -430,7 +430,7 @@ public final class Conda {
      */
     public List<CondaPackageSpec> getPackages(final String environmentName) throws IOException {
         final List<CondaPackageSpec> packages = new ArrayList<>();
-        callCondaAndAwaitTermination(new CondaExecutionMonitor() {
+        callCondaAndAwaitTermination(new CondaExecutionMonitor(true) {
 
             @Override
             protected void handleCustomJsonOutput(final TreeNode json) {
@@ -481,7 +481,7 @@ public final class Conda {
      */
     public List<String> getPackageNamesFromHistory(final String environmentName) throws IOException {
         final List<String> packageNames = new ArrayList<>();
-        callCondaAndAwaitTermination(new CondaExecutionMonitor() {
+        callCondaAndAwaitTermination(new CondaExecutionMonitor(true) {
 
             @Override
             protected void handleCustomJsonOutput(final TreeNode json) {
@@ -678,7 +678,7 @@ public final class Conda {
      */
     public List<String> getEnvsDirs() throws IOException {
         final List<String> envsDirs = new ArrayList<>();
-        callCondaAndAwaitTermination(new CondaExecutionMonitor() {
+        callCondaAndAwaitTermination(new CondaExecutionMonitor(true) {
             @Override
             void handleCustomJsonOutput(final TreeNode json) {
                 final var envsDirsJson = (ArrayNode)json.get("envs_dirs");
@@ -725,7 +725,7 @@ public final class Conda {
         try {
             callCondaAndMonitorExecution(monitor, arguments);
         } catch (final CondaCanceledExecutionException ex) {
-            throw new IOException("Execution was interrupted.", ex);
+            throw new IOException(ex.getMessage(), ex);
         }
     }
 

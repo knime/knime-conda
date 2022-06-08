@@ -60,13 +60,14 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 import org.knime.core.node.CanceledExecutionException;
-import org.knime.core.node.KNIMEConstants;
 import org.knime.core.node.NodeLogger;
 
 import com.fasterxml.jackson.core.JsonFactory;
@@ -75,14 +76,58 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 class CondaExecutionMonitor {
+
+    private static final String MONITOR_TIMEOUT_VM_OPTION = "knime.conda.lightweightCommandTimeout";
+
+    private static final int DEFAULT_MONITOR_TIMEOUT_IN_SECONDS = 30;
 
     private final List<String> m_standardOutputErrors = new ArrayList<>();
 
     private final List<String> m_errorOutputErrors = new ArrayList<>();
 
+    /**
+     * May be {@code < 0}, which means that no timeout is specified.
+     */
+    private final long m_timeoutInSeconds;
+
     private boolean m_isCanceled;
+
+    public CondaExecutionMonitor() {
+        this(false);
+    }
+
+    /**
+     * @param monitorsLightweightCommand {@code true} if this monitor is intended to monitor lightweight conda commands
+     *            that are expected to finish in short time. Enable this option to run
+     *            {@code #monitorExecution(Process, boolean)} within a predefined duration after which the monitor times
+     *            out and causes a {@link CondaCanceledExecutionException cancellation}. This can help to avoid blocking
+     *            subsequent logic if conda is slow or non-responsive. Set this parameter to {@code false} if the
+     *            monitored command is expected to be time consuming (e.g. environment creation).
+     */
+    public CondaExecutionMonitor(final boolean monitorsLightweightCommand) {
+        if (monitorsLightweightCommand) {
+            m_timeoutInSeconds = getLightweightCommandTimeoutInSeconds();
+        } else {
+            m_timeoutInSeconds = -1;
+        }
+    }
+
+    private static int getLightweightCommandTimeoutInSeconds() {
+        try {
+            final String timeout =
+                System.getProperty(MONITOR_TIMEOUT_VM_OPTION, Integer.toString(DEFAULT_MONITOR_TIMEOUT_IN_SECONDS));
+            return Integer.parseInt(timeout);
+        } catch (final NumberFormatException ex) {
+            NodeLogger.getLogger(CondaExecutionMonitor.class)
+                .warn("The VM option -D" + MONITOR_TIMEOUT_VM_OPTION
+                    + " was set to an invalid, non-integer value. The timeout therefore defaults to "
+                    + DEFAULT_MONITOR_TIMEOUT_IN_SECONDS + " sec.");
+            return DEFAULT_MONITOR_TIMEOUT_IN_SECONDS;
+        }
+    }
 
     void monitorExecution(final Process conda, final boolean hasJsonOutput)
         throws CondaCanceledExecutionException, IOException {
@@ -91,7 +136,7 @@ class CondaExecutionMonitor {
         try {
             outputListener.start();
             errorListener.start();
-            final int condaExitCode = awaitTermination(conda, this);
+            final int condaExitCode = awaitTermination(conda);
             if (condaExitCode != 0) {
                 // Wait for listeners to finish consuming their streams before creating the error message.
                 try {
@@ -257,13 +302,30 @@ class CondaExecutionMonitor {
         // Do nothing by default.
     }
 
-    private int awaitTermination(final Process conda, final CondaExecutionMonitor monitor)
-        throws CondaCanceledExecutionException, IOException {
+    private int awaitTermination(final Process conda) throws CondaCanceledExecutionException, IOException {
+        final ExecutorService executor = Executors.newSingleThreadExecutor(
+            new ThreadFactoryBuilder().setNameFormat("conda-" + conda.pid() + "-await-termination-%d").build());
         try {
-            return executeCancelable(conda::waitFor, KNIMEConstants.GLOBAL_THREAD_POOL::enqueue, monitor);
+            return executeCancelable(() -> waitForConda(conda), executor::submit, this);
         } catch (final CondaCanceledExecutionException ex) {
             handleCanceledExecution(conda);
             throw ex;
+        }
+    }
+
+    private int waitForConda(final Process conda) throws InterruptedException, CondaCanceledExecutionException {
+        if (m_timeoutInSeconds < 0) {
+            return conda.waitFor();
+        } else {
+            if (conda.waitFor(m_timeoutInSeconds, TimeUnit.SECONDS)) {
+                return conda.exitValue();
+            } else {
+                throw new CondaCanceledExecutionException("Waiting for the conda command to finish timed out after "
+                    + m_timeoutInSeconds + " sec.\nPlease consider increasing the timeout using the VM option '-D"
+                    + MONITOR_TIMEOUT_VM_OPTION
+                    + "=<value-in-seconds>'.\nIt is also advisable to check why conda was so unusually slow in "
+                    + "executing the command (e.g. due to high CPU load?).");
+            }
         }
     }
 
@@ -360,7 +422,7 @@ class CondaExecutionMonitor {
         }
     }
 
-    public static Optional<Throwable> unwrapExecutionException(final Throwable throwable) {
+    private static Optional<Throwable> unwrapExecutionException(final Throwable throwable) {
         return traverseStackUntilFound(throwable, t -> t instanceof ExecutionException ? null : t);
     }
 

@@ -74,6 +74,28 @@ public final class CondaEnvironmentDirectory {
     private final String m_pathPrefix;
 
     /**
+     * Returns the path to the Python executable of the environment in the given directory.
+     * <P>
+     * Paths are determined as per https://docs.anaconda.com/anaconda/user-guide/tasks/integration/python-path/.
+     *
+     * @param environmentDirectoryPath the path to the environment directory
+     * @return The path to the Python executable of this environment.
+     */
+    public static String getPythonExecutableString(final String environmentDirectoryPath) {
+        final Path executablePath;
+        if (SystemUtils.IS_OS_LINUX || SystemUtils.IS_OS_MAC) {
+            // No Sonar: Path is supposed to be user configurable.
+            executablePath = Paths.get(environmentDirectoryPath, "bin", "python"); // NOSONAR
+        } else if (SystemUtils.IS_OS_WINDOWS) {
+            // No Sonar: Path is supposed to be user configurable.
+            executablePath = Paths.get(environmentDirectoryPath, "python.exe"); // NOSONAR
+        } else {
+            throw Conda.createUnknownOSException();
+        }
+        return executablePath.toString();
+    }
+
+    /**
      * @param environmentDirectoryPath The path to the directory of the Conda environment.
      */
     public CondaEnvironmentDirectory(final String environmentDirectoryPath) {
@@ -128,17 +150,7 @@ public final class CondaEnvironmentDirectory {
      * @return The path to the Python executable of this environment.
      */
     public String getPythonExecutableString() {
-        final Path executablePath;
-        if (SystemUtils.IS_OS_LINUX || SystemUtils.IS_OS_MAC) {
-            // No Sonar: Path is supposed to be user configurable.
-            executablePath = Paths.get(m_environmentDirectoryPath, "bin", "python"); // NOSONAR
-        } else if (SystemUtils.IS_OS_WINDOWS) {
-            // No Sonar: Path is supposed to be user configurable.
-            executablePath = Paths.get(m_environmentDirectoryPath, "python.exe"); // NOSONAR
-        } else {
-            throw Conda.createUnknownOSException();
-        }
-        return executablePath.toString();
+        return getPythonExecutableString(m_environmentDirectoryPath);
     }
 
     /**

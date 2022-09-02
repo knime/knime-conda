@@ -19,6 +19,7 @@
 		<feature-branch-extension.branchListProperty>git.branch</feature-branch-extension.branchListProperty>
 		<feature-branch-extension.appendArtifactoryProperties>false</feature-branch-extension.appendArtifactoryProperties>
 		<changelog.baseref>9d42c71fa89e8a04be022cd6ddfeb291f64c3211</changelog.baseref>
+		<knime.sonar-env>Sonarcloud</knime.sonar-env>
 	</properties>
 
 	<modules>

@@ -96,7 +96,8 @@ public abstract class CondaEnvironmentCreationMonitor extends CondaExecutionMoni
                 final long pid = conda.pid();
                 try {
                     // Call `taskkill /F /T /PID <pid>` to kill the process and all its children
-                    new ProcessBuilder("taskkill", "/F", "/T", "/PID", "" + pid).start().waitFor();
+                    new ProcessBuilder("C:\\Windows\\System32\\taskkill.exe", "/F", "/T", "/PID", "" + pid).start()
+                        .waitFor();
                 } catch (final InterruptedException ex) { // NOSONAR: Re-interrupted later
                     LOGGER.warn("Killing the conda process was interrupted.", ex);
                     interrupted = true;

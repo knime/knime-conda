@@ -520,7 +520,7 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
         } catch (final IOException ex) {
             throw new InvalidSettingsException("Failed to reach out to the Conda installation located at '"
                 + condaInstallationPath + "'.\nPlease make sure Conda is properly configured in the Preferences of "
-                + "the KNIME Python Integration.\nThen select the Conda environment to propagate via the "
+                + "the KNIME Conda Integration.\nThen select the Conda environment to propagate via the "
                 + "configuration dialog of this node.", ex);
         }
     }

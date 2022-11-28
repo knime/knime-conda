@@ -15,9 +15,9 @@
 			on the target machine (for example a KNIME Server instance). The node is intended to be used as follows:
 			<ol>
 				<li>On your local machine, you need to have Conda set up and configured in the Preferences of the KNIME
-					Python Integration as described in the corresponding
+					Conda Integration as described in the
 					<a href="https://docs.knime.com/latest/python_installation_guide">
-					installation guide</a>.</li>
+					Python installation guide</a>.</li>
 				<li>Configure this node by selecting the Conda environment to propagate and selecting the packages to
 					include in the environment in case it needs to be recreated.</li>
 				<li>Connect the output port of the node to the variable input port of any Conda-aware node. For more
@@ -37,7 +37,7 @@
 				<li>Deploy the workflow by uploading it to the KNIME Server, sharing it via the KNIME Hub, or exporting
 					it. Make sure that this node is reset before or during the deployment process.</li>
 				<li>On the target machine, Conda must also be set up and configured in the Preferences of the KNIME
-					Python Integration. If the target machine runs a KNIME Server, you may need to contact your server
+					Conda Integration. If the target machine runs a KNIME Server, you may need to contact your server
 					administrator and/or refer to the
 					<a href="https://docs.knime.com/latest/server_admin_guide">
 					server administration guides</a> in order to do this.</li>

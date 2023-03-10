@@ -1,6 +1,6 @@
-*.class
-.DS_Store
-**/target/
-**/build/
+*/bin/
+target/
+*/build/
+*/.polyglot.build.properties
 **/.flattened-pom.xml
 **/CHANGELOG.md

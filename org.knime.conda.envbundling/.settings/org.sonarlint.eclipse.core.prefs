@@ -1,6 +1,6 @@
 autoEnabled=true
 eclipse.preferences.version=1
 idePrefixKey=
-projectKey=org.knime\:knime-conda
-serverId=sonar.knime.com
+projectKey=KNIME_knime-conda
+serverId=SonarCloud
 sqPrefixKey=org.knime.conda.envbundling

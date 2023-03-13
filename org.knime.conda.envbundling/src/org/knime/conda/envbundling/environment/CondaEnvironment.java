@@ -51,6 +51,8 @@ package org.knime.conda.envbundling.environment;
 import java.nio.file.Path;
 import java.util.Objects;
 
+import org.osgi.framework.Bundle;
+
 /**
  * Represents an installed Conda environment.
  *
@@ -58,13 +60,23 @@ import java.util.Objects;
  */
 public final class CondaEnvironment {
 
+    private final Bundle m_bundle;
+
     private final Path m_path;
 
     private final String m_name;
 
-    CondaEnvironment(final Path path, final String name) {
+    CondaEnvironment(final Bundle bundle, final Path path, final String name) {
+        m_bundle = bundle;
         m_path = path;
         m_name = name;
+    }
+
+    /**
+     * @return the bundle that contains the environment
+     */
+    Bundle getBundle() {
+        return m_bundle;
     }
 
     /**
@@ -87,7 +99,9 @@ public final class CondaEnvironment {
             return true;
         } else if (obj instanceof CondaEnvironment) {
             var other = (CondaEnvironment)obj; // TODO use pattern matching in Java 17
-            return m_name.equals(other.m_name) && m_path.equals(other.m_path);
+            return m_bundle.getBundleId() == other.m_bundle.getBundleId() //
+                && m_name.equals(other.m_name) //
+                && m_path.equals(other.m_path);
         } else {
             return false;
         }
@@ -95,6 +109,6 @@ public final class CondaEnvironment {
 
     @Override
     public int hashCode() {
-        return Objects.hash(m_name, m_path);
+        return Objects.hash(m_bundle.getBundleId(), m_name, m_path);
     }
 }

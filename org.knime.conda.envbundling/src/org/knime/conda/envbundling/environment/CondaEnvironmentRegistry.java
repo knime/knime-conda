@@ -177,6 +177,6 @@ public final class CondaEnvironmentRegistry {
             return Optional.empty();
         }
 
-        return Optional.of(new CondaEnvironment(path, name));
+        return Optional.of(new CondaEnvironment(fragments[0], path, name));
     }
 }

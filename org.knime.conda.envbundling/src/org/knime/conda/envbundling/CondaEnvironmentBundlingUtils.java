@@ -52,6 +52,7 @@ import java.io.IOException;
 
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.Path;
+import org.eclipse.core.runtime.Platform;
 import org.knime.core.util.FileUtil;
 import org.osgi.framework.Bundle;
 
@@ -63,6 +64,28 @@ import org.osgi.framework.Bundle;
 public final class CondaEnvironmentBundlingUtils {
 
     private CondaEnvironmentBundlingUtils() {
+    }
+
+    /**
+     * @return the platform identifier used by Conda to identify the current operating system and system architecture
+     */
+    public static String getCondaPlatformIdentifier() {
+        var os = Platform.getOS();
+        var arch = Platform.getOSArch();
+        if (Platform.OS_LINUX.equals(os) && Platform.ARCH_X86_64.equals(arch)) {
+            return "linux-64";
+        }
+        if (Platform.OS_WIN32.equals(os) && Platform.ARCH_X86_64.equals(arch)) {
+            return "win-64";
+        }
+        if (Platform.OS_MACOSX.equals(os) && Platform.ARCH_X86_64.equals(arch)) {
+            return "osx-64";
+        }
+        if (Platform.OS_MACOSX.equals(os) && Platform.ARCH_AARCH64.equals(arch)) {
+            return "osx-arm64";
+        }
+        throw new IllegalStateException(
+            String.format("The current platform is unknown (operating system: %s, system architecture: %s)", os, arch));
     }
 
     /**

@@ -220,7 +220,7 @@ public final class CondaPackageCollectionUtil {
             throws IOException {
             if (expectedMd5 != null) {
                 try (var in = Files.newInputStream(file)) {
-                    var md5 = DigestUtils.md5Hex(in);
+                    var md5 = DigestUtils.md5Hex(in); // NOSONAR
                     if (!expectedMd5.equals(md5)) {
                         error(String.format(errorMessage, file, expectedMd5, md5));
                     }

@@ -118,20 +118,28 @@ public final class CondaPackageCollectionUtil {
             // Download the packages
             try {
                 // Conda
-                info("Downloading Conda packages");
-                var targetConda = m_targetFolder.resolve(TARGET_FOLDER_CONDA)
-                    .resolve(CondaEnvironmentBundlingUtils.getCondaPlatformIdentifier());
-                Files.createDirectories(targetConda);
-                for (var urlInfo : condaPkgUrls) {
-                    downloadPkg(targetConda, urlInfo);
+                if (condaPkgUrls.isEmpty()) {
+                    info("No conda packages to download");
+                } else {
+                    info("Downloading Conda packages");
+                    var targetConda = m_targetFolder.resolve(TARGET_FOLDER_CONDA)
+                        .resolve(CondaEnvironmentBundlingUtils.getCondaPlatformIdentifier());
+                    Files.createDirectories(targetConda);
+                    for (var urlInfo : condaPkgUrls) {
+                        downloadPkg(targetConda, urlInfo);
+                    }
                 }
 
                 // Pip
-                info("Downloading pip packages");
-                var targetPip = m_targetFolder.resolve(TARGET_FOLDER_PIP);
-                Files.createDirectories(targetConda);
-                for (var urlInfo : pipPkgUrls) {
-                    downloadPkg(targetPip, urlInfo);
+                if (pipPkgUrls.isEmpty()) {
+                    info("No pip packages to download");
+                } else {
+                    info("Downloading pip packages");
+                    var targetPip = m_targetFolder.resolve(TARGET_FOLDER_PIP);
+                    Files.createDirectories(targetPip);
+                    for (var urlInfo : pipPkgUrls) {
+                        downloadPkg(targetPip, urlInfo);
+                    }
                 }
 
                 info("DONE");

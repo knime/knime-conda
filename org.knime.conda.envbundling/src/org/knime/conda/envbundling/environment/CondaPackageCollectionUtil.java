@@ -66,6 +66,7 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.knime.conda.envbundling.CondaEnvironmentBundlingUtils;
+import org.knime.core.node.NodeLogger;
 
 /**
  * Utility for collecting and downloading the packages of installed Conda environments.
@@ -95,7 +96,13 @@ public final class CondaPackageCollectionUtil {
      * @param logger a consumer that receives status updates
      */
     public static void collectAndDownloadPackages(final Path targetFolder, final Consumer<String> logger) {
-        new PackageCollector(targetFolder, logger).collect();
+        try {
+            new PackageCollector(targetFolder, logger).collect();
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            NodeLogger.getLogger(CondaPackageCollectionUtil.class).warn("Python package download was interrupted", ex);
+            logger.accept("ERROR - Download interrupted");
+        }
     }
 
     private static final class PackageCollector {
@@ -109,7 +116,7 @@ public final class CondaPackageCollectionUtil {
             m_logger = logger;
         }
 
-        private void collect() {
+        private void collect() throws InterruptedException {
             info("Collecting package URLs");
             final var condaPkgUrls = new HashSet<UrlInfo>();
             final var pipPkgUrls = new HashSet<UrlInfo>();
@@ -127,6 +134,7 @@ public final class CondaPackageCollectionUtil {
                     Files.createDirectories(targetConda);
                     for (var urlInfo : condaPkgUrls) {
                         downloadPkg(targetConda, urlInfo);
+                        throwIfInterrupted();
                     }
                 }
 
@@ -139,6 +147,7 @@ public final class CondaPackageCollectionUtil {
                     Files.createDirectories(targetPip);
                     for (var urlInfo : pipPkgUrls) {
                         downloadPkg(targetPip, urlInfo);
+                        throwIfInterrupted();
                     }
                 }
 
@@ -152,12 +161,14 @@ public final class CondaPackageCollectionUtil {
          * Collect the package URLs for all conda and pip packages that need to be downloaded and put them into the
          * given collections
          */
-        private void collectPkgUrls(final Collection<UrlInfo> condaPkgUrls, final Collection<UrlInfo> pipPkgUrls) {
+        private void collectPkgUrls(final Collection<UrlInfo> condaPkgUrls, final Collection<UrlInfo> pipPkgUrls)
+            throws InterruptedException {
             Map<String, CondaEnvironment> allEnvironments = CondaEnvironmentRegistry.getEnvironments();
             for (var env : allEnvironments.values()) {
                 info(String.format("Collecting package URLs for environment %s at %s", env.getName(), env.getPath()));
                 condaPkgUrls.addAll(getCondaPkgUrls(env));
                 pipPkgUrls.addAll(getPipPkgUrls(env));
+                throwIfInterrupted();
             }
         }
 
@@ -242,6 +253,13 @@ public final class CondaPackageCollectionUtil {
             var pw = new PrintWriter(sw);
             t.printStackTrace(pw);
             return sw.toString();
+        }
+
+        /** @throws InterruptedException if the current thread is interrupted */
+        private static void throwIfInterrupted() throws InterruptedException {
+            if (Thread.interrupted()) {
+                throw new InterruptedException();
+            }
         }
 
         private static record UrlInfo(String url, String md5) {

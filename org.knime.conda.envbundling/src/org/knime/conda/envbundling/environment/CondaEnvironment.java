@@ -66,14 +66,17 @@ public final class CondaEnvironment {
 
     private final String m_name;
 
-    CondaEnvironment(final Bundle bundle, final Path path, final String name) {
+    private final boolean m_requiresDownload;
+
+    CondaEnvironment(final Bundle bundle, final Path path, final String name, final boolean requiresDownload) {
         m_bundle = bundle;
         m_path = path;
         m_name = name;
+        m_requiresDownload = requiresDownload;
     }
 
     /**
-     * @return the bundle that contains the environment
+     * @return the bundle that defines the environment
      */
     Bundle getBundle() {
         return m_bundle;
@@ -93,6 +96,13 @@ public final class CondaEnvironment {
         return m_path;
     }
 
+    /**
+     * @return <code>true</code> if installing the conda environment requires downloading packages from the internet
+     */
+    boolean isRequiresDownload() {
+        return m_requiresDownload;
+    }
+
     @Override
     public boolean equals(final Object obj) {
         if (obj == this) {
@@ -101,7 +111,8 @@ public final class CondaEnvironment {
             var other = (CondaEnvironment)obj; // TODO use pattern matching in Java 17
             return m_bundle.getBundleId() == other.m_bundle.getBundleId() //
                 && m_name.equals(other.m_name) //
-                && m_path.equals(other.m_path);
+                && m_path.equals(other.m_path) //
+                && m_requiresDownload == other.m_requiresDownload;
         } else {
             return false;
         }
@@ -109,6 +120,6 @@ public final class CondaEnvironment {
 
     @Override
     public int hashCode() {
-        return Objects.hash(m_bundle.getBundleId(), m_name, m_path);
+        return Objects.hash(m_bundle.getBundleId(), m_name, m_path, m_requiresDownload);
     }
 }

@@ -119,9 +119,8 @@ public final class CondaEnvironmentRegistry {
                 extractEnvironment(ext).ifPresent(env -> {
                     final var name = env.getName();
                     if (environments.containsKey(name)) {
-                        LOGGER.errorWithFormat(
-                            "An environment with the name '%s' is already registered. Please use an unique environment name.",
-                            name);
+                        LOGGER.errorWithFormat("An environment with the name '%s' is already registered. "
+                            + "Please use an unique environment name.", name);
                     } else {
                         environments.put(env.getName(), env);
                     }
@@ -177,6 +176,11 @@ public final class CondaEnvironmentRegistry {
             return Optional.empty();
         }
 
-        return Optional.of(new CondaEnvironment(fragments[0], path, name));
+        return Optional.of(new CondaEnvironment(bundle, path, name, isRequiresDownload(extension)));
+    }
+
+    private static boolean isRequiresDownload(final IExtension extension) {
+        return Arrays.stream(extension.getConfigurationElements())
+            .anyMatch(e -> "requires-download".equals(e.getName()));
     }
 }

@@ -19,7 +19,8 @@ The environment should be created on the user machine from a Conda channel using
          </appinfo>
       </annotation>
       <complexType>
-         <sequence>
+         <sequence minOccurs="0" maxOccurs="1">
+            <element ref="requires-download" minOccurs="0" maxOccurs="1"/>
          </sequence>
          <attribute name="point" type="string" use="required">
             <annotation>
@@ -45,6 +46,11 @@ The environment should be created on the user machine from a Conda channel using
                </appinfo>
             </annotation>
          </attribute>
+      </complexType>
+   </element>
+
+   <element name="requires-download">
+      <complexType>
       </complexType>
    </element>
 

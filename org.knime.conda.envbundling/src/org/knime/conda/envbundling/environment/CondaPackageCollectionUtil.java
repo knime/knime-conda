@@ -75,13 +75,15 @@ import org.knime.core.node.NodeLogger;
  */
 public final class CondaPackageCollectionUtil {
 
+    private static final String[] PLATFORM_IDS = {"linux-64", "win-64", "osx-64", "osx-arm64"};
+
     private static final String TARGET_FOLDER_CONDA = "conda";
 
     private static final String TARGET_FOLDER_PIP = "pip";
 
-    private static final String CONDA_PKG_URLS_FILENAME = "conda_pkg_urls.txt";
+    private static final String CONDA_PKG_URLS_PATH = "pkg_urls/conda_%s.txt";
 
-    private static final String PIP_PKG_URLS_FILENAME = "pip_pkg_urls.txt";
+    private static final String PIP_PKG_URLS_PATH = "pkg_urls/pip_%s.txt";
 
     private CondaPackageCollectionUtil() {
         // Only static functions
@@ -118,35 +120,16 @@ public final class CondaPackageCollectionUtil {
 
         private void collect() throws InterruptedException {
             info("Collecting package URLs");
-            final var condaPkgUrls = new HashSet<UrlInfo>();
-            final var pipPkgUrls = new HashSet<UrlInfo>();
-            collectPkgUrls(condaPkgUrls, pipPkgUrls);
+            final var pkgsToDownload = collectPkgToDownload();
 
             // Download the packages
             try {
-                // Conda
-                if (condaPkgUrls.isEmpty()) {
-                    info("No conda packages to download");
+                if (pkgsToDownload.isEmpty()) {
+                    info("No packages to download");
                 } else {
-                    info("Downloading Conda packages");
-                    var targetConda = m_targetFolder.resolve(TARGET_FOLDER_CONDA)
-                        .resolve(CondaEnvironmentBundlingUtils.getCondaPlatformIdentifier());
-                    Files.createDirectories(targetConda);
-                    for (var urlInfo : condaPkgUrls) {
-                        downloadPkg(targetConda, urlInfo);
-                        throwIfInterrupted();
-                    }
-                }
-
-                // Pip
-                if (pipPkgUrls.isEmpty()) {
-                    info("No pip packages to download");
-                } else {
-                    info("Downloading pip packages");
-                    var targetPip = m_targetFolder.resolve(TARGET_FOLDER_PIP);
-                    Files.createDirectories(targetPip);
-                    for (var urlInfo : pipPkgUrls) {
-                        downloadPkg(targetPip, urlInfo);
+                    info("Downloading packages");
+                    for (var downloadInfo : pkgsToDownload) {
+                        downloadPkg(downloadInfo, m_targetFolder);
                         throwIfInterrupted();
                     }
                 }
@@ -157,41 +140,51 @@ public final class CondaPackageCollectionUtil {
             }
         }
 
-        /**
-         * Collect the package URLs for all conda and pip packages that need to be downloaded and put them into the
-         * given collections
-         */
-        private void collectPkgUrls(final Collection<UrlInfo> condaPkgUrls, final Collection<UrlInfo> pipPkgUrls)
-            throws InterruptedException {
+        /** Collect the package URLs for all conda and pip packages that need to be downloaded */
+        private Collection<DownloadInfo> collectPkgToDownload() throws InterruptedException {
             Map<String, CondaEnvironment> allEnvironments = CondaEnvironmentRegistry.getEnvironments();
+            Set<DownloadInfo> packages = new HashSet<>();
+
             for (var env : allEnvironments.values()) {
-                info(String.format("Collecting package URLs for environment %s at %s", env.getName(), env.getPath()));
-                condaPkgUrls.addAll(getCondaPkgUrls(env));
-                pipPkgUrls.addAll(getPipPkgUrls(env));
+                if (env.isRequiresDownload()) {
+                    info(String.format("Collecting package URLs for environment %s at %s", env.getName(),
+                        env.getPath()));
+                    for (var platformId : PLATFORM_IDS) {
+                        packages.addAll(getCondaPkgUrls(env, platformId));
+                        packages.addAll(getPipPkgUrls(env, platformId));
+                    }
+                } else {
+                    info(String.format("Environment %s at %s includes all required packages in the bundle. "
+                        + "No packages to download.", env.getName(), env.getPath()));
+                }
                 throwIfInterrupted();
             }
+
+            return packages;
         }
 
         /**
          * Get the URLs of the conda packages of the given conda environment. Empty if the packages are bundled.
          */
-        private Set<UrlInfo> getCondaPkgUrls(final CondaEnvironment env) {
+        private Set<DownloadInfo> getCondaPkgUrls(final CondaEnvironment env, final String platformId) {
+            var relativePath = Path.of(TARGET_FOLDER_CONDA, platformId);
             try {
-                var pkgUrlsFile =
-                    CondaEnvironmentBundlingUtils.getAbsolutePath(env.getBundle(), CONDA_PKG_URLS_FILENAME);
+                var pkgUrlsFile = CondaEnvironmentBundlingUtils.getAbsolutePath(env.getBundle(),
+                    CONDA_PKG_URLS_PATH.formatted(platformId));
                 try (var reader = Files.newBufferedReader(pkgUrlsFile)) {
                     var pkgUrls = reader.lines() //
                         .filter(l -> !("@EXPLICIT".equals(l))) //
                         .map(l -> {
                             var splitIdx = l.lastIndexOf('#');
-                            return new UrlInfo(l.substring(0, splitIdx), l.substring(splitIdx + 1));
+                            return new DownloadInfo(l.substring(0, splitIdx), l.substring(splitIdx + 1), relativePath);
                         }) //
                         .collect(Collectors.toSet());
                     info(String.format("Read Conda package URLs for %s from %s", env.getName(), pkgUrlsFile));
                     return pkgUrls;
                 }
             } catch (final IOException ex) { // NOSONAR (exception message logged in the next line)
-                warn(String.format("Could not find conda package list for %s: %s", env.getName(), ex.getMessage()));
+                error(String.format("Could not find conda package list for %s (platform: %s): %s", env.getName(),
+                    platformId, ex.getMessage()));
                 return Collections.emptySet();
             }
         }
@@ -200,38 +193,50 @@ public final class CondaPackageCollectionUtil {
          * Get the URLs of the pip packages of the given conda environment. Empty if the packages are bundled or if
          * there are none.
          */
-        private Set<UrlInfo> getPipPkgUrls(final CondaEnvironment env) {
+        private Set<DownloadInfo> getPipPkgUrls(final CondaEnvironment env, final String platformId) {
+            Path pkgUrlsFile;
             try {
-                var pkgUrlsFile = CondaEnvironmentBundlingUtils.getAbsolutePath(env.getBundle(), PIP_PKG_URLS_FILENAME);
-                try (var reader = Files.newBufferedReader(pkgUrlsFile)) {
-                    var pkgUrls = reader.lines() //
-                        .map(l -> new UrlInfo(l, null)) //
-                        .collect(Collectors.toSet());
-                    info(String.format("Read pip package URLs for %s from %s", env.getName(), pkgUrlsFile));
-                    return pkgUrls;
-                }
+                pkgUrlsFile = CondaEnvironmentBundlingUtils.getAbsolutePath(env.getBundle(),
+                    PIP_PKG_URLS_PATH.formatted(platformId));
+            } catch (IOException ex) { // NOSONAR
+                // NB: The file does not exist -> We do not have pip packages
+                info(String.format("No pip packages to download for %s (platform %s)", env.getName(), platformId));
+                return Collections.emptySet();
+            }
+
+            var relativePath = Path.of(TARGET_FOLDER_PIP);
+            try (var reader = Files.newBufferedReader(pkgUrlsFile)) {
+                var pkgUrls = reader.lines() //
+                    .map(l -> new DownloadInfo(l, null, relativePath)) //
+                    .collect(Collectors.toSet());
+                info(String.format("Read pip package URLs for %s from %s", env.getName(), pkgUrlsFile));
+                return pkgUrls;
             } catch (final IOException ex) { // NOSONAR (exception message logged in the next line)
-                info(String.format("Could not find pip package list for %s: %s", env.getName(), ex.getMessage()));
+                error(String.format("Could not read pip package list for %s (platform %s): %s", env.getName(),
+                    platformId, ex.getMessage()));
                 return Collections.emptySet();
             }
         }
 
         /** Download the package from the given URL and check the md5 sum */
-        private void downloadPkg(final Path targetFolder, final UrlInfo urlInfo) throws IOException {
-            info(String.format("Downloading %s", urlInfo.url));
-            var url = new URL(urlInfo.url);
-            var targetFile = targetFolder.resolve(FilenameUtils.getName(url.getPath()));
+        private void downloadPkg(final DownloadInfo downloadInfo, final Path targetFolder) throws IOException {
+            var url = new URL(downloadInfo.url);
+            var relativeFilePath = downloadInfo.relativePath.resolve(FilenameUtils.getName(url.getPath()));
+            var targetFile = targetFolder.resolve(relativeFilePath);
 
             if (Files.exists(targetFile)) {
                 // Do not download if the file already exist
                 // Only check the checksum if it is available
-                checkMd5Sum(targetFile, urlInfo.md5,
+                info(String.format("File %s already downloaded", downloadInfo.url));
+                checkMd5Sum(targetFile, downloadInfo.md5,
                     "The file %s already existed but the checksum did not match. Expected %s, got %s.");
                 return;
             }
 
+            info(String.format("Downloading %s", downloadInfo.url));
             FileUtils.copyURLToFile(url, targetFile.toFile());
-            checkMd5Sum(targetFile, urlInfo.md5, "Checksum of downloaded file %s did not match. Expected %s, got %s.");
+            checkMd5Sum(targetFile, downloadInfo.md5,
+                "Checksum of downloaded file %s did not match. Expected %s, got %s.");
         }
 
         /** Checks if the file has the given checksum. If expectedMd5 is null, nothing will be checked */
@@ -262,15 +267,11 @@ public final class CondaPackageCollectionUtil {
             }
         }
 
-        private static record UrlInfo(String url, String md5) {
+        private static record DownloadInfo(String url, String md5, Path relativePath) {
         }
 
         private void info(final String message) {
             m_logger.accept("INFO - " + message);
-        }
-
-        private void warn(final String message) {
-            m_logger.accept("WARN - " + message);
         }
 
         private void error(final String message) {

@@ -176,10 +176,10 @@ public final class CondaEnvironmentRegistry {
             return Optional.empty();
         }
 
-        return Optional.of(new CondaEnvironment(bundle, path, name, isRequiresDownload(extension)));
+        return Optional.of(new CondaEnvironment(bundle, path, name, requiresDownload(extension)));
     }
 
-    private static boolean isRequiresDownload(final IExtension extension) {
+    private static boolean requiresDownload(final IExtension extension) {
         return Arrays.stream(extension.getConfigurationElements())
             .anyMatch(e -> "requires-download".equals(e.getName()));
     }

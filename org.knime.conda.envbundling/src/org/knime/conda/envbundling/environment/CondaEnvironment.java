@@ -98,8 +98,9 @@ public final class CondaEnvironment {
 
     /**
      * @return <code>true</code> if installing the conda environment requires downloading packages from the internet
+     * @since 5.1
      */
-    boolean isRequiresDownload() {
+    boolean requiresDownload() {
         return m_requiresDownload;
     }
 

@@ -146,7 +146,7 @@ public final class CondaPackageCollectionUtil {
             Set<DownloadInfo> packages = new HashSet<>();
 
             for (var env : allEnvironments.values()) {
-                if (env.isRequiresDownload()) {
+                if (env.requiresDownload()) {
                     info(String.format("Collecting package URLs for environment %s at %s", env.getName(),
                         env.getPath()));
                     for (var platformId : PLATFORM_IDS) {

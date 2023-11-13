@@ -48,8 +48,11 @@
  */
 package org.knime.conda.envbundling.environment;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -57,6 +60,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IExtension;
 import org.eclipse.core.runtime.IExtensionPoint;
 import org.eclipse.core.runtime.IExtensionRegistry;
@@ -75,10 +79,15 @@ public final class CondaEnvironmentRegistry {
     private static final String EXT_POINT_ID = "org.knime.conda.envbundling.CondaEnvironment";
 
     /**
-     * The name of the folder containing the environment. Each fragment of a plugin which registers a CondaEnvironment
-     * must have this folder at its root.
+     * The old name of the folder containing the environment. Each fragment of a plugin which registers a
+     * CondaEnvironment must have this folder at its root.
      */
     public static final String ENV_FOLDER_NAME = "env";
+
+    /**
+     * The new name of the folder containing the all conda environments.
+     */
+    public static final String BUNDLE_PREFIX = "bundling" + File.separator + "envs";
 
     private static final NodeLogger LOGGER = NodeLogger.getLogger(CondaEnvironmentRegistry.class);
 
@@ -167,16 +176,31 @@ public final class CondaEnvironmentRegistry {
                 fragments.length, bundleName, Platform.getOS(), Platform.getOSArch(), usedFragmentName,
                 unusedFragmentNames);
         }
-        final Path path;
-        try {
-            path = CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], ENV_FOLDER_NAME);
-        } catch (final IOException ex) {
-            LOGGER.error(String.format("Could not find the path to the Conda environment for the plugin '%s'. "
-                + "Did the installation of the plugin fail?", bundleName), ex);
-            return Optional.empty();
+        Path path;
+
+        String knimePythonBundlingPath = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
+        if (knimePythonBundlingPath != null) {
+            path = Paths.get(knimePythonBundlingPath, name);
+        } else {
+            String bundleLocationString =
+                FileLocator.getBundleFileLocation(fragments[0]).orElseThrow().getAbsolutePath();
+            Path bundleLocationPath = Paths.get(bundleLocationString);
+            String installationDirectoryString = bundleLocationPath.getParent().getParent().toString();
+            path = Paths.get(installationDirectoryString, BUNDLE_PREFIX, name);
+        }
+
+        if (!Files.exists(path)) {
+            try {
+                path = CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], ENV_FOLDER_NAME);
+            } catch (final IOException ex) {
+                LOGGER.error(String.format("Could not find the path to the Conda environment for the plugin '%s'. "
+                    + "Did the installation of the plugin fail?", bundleName), ex);
+                return Optional.empty();
+            }
         }
 
         return Optional.of(new CondaEnvironment(bundle, path, name, requiresDownload(extension)));
+
     }
 
     private static boolean requiresDownload(final IExtension extension) {

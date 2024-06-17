@@ -535,7 +535,7 @@ public final class Conda {
     }
 
     /**
-     * {@code conda env create --file <file generated from arguments> --name <environmentName> --force} Overwrites
+     * {@code conda env create --file <file generated from arguments> --name <environmentName> --yes} Overwrites
      * environment {@code <environmentName>} if it already exists.
      *
      * @param environmentName The name of the environment to create. If an environment with the given name already
@@ -605,7 +605,7 @@ public final class Conda {
     }
 
     /**
-     * {@code conda env create --file <pathToFile> [--name <optionalEnvironmentName>] [--force]}
+     * {@code conda env create --file <pathToFile> [--name <optionalEnvironmentName>] [--yes]}
      * </p>
      * NOTE: This method does not call {@link #notifyEnvironmentChanged(String)}. Please call it afterwards if an
      * environment was changed.
@@ -613,13 +613,26 @@ public final class Conda {
     private void createEnvironmentFromFile(final String pathToFile, final String optionalEnvironmentName,
         final boolean overwriteExistingEnvironment, final CondaEnvironmentCreationMonitor monitor)
         throws CondaCanceledExecutionException, IOException {
+
+        String forceArgument = "--yes";
+        try {
+            String versionString = getVersionString();
+            final Version version = condaVersionStringToVersion(versionString);
+            if (!version.isSameOrNewer(new Version(24, 3, 0))) {
+                forceArgument = "--force";
+            }
+        } catch (final Exception ex) { // NOSONAR: We want to catch everything and just try with "--yes"
+            LOGGER.warn("Could not detect installed Conda version. "
+                + "Invoking Conda under the assumption that it is a recent version.", ex);
+        }
+
         final List<String> arguments = new ArrayList<>(6);
         Collections.addAll(arguments, "env", "create", "--file", pathToFile);
         if (optionalEnvironmentName != null) {
             Collections.addAll(arguments, "--name", optionalEnvironmentName);
         }
         if (overwriteExistingEnvironment) {
-            arguments.add("--force");
+            arguments.add(forceArgument);
         }
         arguments.add(JSON);
         callCondaAndMonitorExecution(monitor, arguments.toArray(new String[0]));

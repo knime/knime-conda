@@ -73,6 +73,7 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang3.SystemUtils;
 import org.knime.conda.Conda.CondaEnvironmentChangeListener.ChangeEvent;
 import org.knime.conda.prefs.CondaPreferences;
+import org.knime.core.data.util.memory.ExternalProcessMemoryWatchdog;
 import org.knime.core.node.NodeLogger;
 import org.knime.core.util.FileUtil;
 import org.knime.core.util.PathUtils;
@@ -758,6 +759,10 @@ public final class Conda {
         argumentList.add(m_executable);
         Collections.addAll(argumentList, arguments);
         final ProcessBuilder pb = new ProcessBuilder(argumentList);
-        return pb.start();
+        var process = pb.start();
+        // TODO(22951) handle process being killed better
+        ExternalProcessMemoryWatchdog.getInstance().trackProcess(process.toHandle(), memoryUsed -> LOGGER.error(
+            "Total memory limit exceeded. This Conda process used " + memoryUsed / 1024 + " MB and was killed."));
+        return process;
     }
 }

@@ -109,12 +109,12 @@ public final class CondaEnvironmentBundlingUtils {
      * @throws IOException if resolving the path failed
      */
     static java.nio.file.Path getAbsolutePath(final Bundle bundle, final Path path) throws IOException {
-        final var pkgsUrl = FileLocator.find(bundle, path, null);
-        if (pkgsUrl == null) {
+        final var url = FileLocator.find(bundle, path, null);
+        if (url == null) {
             throw new IOException(
                 "Could not find the file '" + path + "' in bundle '" + bundle.getSymbolicName() + "'.");
         }
-        final var pkgsFile = FileUtil.getFileFromURL(FileLocator.toFileURL(pkgsUrl));
-        return pkgsFile.toPath().normalize().toAbsolutePath();
+        final var file = FileUtil.getFileFromURL(FileLocator.toFileURL(url));
+        return file.toPath().normalize().toAbsolutePath();
     }
 }

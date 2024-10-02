@@ -149,6 +149,10 @@ final class CondaEnvironmentsList {
         return m_environmentNameModel;
     }
 
+    DialogComponentStringSelection getEnvironmentNameSelection() {
+        return m_environmentNameSelection;
+    }
+
     public JComponent getComponent() {
         return m_panel;
     }
@@ -174,7 +178,7 @@ final class CondaEnvironmentsList {
         }
     }
 
-    public void initializeEnvironments(final Conda conda) {
+    void initializeEnvironments(final List<CondaEnvironmentIdentifier> environments) {
         try {
             m_configuredNonExistingEnvironmentName = null;
             invokeOnEDT(() -> {
@@ -182,13 +186,11 @@ final class CondaEnvironmentsList {
                 m_warningLabel.setVisible(false);
             });
             final String environmentName = m_environmentNameModel.getStringValue();
-            final List<CondaEnvironmentIdentifier> environments =
-                CondaEnvironmentPropagationNodeModel.getSelectableEnvironments(conda);
             final TreeSet<String> environmentNames = environments.stream() //
                 .map(CondaEnvironmentIdentifier::getName) //
                 .collect(Collectors.toCollection(TreeSet::new));
             String nonExistingEnvironmentName = null;
-            if (!environmentName.equals(CondaEnvironmentIdentifier.PLACEHOLDER_CONDA_ENV.getDirectoryPath())
+            if (!environmentName.equals(CondaEnvironmentIdentifier.PLACEHOLDER_CONDA_ENV.getName())
                 // Include the configured environment even if it is not present on the local machine. This way, the
                 // dialog can be opened on the target machine before the environment has been recreated without
                 // overriding the current configuration.

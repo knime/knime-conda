@@ -53,8 +53,14 @@ import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.TreeSet;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 import javax.swing.Box;
 import javax.swing.JCheckBox;
@@ -65,6 +71,8 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 
 import org.knime.conda.Conda;
+import org.knime.conda.CondaEnvironmentIdentifier;
+import org.knime.conda.CondaPackageSpec;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeDialogPane;
 import org.knime.core.node.NodeLogger;
@@ -274,9 +282,17 @@ final class CondaEnvironmentPropagationNodeDialog extends NodeDialogPane {
             m_refreshVsSaveLock.lock();
             try {
                 final Conda conda = getOrCreateConda();
-                m_environmentsList.initializeEnvironments(conda);
+                final List<CondaEnvironmentIdentifier> environments =
+                    CondaEnvironmentPropagationNodeModel.getSelectableEnvironments(conda);
+
+                if (m_environmentsList.getEnvironmentNameModel().getStringValue()
+                    .equals(CondaEnvironmentIdentifier.PLACEHOLDER_CONDA_ENV.getName())) {
+                    autoconfigure(conda, environments);
+                }
+
+                m_environmentsList.initializeEnvironments(environments);
                 m_packagesTable.initializePackages(conda);
-            } catch (final InvalidSettingsException ex) {
+            } catch (final InvalidSettingsException | IOException ex) {
                 invokeOnEDT(() -> {
                     m_errorLabel.setText(ex.getMessage());
                     ((CardLayout)m_panel.getLayout()).show(m_panel, ERROR);
@@ -295,6 +311,58 @@ final class CondaEnvironmentPropagationNodeDialog extends NodeDialogPane {
                 m_conda = CondaEnvironmentPropagationNodeModel.createConda();
             }
             return m_conda;
+        }
+
+        /**
+         * Auto-configuration: select environment configured in the Preferences.
+         */
+        private void autoconfigure(final Conda conda,
+            final List<CondaEnvironmentIdentifier> environments) throws InvalidSettingsException {
+
+            if (environments.isEmpty()) {
+                throw new InvalidSettingsException("No Conda environment available for propagation." //
+                    + "\nNote that Conda's \"" + Conda.ROOT_ENVIRONMENT_NAME + "\" environment cannot be propagated "
+                    + "because it is not allowed to be overwritten." //
+                    + "\nThis is, however, a prerequisite for environment propagation."
+                    + "\nPlease create at least one additional Conda environment before using this node." //
+                    + "\nThen select the environment to propagate via the configuration dialog of the node.");
+            }
+
+            final String environmentName = selectDefaultEnvironment(environments);
+            final TreeSet<String> environmentNames = environments.stream() //
+                .map(CondaEnvironmentIdentifier::getName) //
+                .collect(Collectors.toCollection(TreeSet::new));
+            m_environmentsList.getEnvironmentNameSelection().replaceListItems(environmentNames, environmentName);
+            m_environmentsList.getEnvironmentNameModel().setStringValue(environmentName);
+
+            List<CondaPackageSpec> packages;
+            try {
+                packages = conda.getPackages(environmentName);
+            } catch (final IOException ex) {
+                throw new InvalidSettingsException(ex.getMessage(), ex);
+            }
+
+            m_packagesTable.getPackagesConfig().setPackages(packages, Collections.emptyList());
+        }
+
+        private String selectDefaultEnvironment(final List<CondaEnvironmentIdentifier> environments) {
+            // Loop over the DEFAULT_ENV_SELECTORS and let them select the default
+            String environmentName = null;
+            for (int i = 0; i < CondaEnvironmentPropagationNodeModel.DEFAULT_ENV_SELECTORS.size()
+                && environmentName == null; i++) {
+                final Optional<CondaEnvironmentIdentifier> selectedEnv =
+                    CondaEnvironmentPropagationNodeModel.DEFAULT_ENV_SELECTORS.get(i)
+                        .selectDefaultEnvironment(environments);
+                if (selectedEnv.isPresent()) {
+                    environmentName = selectedEnv.get().getName();
+                }
+            }
+
+            // If no default environment selected: Default to first environment in the list
+            if (environmentName == null) {
+                environmentName = environments.get(0).getName();
+            }
+            return environmentName;
         }
     }
 }

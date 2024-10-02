@@ -53,7 +53,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -88,7 +87,6 @@ import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.port.PortType;
 import org.knime.core.node.port.flowvariable.FlowVariablePortObject;
-import org.knime.core.node.port.flowvariable.FlowVariablePortObjectSpec;
 import org.knime.core.node.workflow.NodeContext;
 import org.knime.core.util.Pair;
 import org.knime.core.util.PathUtils;
@@ -234,19 +232,6 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
 
     @Override
     protected PortObjectSpec[] configure(final PortObjectSpec[] inSpecs) throws InvalidSettingsException {
-        final Conda conda = createConda();
-        final List<CondaEnvironmentIdentifier> environments;
-        try {
-            environments = getSelectableEnvironments(conda);
-        } catch (IOException ex) {
-            throw new InvalidSettingsException(ex.getMessage(), ex);
-        }
-
-        if (CondaEnvironmentIdentifier.PLACEHOLDER_CONDA_ENV.getName()
-            .equals(m_environmentNameModel.getStringValue())) {
-            autoConfigureOnSourceMachine(conda, environments);
-        }
-
         final List<CondaPackageSpec> packages = m_packagesConfig.getIncludedPackages();
         if (packages.isEmpty()) {
             throw new InvalidSettingsException(
@@ -259,60 +244,7 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
                 + "installed using pip. Therefore you also need to include package 'pip'.");
         }
 
-        final String environmentName = m_environmentNameModel.getStringValue();
-        if (environmentName == null || environmentName.isBlank()) {
-            throw new InvalidSettingsException("The environment name may not be blank.");
-        }
-        final Optional<CondaEnvironmentIdentifier> environment = findEnvironment(environmentName, environments);
-        if (environment.isPresent()) {
-            pushEnvironmentFlowVariable(environmentName, environment.get().getDirectoryPath());
-            return new PortObjectSpec[]{FlowVariablePortObjectSpec.INSTANCE};
-        } else {
-            // Environment not present: create it during execution.
-            return null; // NOSONAR -- null is a valid return value that conforms to this method's contract.
-        }
-    }
-
-    /**
-     * Auto-configuration: select environment configured in the Preferences.
-     */
-    private void autoConfigureOnSourceMachine(final Conda conda, final List<CondaEnvironmentIdentifier> environments)
-        throws InvalidSettingsException {
-
-        // Check if an environment is available at all
-        if (environments.isEmpty()) {
-            throw new InvalidSettingsException("No Conda environment available for propagation." //
-                + "\nNote that Conda's \"" + Conda.ROOT_ENVIRONMENT_NAME + "\" environment cannot be propagated "
-                + "because it is not allowed to be overwritten." //
-                + "\nThis is, however, a prerequisite for environment propagation."
-                + "\nPlease create at least one additional Conda environment before using this node." //
-                + "\nThen select the environment to propagate via the configuration dialog of the node.");
-        }
-
-        // Loop over the DEFAULT_ENV_SELECTORS and let them select the default
-        String environmentName = null;
-        for (int i = 0; i < DEFAULT_ENV_SELECTORS.size() && environmentName == null; i++) {
-            final Optional<CondaEnvironmentIdentifier> selectedEnv =
-                DEFAULT_ENV_SELECTORS.get(i).selectDefaultEnvironment(environments);
-            if (selectedEnv.isPresent()) {
-                environmentName = selectedEnv.get().getName();
-            }
-        }
-
-        // If no default environment selected: Default to first environment in the list
-        if (environmentName == null) {
-            environmentName = environments.get(0).getName();
-        }
-
-        m_environmentNameModel.setStringValue(environmentName);
-
-        List<CondaPackageSpec> packages;
-        try {
-            packages = conda.getPackages(environmentName);
-        } catch (final IOException ex) {
-            throw new InvalidSettingsException(ex.getMessage(), ex);
-        }
-        m_packagesConfig.setPackages(packages, Collections.emptyList());
+        return null;
     }
 
     @Override

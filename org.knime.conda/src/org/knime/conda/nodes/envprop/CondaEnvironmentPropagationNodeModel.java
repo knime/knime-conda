@@ -533,10 +533,16 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
      *         base} environment. The base environment cannot be overwritten. It can therefore not be propagated when
      *         using the {@link #VALIDATION_METHOD_NAME_PACKAGES} or {@link #VALIDATION_METHOD_OVERWRITE} validation
      *         options.
+     *
+     *         Throughout the Conda Environment Propagation node we use the name of an environment to identify it.
+     *         Environments outside of the conda root prefix cannot be addressed by name, and thus we drop them from the
+     *         list.
      */
     static List<CondaEnvironmentIdentifier> getSelectableEnvironments(final Conda conda) throws IOException {
+        final String rootPrefix = conda.getRootPrefix();
         return conda.getEnvironments().stream() //
             .filter(e -> !Objects.equals(e.getName(), Conda.ROOT_ENVIRONMENT_NAME)) //
+            .filter(e -> e.getDirectoryPath().contains(rootPrefix))
             .collect(Collectors.toList());
     }
 

@@ -195,7 +195,7 @@ public final class Conda {
     private final String m_executable;
 
     /**
-     * Lazily initialized by {@link #getEnvironments()}.
+     * Lazily initialized by {@link #getRootPrefix()}. Use {@link #getRootPrefix()} to access the value
      */
     private String m_rootPrefix = null;
 
@@ -373,9 +373,7 @@ public final class Conda {
      * @throws IOException If an error occurs during execution of the underlying command.
      */
     public List<CondaEnvironmentIdentifier> getEnvironments() throws IOException {
-        if (m_rootPrefix == null) {
-            m_rootPrefix = getRootPrefix();
-        }
+        final String rootPrefix = getRootPrefix();
         final List<CondaEnvironmentIdentifier> environments = new ArrayList<>();
         callCondaAndAwaitTermination(new CondaExecutionMonitor(true) {
 
@@ -385,7 +383,7 @@ public final class Conda {
                 for (int i = 0; i < environmentsJson.size(); i++) {
                     final String environmentPath = environmentsJson.get(i).textValue();
                     final String environmentName;
-                    if (environmentPath.equals(m_rootPrefix)) {
+                    if (environmentPath.equals(rootPrefix)) {
                         environmentName = ROOT_ENVIRONMENT_NAME;
                     } else {
                         environmentName = new File(environmentPath).getName();
@@ -411,16 +409,23 @@ public final class Conda {
             .collect(Collectors.toList());
     }
 
-    private String getRootPrefix() throws IOException {
-        final AtomicReference<String> rootPrefix = new AtomicReference<>();
-        callCondaAndAwaitTermination(new CondaExecutionMonitor(true) {
+    /**
+     * @return The root prefix of the selected conda installation
+     * @throws IOException If an error occurs while getting information about the conda installation
+     */
+    public String getRootPrefix() throws IOException {
+        if (m_rootPrefix == null) {
+            final AtomicReference<String> rootPrefix = new AtomicReference<>();
+            callCondaAndAwaitTermination(new CondaExecutionMonitor(true) {
 
-            @Override
-            protected void handleCustomJsonOutput(final TreeNode json) {
-                rootPrefix.set(((JsonNode)json.get("root_prefix")).textValue());
-            }
-        }, "info", JSON);
-        return rootPrefix.get();
+                @Override
+                protected void handleCustomJsonOutput(final TreeNode json) {
+                    rootPrefix.set(((JsonNode)json.get("root_prefix")).textValue());
+                }
+            }, "info", JSON);
+            m_rootPrefix = rootPrefix.get();
+        }
+        return m_rootPrefix;
     }
 
     /**
@@ -550,7 +555,7 @@ public final class Conda {
      * @return The environment.yml file of the created environment. Note that this is a temporary file that is deleted
      *         when the JVM is shut down. Manually copy it if you want to preserve it.
      * @throws IOException If an error occurs during execution of the underlying command.
-     * @throws PythonCanceledExecutionException If environment creation was canceled via the given monitor.
+     * @throws CondaCanceledExecutionException If environment creation was canceled via the given monitor.
      */
     public File createEnvironment(final String environmentName, final List<CondaPackageSpec> packages,
         final boolean includeBuildSpecs, final CondaEnvironmentCreationMonitor monitor)

@@ -384,6 +384,13 @@ public final class Conda {
                 final ArrayNode environmentsJson = (ArrayNode)json.get("envs");
                 for (int i = 0; i < environmentsJson.size(); i++) {
                     final String environmentPath = environmentsJson.get(i).textValue();
+
+                    // Most other operations we perform here use the name of an environment to identify it. Environments outside
+                    // of the root prefix cannot be addressed by name, and thus we drop them from the list.
+                    if (!environmentPath.contains(m_rootPrefix)) {
+                        continue;
+                    }
+
                     final String environmentName;
                     if (environmentPath.equals(m_rootPrefix)) {
                         environmentName = ROOT_ENVIRONMENT_NAME;
@@ -550,7 +557,7 @@ public final class Conda {
      * @return The environment.yml file of the created environment. Note that this is a temporary file that is deleted
      *         when the JVM is shut down. Manually copy it if you want to preserve it.
      * @throws IOException If an error occurs during execution of the underlying command.
-     * @throws PythonCanceledExecutionException If environment creation was canceled via the given monitor.
+     * @throws CondaCanceledExecutionException If environment creation was canceled via the given monitor.
      */
     public File createEnvironment(final String environmentName, final List<CondaPackageSpec> packages,
         final boolean includeBuildSpecs, final CondaEnvironmentCreationMonitor monitor)

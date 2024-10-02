@@ -242,6 +242,10 @@ final class CondaPackagesTable {
         setState(UNINITIALIZED);
     }
 
+    CondaPackagesConfig getPackagesConfig() {
+        return m_config;
+    }
+
     private void setState(final String state) {
         m_allowsRefresh = POPULATED.equals(state) || ERROR.equals(state);
         ((CardLayout)m_panel.getLayout()).show(m_panel, state);

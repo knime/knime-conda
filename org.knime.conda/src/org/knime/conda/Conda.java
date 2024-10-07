@@ -84,6 +84,7 @@ import org.yaml.snakeyaml.Yaml;
 import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.google.common.base.Preconditions;
 
 /**
  * Interface to an external Conda installation.
@@ -554,6 +555,9 @@ public final class Conda {
     public File createEnvironment(final String environmentName, final List<CondaPackageSpec> packages,
         final boolean includeBuildSpecs, final CondaEnvironmentCreationMonitor monitor)
         throws CondaCanceledExecutionException, IOException {
+        Preconditions.checkNotNull(environmentName, "Environment name must not be null.");
+        Preconditions.checkArgument(!environmentName.isBlank(), "Environment name must not be blank.");
+
         final List<CondaPackageSpec> installedByPip = new ArrayList<>();
         final List<CondaPackageSpec> installedByConda = new ArrayList<>();
         final boolean pipExists = filterPipInstalledPackages(packages, installedByPip, installedByConda);
@@ -648,6 +652,8 @@ public final class Conda {
      * @throws IOException if running the command failed.
      */
     public void deleteEnvironment(final String environmentName) throws IOException {
+        Preconditions.checkNotNull(environmentName, "Environment name must not be null.");
+        Preconditions.checkArgument(!environmentName.isBlank(), "Environment name must not be blank.");
         try {
             try {
                 // Try the correct way: call conda env remove -n <env_name>

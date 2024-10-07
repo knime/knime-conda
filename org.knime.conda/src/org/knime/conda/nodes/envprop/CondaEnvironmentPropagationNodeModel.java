@@ -260,6 +260,9 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
         }
 
         final String environmentName = m_environmentNameModel.getStringValue();
+        if (environmentName == null || environmentName.isBlank()) {
+            throw new InvalidSettingsException("The environment name may not be blank.");
+        }
         final Optional<CondaEnvironmentIdentifier> environment = findEnvironment(environmentName, environments);
         if (environment.isPresent()) {
             pushEnvironmentFlowVariable(environmentName, environment.get().getDirectoryPath());

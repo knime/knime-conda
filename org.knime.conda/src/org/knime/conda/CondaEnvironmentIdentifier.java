@@ -62,6 +62,15 @@ public final class CondaEnvironmentIdentifier {
     public static final CondaEnvironmentIdentifier PLACEHOLDER_CONDA_ENV =
         new CondaEnvironmentIdentifier("no environment available", "no_conda_environment_selected");
 
+    /**
+     * Placeholder value that is used as path during configure(), so that downstream nodes can be configured to use the
+     * flow variable even though we don't run any conda commands in configure().
+     *
+     * @since 5.4
+     */
+    public static final String NOT_EXECUTED_PATH_PLACEHOLDER =
+        "Execute the upstream Conda Environment Propagation node to populate the environment path";
+
     private final String m_name;
 
     private final String m_directoryPath;

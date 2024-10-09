@@ -87,6 +87,7 @@ import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.port.PortType;
 import org.knime.core.node.port.flowvariable.FlowVariablePortObject;
+import org.knime.core.node.port.flowvariable.FlowVariablePortObjectSpec;
 import org.knime.core.node.workflow.NodeContext;
 import org.knime.core.util.Pair;
 import org.knime.core.util.PathUtils;
@@ -244,7 +245,13 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
                 + "installed using pip. Therefore you also need to include package 'pip'.");
         }
 
-        return null;
+        // Always output environment flow variable, but use placeholder path while execute hasn't been run
+        final String environmentName = m_environmentNameModel.getStringValue();
+        if (environmentName == null || environmentName.isBlank()) {
+            throw new InvalidSettingsException("The environment name may not be blank.");
+        }
+        pushEnvironmentFlowVariable(environmentName, CondaEnvironmentIdentifier.NOT_EXECUTED_PATH_PLACEHOLDER);
+        return new PortObjectSpec[]{FlowVariablePortObjectSpec.INSTANCE};
     }
 
     @Override

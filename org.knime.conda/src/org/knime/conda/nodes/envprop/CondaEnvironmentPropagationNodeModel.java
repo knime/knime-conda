@@ -234,9 +234,13 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
     @Override
     protected PortObjectSpec[] configure(final PortObjectSpec[] inSpecs) throws InvalidSettingsException {
         final List<CondaPackageSpec> packages = m_packagesConfig.getIncludedPackages();
+        if (m_environmentNameModel.getStringValue()
+            .equals(CondaEnvironmentIdentifier.PLACEHOLDER_CONDA_ENV.getName())) {
+            throw new InvalidSettingsException("No conda environment selected.");
+        }
         if (packages.isEmpty()) {
             throw new InvalidSettingsException(
-                "Cannot propagate an empty environment. Please select at least one package.");
+                "Cannot propagate an empty environment. Select at least one package.");
         }
         final List<CondaPackageSpec> installedByPip = new ArrayList<>();
         final boolean pipExists = Conda.filterPipInstalledPackages(packages, installedByPip, null);

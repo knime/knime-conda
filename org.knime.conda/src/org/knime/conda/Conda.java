@@ -413,7 +413,7 @@ public final class Conda {
      * @return The root prefix of the selected conda installation
      * @throws IOException If an error occurs while getting information about the conda installation
      */
-    public String getRootPrefix() throws IOException {
+    private String getRootPrefix() throws IOException {
         if (m_rootPrefix == null) {
             final AtomicReference<String> rootPrefix = new AtomicReference<>();
             callCondaAndAwaitTermination(new CondaExecutionMonitor(true) {

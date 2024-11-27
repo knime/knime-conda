@@ -58,6 +58,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
@@ -239,8 +240,7 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
             throw new InvalidSettingsException("No conda environment selected.");
         }
         if (packages.isEmpty()) {
-            throw new InvalidSettingsException(
-                "Cannot propagate an empty environment. Select at least one package.");
+            throw new InvalidSettingsException("Cannot propagate an empty environment. Select at least one package.");
         }
         final List<CondaPackageSpec> installedByPip = new ArrayList<>();
         final boolean pipExists = Conda.filterPipInstalledPackages(packages, installedByPip, null);
@@ -482,10 +482,13 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
      *         list.
      */
     static List<CondaEnvironmentIdentifier> getSelectableEnvironments(final Conda conda) throws IOException {
-        final String rootPrefix = conda.getRootPrefix();
+        var envDirsConfig = conda.getEnvsDirs();
+        Predicate<CondaEnvironmentIdentifier> isInConfiguredEnvDir =
+            env -> envDirsConfig.stream().anyMatch(dir -> env.getDirectoryPath().contains(dir));
+
         return conda.getEnvironments().stream() //
             .filter(e -> !Objects.equals(e.getName(), Conda.ROOT_ENVIRONMENT_NAME)) //
-            .filter(e -> e.getDirectoryPath().contains(rootPrefix))
+            .filter(isInConfiguredEnvDir) //
             .collect(Collectors.toList());
     }
 

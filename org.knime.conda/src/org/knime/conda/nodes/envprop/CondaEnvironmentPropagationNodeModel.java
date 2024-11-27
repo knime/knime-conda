@@ -483,10 +483,16 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
      */
     static List<CondaEnvironmentIdentifier> getSelectableEnvironments(final Conda conda) throws IOException {
         final String rootPrefix = conda.getRootPrefix();
-        return conda.getEnvironments().stream() //
+        var environments = conda.getEnvironments();
+
+        // TODO remove debug logging
+        LOGGER.warn("DEBUG CONDA - Root prefix: '" + rootPrefix + "'");
+        LOGGER.warn("DEBUG CONDA - All environment paths: "
+            + environments.stream().map(e -> "'" + e.getDirectoryPath() + "'").collect(Collectors.joining(", ")));
+
+        return environments.stream() //
             .filter(e -> !Objects.equals(e.getName(), Conda.ROOT_ENVIRONMENT_NAME)) //
-            .filter(e -> e.getDirectoryPath().contains(rootPrefix))
-            .collect(Collectors.toList());
+            .filter(e -> e.getDirectoryPath().contains(rootPrefix)).collect(Collectors.toList());
     }
 
     private static Optional<CondaEnvironmentIdentifier> findEnvironment(final String environmentName,

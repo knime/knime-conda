@@ -284,7 +284,7 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
             try (final EnvironmentBackup envBackup = new EnvironmentBackup(existingEnvironment.orElse(null))) {
                 try {
                     conda.createEnvironment(environmentName, packages, sameOs,
-                        new Monitor(packages.size(), exec.getProgressMonitor(), errorMsg -> {
+                        new Monitor(packages.size(), exec.getProgressMonitor(), exec::setProgress, errorMsg -> {
                             throw new KNIMEException(errorMsg).toUnchecked();
                         }));
                 } catch (final IOException ex) {
@@ -516,12 +516,20 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
 
         private final NodeContext m_nodeContext;
 
-        public Monitor(final int numPackages, final NodeProgressMonitor monitor,
+        private final Consumer<String> m_msgConsumer;
+
+        public Monitor(final int numPackages, final NodeProgressMonitor monitor, final Consumer<String> msgConsumer,
             final Consumer<String> nodeErrorMessageConsumer) {
             super(nodeErrorMessageConsumer);
             m_progressPerPackage = 1d / numPackages;
             m_monitor = monitor;
             m_nodeContext = NodeContext.getContext();
+            m_msgConsumer = msgConsumer;
+        }
+
+        @Override
+        public void setProgressMessage(final String msg) {
+            m_msgConsumer.accept(msg);
         }
 
         @Override

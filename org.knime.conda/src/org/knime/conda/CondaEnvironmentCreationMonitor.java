@@ -49,6 +49,7 @@
 package org.knime.conda;
 
 import java.io.IOException;
+import java.util.function.Consumer;
 
 import org.apache.commons.lang3.SystemUtils;
 import org.knime.core.node.NodeLogger;
@@ -61,6 +62,23 @@ import com.fasterxml.jackson.databind.JsonNode;
  * downloads, at the moment.
  */
 public abstract class CondaEnvironmentCreationMonitor extends CondaExecutionMonitor {
+
+    /**
+     * Default constructor
+     */
+    protected CondaEnvironmentCreationMonitor() {
+        super(false);
+    }
+
+    /**
+     * Constructor with a message consumer for node errors
+     *
+     * @param nodeErrorMessageConsumer the consumer to call when an error occurs that should be shown on node-level
+     * @since 5.5
+     */
+    protected CondaEnvironmentCreationMonitor(final Consumer<String> nodeErrorMessageConsumer) {
+        super(false, nodeErrorMessageConsumer);
+    }
 
     private static final NodeLogger LOGGER = NodeLogger.getLogger(CondaEnvironmentCreationMonitor.class);
 

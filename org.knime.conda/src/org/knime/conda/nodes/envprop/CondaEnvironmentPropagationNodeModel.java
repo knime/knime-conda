@@ -58,6 +58,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
@@ -77,6 +78,7 @@ import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.KNIMEException;
 import org.knime.core.node.NodeLogger;
 import org.knime.core.node.NodeModel;
 import org.knime.core.node.NodeProgressMonitor;
@@ -282,7 +284,9 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
             try (final EnvironmentBackup envBackup = new EnvironmentBackup(existingEnvironment.orElse(null))) {
                 try {
                     conda.createEnvironment(environmentName, packages, sameOs,
-                        new Monitor(packages.size(), exec.getProgressMonitor()));
+                        new Monitor(packages.size(), exec.getProgressMonitor(), errorMsg -> {
+                            throw new KNIMEException(errorMsg).toUnchecked();
+                        }));
                 } catch (final IOException ex) {
                     handleFailedEnvCreation(conda, environmentName, envBackup);
                     throw ex;
@@ -512,7 +516,9 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
 
         private final NodeContext m_nodeContext;
 
-        public Monitor(final int numPackages, final NodeProgressMonitor monitor) {
+        public Monitor(final int numPackages, final NodeProgressMonitor monitor,
+            final Consumer<String> nodeErrorMessageConsumer) {
+            super(nodeErrorMessageConsumer);
             m_progressPerPackage = 1d / numPackages;
             m_monitor = monitor;
             m_nodeContext = NodeContext.getContext();

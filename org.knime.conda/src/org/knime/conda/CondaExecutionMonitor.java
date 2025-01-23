@@ -65,6 +65,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.knime.core.node.CanceledExecutionException;
@@ -95,6 +96,8 @@ class CondaExecutionMonitor {
 
     private boolean m_isCanceled;
 
+    private final Consumer<String> m_nodeErrorMessageConsumer;
+
     public CondaExecutionMonitor() {
         this(false);
     }
@@ -108,11 +111,27 @@ class CondaExecutionMonitor {
      *            monitored command is expected to be time consuming (e.g. environment creation).
      */
     public CondaExecutionMonitor(final boolean monitorsLightweightCommand) {
+        this(monitorsLightweightCommand, s -> {
+        });
+    }
+
+    /**
+     * @param monitorsLightweightCommand {@code true} if this monitor is intended to monitor lightweight conda commands
+     *            that are expected to finish in short time. Enable this option to run
+     *            {@code #monitorExecution(Process, boolean)} within a predefined duration after which the monitor times
+     *            out and causes a {@link CondaCanceledExecutionException cancellation}. This can help to avoid blocking
+     *            subsequent logic if conda is slow or non-responsive. Set this parameter to {@code false} if the
+     *            monitored command is expected to be time consuming (e.g. environment creation).
+     * @param nodeErrorMessageConsumer A consumer that should show this error as node error
+     */
+    public CondaExecutionMonitor(final boolean monitorsLightweightCommand,
+        final Consumer<String> nodeErrorMessageConsumer) {
         if (monitorsLightweightCommand) {
             m_timeoutInSeconds = getLightweightCommandTimeoutInSeconds();
         } else {
             m_timeoutInSeconds = -1;
         }
+        m_nodeErrorMessageConsumer = nodeErrorMessageConsumer;
     }
 
     private static int getLightweightCommandTimeoutInSeconds() {
@@ -153,6 +172,10 @@ class CondaExecutionMonitor {
             outputListener.interrupt();
             errorListener.interrupt();
         }
+    }
+
+    void setNodeError(final String message) {
+        m_nodeErrorMessageConsumer.accept(message);
     }
 
     private void parseOutputStream(final InputStream standardOutput, final boolean isJsonOutput) {

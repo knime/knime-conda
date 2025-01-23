@@ -759,7 +759,7 @@ public final class Conda {
     private void callCondaAndMonitorExecution(final CondaExecutionMonitor monitor, final String... arguments)
         throws CondaCanceledExecutionException, IOException {
         final boolean hasJsonOutput = Arrays.asList(arguments).contains(JSON);
-        final Process conda = startCondaProcess(arguments);
+        final Process conda = startCondaProcess(monitor, arguments);
         try {
             monitor.monitorExecution(conda, hasJsonOutput);
         } finally {
@@ -767,15 +767,20 @@ public final class Conda {
         }
     }
 
-    private Process startCondaProcess(final String... arguments) throws IOException {
+    private Process startCondaProcess(final CondaExecutionMonitor monitor, final String... arguments)
+        throws IOException {
         final List<String> argumentList = new ArrayList<>(1 + arguments.length);
         argumentList.add(m_executable);
         Collections.addAll(argumentList, arguments);
         final ProcessBuilder pb = new ProcessBuilder(argumentList);
         var process = pb.start();
-        // TODO(22951) handle process being killed better
-        ExternalProcessMemoryWatchdog.getInstance().trackProcess(process.toHandle(), memoryUsed -> LOGGER.error(
-            "Total memory limit exceeded. This Conda process used " + memoryUsed / 1024 + " MB and was killed."));
+
+        ExternalProcessMemoryWatchdog.getInstance().trackProcess(process.toHandle(), memoryUsed -> {
+            var msg =
+                "Total memory limit exceeded. This Conda process used " + memoryUsed / 1024 + " MB and was killed.";
+            LOGGER.error(msg);
+            monitor.setNodeError(msg);
+        });
         return process;
     }
 }

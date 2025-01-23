@@ -410,6 +410,8 @@ public final class Conda {
     }
 
     /**
+     * (private since 5.4)
+     *
      * @return The root prefix of the selected conda installation
      * @throws IOException If an error occurs while getting information about the conda installation
      */

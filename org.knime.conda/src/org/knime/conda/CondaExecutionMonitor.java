@@ -98,6 +98,8 @@ class CondaExecutionMonitor {
 
     private final Consumer<String> m_nodeErrorMessageConsumer;
 
+    private String m_lastNodeErrorMessage;
+
     public CondaExecutionMonitor() {
         this(false);
     }
@@ -165,7 +167,11 @@ class CondaExecutionMonitor {
                     Thread.currentThread().interrupt();
                     throw new CondaCanceledExecutionException(ex);
                 }
-                final String errorMessage = createErrorMessage(condaExitCode);
+
+                // If we already have an error message set that caused conda to fail, use that, otherwise
+                // tell users about the exit code.
+                final String errorMessage =
+                    m_lastNodeErrorMessage == null ? createErrorMessage(condaExitCode) : m_lastNodeErrorMessage;
                 throw new IOException(errorMessage);
             }
         } finally {
@@ -175,6 +181,7 @@ class CondaExecutionMonitor {
     }
 
     void setNodeError(final String message) {
+        m_lastNodeErrorMessage = message;
         m_nodeErrorMessageConsumer.accept(message);
     }
 

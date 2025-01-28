@@ -67,6 +67,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -115,6 +116,11 @@ public final class Conda {
     private static final Pattern VERSION_BUILD_SEPARATOR = Pattern.compile("=");
 
     private static final Set<CondaEnvironmentChangeListener> ENV_CHANGE_LISTENERS = new HashSet<>();
+
+    /**
+     * Used to lock the environment creation
+     */
+    private static final ReentrantLock LOCK = new ReentrantLock();
 
     /**
      * Converts a version string of the form "conda &ltmajor&gt.&ltminor&gt.&ltmicro&gt" into a {@link Version} object.
@@ -624,28 +630,38 @@ public final class Conda {
         final boolean overwriteExistingEnvironment, final CondaEnvironmentCreationMonitor monitor)
         throws CondaCanceledExecutionException, IOException {
 
-        String forceArgument = "--yes";
-        try {
-            String versionString = getVersionString();
-            final Version version = condaVersionStringToVersion(versionString);
-            if (!version.isSameOrNewer(new Version(24, 3, 0))) {
-                forceArgument = "--force";
+        monitor.setProgressMessage("Waiting for environment creation.");
+        try{
+            LOCK.lockInterruptibly();
+            monitor.setProgressMessage("Creating environment.");
+            String forceArgument = "--yes";
+            try {
+                String versionString = getVersionString();
+                final Version version = condaVersionStringToVersion(versionString);
+                if (!version.isSameOrNewer(new Version(24, 3, 0))) {
+                    forceArgument = "--force";
+                }
+            } catch (final Exception ex) { // NOSONAR: We want to catch everything and just try with "--yes"
+                LOGGER.warn("Could not detect installed Conda version. "
+                    + "Invoking Conda under the assumption that it is a recent version.", ex);
             }
-        } catch (final Exception ex) { // NOSONAR: We want to catch everything and just try with "--yes"
-            LOGGER.warn("Could not detect installed Conda version. "
-                + "Invoking Conda under the assumption that it is a recent version.", ex);
-        }
 
-        final List<String> arguments = new ArrayList<>(6);
-        Collections.addAll(arguments, "env", "create", "--file", pathToFile);
-        if (optionalEnvironmentName != null) {
-            Collections.addAll(arguments, "--name", optionalEnvironmentName);
+            final List<String> arguments = new ArrayList<>(6);
+            Collections.addAll(arguments, "env", "create", "--file", pathToFile);
+            if (optionalEnvironmentName != null) {
+                Collections.addAll(arguments, "--name", optionalEnvironmentName);
+            }
+            if (overwriteExistingEnvironment) {
+                arguments.add(forceArgument);
+            }
+            arguments.add(JSON);
+            callCondaAndMonitorExecution(monitor, arguments.toArray(new String[0]));
+        } catch (InterruptedException ex) {
+            monitor.setProgressMessage("Environment creation was cancelled.");
+            Thread.currentThread().interrupt();
+        } finally {
+            LOCK.unlock();
         }
-        if (overwriteExistingEnvironment) {
-            arguments.add(forceArgument);
-        }
-        arguments.add(JSON);
-        callCondaAndMonitorExecution(monitor, arguments.toArray(new String[0]));
     }
 
     /**

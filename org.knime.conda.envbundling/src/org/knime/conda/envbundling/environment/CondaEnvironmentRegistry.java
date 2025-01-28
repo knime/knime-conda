@@ -188,34 +188,39 @@ public final class CondaEnvironmentRegistry {
 
         Path path = null;
 
+        String bundleLocationString = FileLocator.getBundleFileLocation(fragments[0]).orElseThrow().getAbsolutePath();
+        Path bundleLocationPath = Paths.get(bundleLocationString);
+        Path installationDirectoryPath = bundleLocationPath.getParent().getParent();
+
         // try to find environment_path.txt, if that is present, use that.
         try {
             var environmentPathFile =
                 CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], ENVIRONMENT_PATH_FILE);
             var environmentPath = FileUtils.readFileToString(environmentPathFile.toFile(), StandardCharsets.UTF_8);
             environmentPath = environmentPath.trim();
-            path = Paths.get(environmentPath);
-        } catch (IOException e) {
-            LOGGER.debug("No " + ENVIRONMENT_PATH_FILE + " file found for " + bundleName
-                + ", using old means to construct environment path");
-        }
+            // Note: if environmentPath is absolute, resolve returns environmentPath directly
+            path = installationDirectoryPath.resolve(environmentPath);
+            LOGGER.debug("Found environment path '" + path + "' (before expansion: '" + environmentPath + "') for '"
+                + bundleName + "' in '" + environmentPathFile + "'");
 
-        if (path == null) {
+        } catch (IOException e) {
+            // No problem, we only introduced the environment_path.txt file in 5.4. Trying other env locations...
+            LOGGER.debug("No " + ENVIRONMENT_PATH_FILE + " file found for '" + bundleName + "'");
+
             String knimePythonBundlingPath = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
             if (knimePythonBundlingPath != null) {
                 path = Paths.get(knimePythonBundlingPath, name);
+                LOGGER.debug("KNIME_PYTHON_BUNDLING_PATH is set, expecting environment at '" + path + "' for '"
+                    + bundleName + "'");
             } else {
-                String bundleLocationString =
-                    FileLocator.getBundleFileLocation(fragments[0]).orElseThrow().getAbsolutePath();
-                Path bundleLocationPath = Paths.get(bundleLocationString);
-                String installationDirectoryString = bundleLocationPath.getParent().getParent().toString();
-                path = Paths.get(installationDirectoryString, BUNDLE_PREFIX, name);
+                path = installationDirectoryPath.resolve(BUNDLE_PREFIX).resolve(name);
             }
         }
 
         if (!Files.exists(path)) {
             try {
                 path = CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], ENV_FOLDER_NAME);
+                LOGGER.debug("Found environment for '" + bundleName + "' inside plugin folder: " + path);
             } catch (final IOException ex) {
                 LOGGER.error(String.format("Could not find the path to the Conda environment for the plugin '%s'. "
                     + "Did the installation of the plugin fail?", bundleName), ex);

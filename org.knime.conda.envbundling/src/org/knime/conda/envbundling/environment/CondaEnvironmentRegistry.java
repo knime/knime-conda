@@ -192,17 +192,22 @@ public final class CondaEnvironmentRegistry {
         try {
             var environmentPathFile =
                 CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], ENVIRONMENT_PATH_FILE);
+            LOGGER
+                .debug("Reading " + ENVIRONMENT_PATH_FILE + " file for " + bundleName + " from " + environmentPathFile);
             var environmentPath = FileUtils.readFileToString(environmentPathFile.toFile(), StandardCharsets.UTF_8);
             environmentPath = environmentPath.trim();
+            LOGGER.debug("Found environment path for " + bundleName + ": " + environmentPath);
             path = Paths.get(environmentPath);
         } catch (IOException e) {
             LOGGER.debug("No " + ENVIRONMENT_PATH_FILE + " file found for " + bundleName
-                + ", using old means to construct environment path");
+                + ", using other means to construct environment path");
         }
 
         if (path == null) {
             String knimePythonBundlingPath = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
             if (knimePythonBundlingPath != null) {
+                LOGGER
+                    .debug("KNIME_PYTHON_BUNDLING_PATH is set, looking for " + name + " for " + bundleName + " there");
                 path = Paths.get(knimePythonBundlingPath, name);
             } else {
                 String bundleLocationString =
@@ -215,6 +220,8 @@ public final class CondaEnvironmentRegistry {
 
         if (!Files.exists(path)) {
             try {
+                LOGGER.debug("No " + ENVIRONMENT_PATH_FILE + " file found for " + bundleName
+                    + ", expecting environment inside plugin folder");
                 path = CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], ENV_FOLDER_NAME);
             } catch (final IOException ex) {
                 LOGGER.error(String.format("Could not find the path to the Conda environment for the plugin '%s'. "

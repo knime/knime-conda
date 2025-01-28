@@ -85,8 +85,9 @@ public final class CondaPreferences {
     /**
      * @return the configured path to the Conda installation directory
      */
-    public static String getCondaInstallationDirectory() {
-        // Return the instance scope preference if present
+    public static synchronized String getCondaInstallationDirectory() {
+        // Synchronized because PREF_STORE.getString() is not thread-safe
+
         String condaDir = instanceScopePrefs().get(CONDA_DIR_PREF_KEY, null);
         if (condaDir != null) {
             return condaDir;

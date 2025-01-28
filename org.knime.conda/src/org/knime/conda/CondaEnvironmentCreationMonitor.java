@@ -88,6 +88,14 @@ public abstract class CondaEnvironmentCreationMonitor extends CondaExecutionMoni
     protected abstract void handlePackageDownloadProgress(String currentPackage, boolean packageFinished,
         double progress);
 
+    /**
+     * @param msg The message to display during execution
+     * @since 5.3.4
+     */
+    public void setProgressMessage(final String msg){
+        // Not abstract to prevent backport issues
+    }
+
     @Override
     protected void handleCanceledExecution(final Process conda) {
         try {

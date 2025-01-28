@@ -59,6 +59,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
@@ -339,7 +340,7 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
             try (final EnvironmentBackup envBackup = new EnvironmentBackup(existingEnvironment.orElse(null))) {
                 try {
                     conda.createEnvironment(environmentName, packages, sameOs,
-                        new Monitor(packages.size(), exec.getProgressMonitor()));
+                        new Monitor(packages.size(), exec.getProgressMonitor(), exec::setProgress));
                 } catch (final IOException ex) {
                     handleFailedEnvCreation(conda, environmentName, envBackup);
                     throw ex;
@@ -560,10 +561,18 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
 
         private final NodeContext m_nodeContext;
 
-        public Monitor(final int numPackages, final NodeProgressMonitor monitor) {
+        private final Consumer<String> m_msgConsumer;
+
+        public Monitor(final int numPackages, final NodeProgressMonitor monitor, final Consumer<String> msgConsumer) {
             m_progressPerPackage = 1d / numPackages;
             m_monitor = monitor;
             m_nodeContext = NodeContext.getContext();
+            m_msgConsumer = msgConsumer;
+        }
+
+        @Override
+        public void setProgressMessage(final String msg) {
+            m_msgConsumer.accept(msg);
         }
 
         @Override

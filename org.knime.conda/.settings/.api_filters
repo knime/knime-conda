@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<component id="org.knime.conda" version="2">
+    <resource path="src/org/knime/conda/CondaEnvironmentCreationMonitor.java" type="org.knime.conda.CondaEnvironmentCreationMonitor">
+        <filter comment="AP-22954: Backported from 5.5" id="1142947843">
+            <message_arguments>
+                <message_argument value="5.3.4"/>
+                <message_argument value="setProgressMessage(String)"/>
+            </message_arguments>
+        </filter>
+    </resource>
+</component>

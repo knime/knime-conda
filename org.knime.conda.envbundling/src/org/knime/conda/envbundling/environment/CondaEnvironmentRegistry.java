@@ -188,6 +188,10 @@ public final class CondaEnvironmentRegistry {
 
         Path path = null;
 
+        String bundleLocationString = FileLocator.getBundleFileLocation(fragments[0]).orElseThrow().getAbsolutePath();
+        Path bundleLocationPath = Paths.get(bundleLocationString);
+        Path installationDirectoryPath = bundleLocationPath.getParent().getParent();
+
         // try to find environment_path.txt, if that is present, use that.
         try {
             var environmentPathFile =
@@ -207,20 +211,14 @@ public final class CondaEnvironmentRegistry {
         } catch (IOException e) {
             LOGGER.debug("No " + ENVIRONMENT_PATH_FILE + " file found for " + bundleName
                 + ", using other means to construct environment path");
-        }
 
-        if (path == null) {
             String knimePythonBundlingPath = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
             if (knimePythonBundlingPath != null) {
                 LOGGER
                     .debug("KNIME_PYTHON_BUNDLING_PATH is set, looking for " + name + " for " + bundleName + " there");
                 path = Paths.get(knimePythonBundlingPath, name);
             } else {
-                String bundleLocationString =
-                    FileLocator.getBundleFileLocation(fragments[0]).orElseThrow().getAbsolutePath();
-                Path bundleLocationPath = Paths.get(bundleLocationString);
-                String installationDirectoryString = bundleLocationPath.getParent().getParent().toString();
-                path = Paths.get(installationDirectoryString, BUNDLE_PREFIX, name);
+                path = installationDirectoryPath.resolve(BUNDLE_PREFIX).resolve(name);
             }
         }
 

@@ -198,6 +198,12 @@ public final class CondaEnvironmentRegistry {
             environmentPath = environmentPath.trim();
             LOGGER.debug("Found environment path for " + bundleName + ": " + environmentPath);
             path = Paths.get(environmentPath);
+            LOGGER.debug("Resolved path is: " + path.toAbsolutePath().normalize());
+
+            if (!path.isAbsolute()) {
+                path = path.toAbsolutePath().normalize();
+                LOGGER.debug("Path was relative, making it absolute: " + path);
+            }
         } catch (IOException e) {
             LOGGER.debug("No " + ENVIRONMENT_PATH_FILE + " file found for " + bundleName
                 + ", using other means to construct environment path");

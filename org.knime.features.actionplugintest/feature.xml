@@ -728,11 +728,11 @@ propagated with or for interoperation with KNIME.
    </license>
 
    <plugin
-         id="org.knime.actionprovider"
+         id="org.knime.actionconsumer"
          version="0.0.0"/>
 
    <plugin
-         id="org.knime.actionconsumer"
+         id="org.knime.actionprovider"
          version="0.0.0"/>
 
 </feature>

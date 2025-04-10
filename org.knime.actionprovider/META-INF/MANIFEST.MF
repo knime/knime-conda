@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Action plugin
+Bundle-SymbolicName: org.knime.actionprovider;singleton:=true
+Bundle-Version: 5.8.0.qualifier
+Bundle-Vendor: KNIME AG, Zurich, Switzerland
+Require-Bundle: org.apache.commons.lang3;bundle-version="[3.9.0,4.0.0)",
+ org.eclipse.equinox.p2.engine,
+ org.eclipse.core.runtime
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+Bundle-ActivationPolicy: lazy

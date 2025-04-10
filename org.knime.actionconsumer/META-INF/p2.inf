@@ -1,0 +1,12 @@
+metaRequirements.0.namespace = osgi.bundle
+metaRequirements.0.name = org.knime.actionprovider
+metaRequirements.0.range = [5.0.0,6.0.0)
+metaRequirements.0.greedy = true
+metaRequirements.0.optional = false
+
+instructions.install=\
+    exampleaction(directory:${artifact.location}, text:"my action did run!");
+instructions.install.import = \
+  org.knime.actionprovider.exampleaction
+
+

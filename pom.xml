@@ -27,6 +27,9 @@
 		<module>org.knime.conda.envbundling</module>
 		<module>org.knime.conda.tests</module>
 		<module>org.knime.features.conda</module>
+		<module>org.knime.actionprovider</module>
+		<module>org.knime.actionconsumer</module>
+		<module>org.knime.features.actionplugintest</module>
 		<module>org.knime.update.conda</module>
 	</modules>
 

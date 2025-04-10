@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         point="org.eclipse.equinox.p2.engine.actions">
+      <action
+            class="org.knime.actionprovider.ExampleAction"
+            name="exampleaction"
+            version="1.0.0">
+      </action>
+   </extension>
+</plugin>

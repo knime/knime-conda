@@ -6,6 +6,9 @@
    <feature id="org.knime.features.conda.source" version="0.0.0">
        <category name="knime-conda" />
    </feature>
+   <feature id="org.knime.features.actionplugintest" version="0.0.0">
+       <category name="knime-conda" />
+   </feature>
    <bundle id="org.knime.conda.envbundling"/>
    <bundle id="org.knime.conda.envbundling.source"/>
 

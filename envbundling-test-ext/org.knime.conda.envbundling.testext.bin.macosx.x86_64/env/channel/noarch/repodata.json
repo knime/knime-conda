@@ -1,0 +1,23 @@
+{
+  "info": {
+    "subdir": "noarch"
+  },
+  "packages": {},
+  "packages.conda": {
+    "tzdata-2025b-h78e105d_0.conda": {
+      "build": "h78e105d_0",
+      "build_number": 0,
+      "depends": [],
+      "license": "LicenseRef-Public-Domain",
+      "md5": "4222072737ccff51314b5ece9c7d6f5a",
+      "name": "tzdata",
+      "noarch": "generic",
+      "sha256": "5aaa366385d716557e365f0a4e9c3fca43ba196872abbbe3d56bb610d131e192",
+      "size": 122968,
+      "subdir": "noarch",
+      "timestamp": 1742727099393,
+      "version": "2025b"
+    }
+  },
+  "repodata_version": 2
+}

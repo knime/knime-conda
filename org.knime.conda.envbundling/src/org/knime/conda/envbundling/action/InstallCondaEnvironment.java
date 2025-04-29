@@ -11,8 +11,10 @@ import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.equinox.p2.engine.spi.ProvisioningAction;
+import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
 import org.knime.conda.envbundling.pixi.PixiBinary;
 import org.knime.core.node.NodeLogger;
+import org.knime.core.util.FileUtil;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
 
@@ -23,6 +25,7 @@ import org.osgi.framework.FrameworkUtil;
  * - implement proper error handling (do we need to catch runtime exceptions?)
  * - how do we version this? If the format changes, we might want to support the old format
  *     + update the action automatically if the client requires a newer version of the action
+ * - uninstall action
  */
 
 /**
@@ -41,24 +44,47 @@ public class InstallCondaEnvironment extends ProvisioningAction {
         try {
             // TODO get the parameters (path to pixi.toml, pixi.lock, channel?
             var directory = (String)parameters.get("directory");
+            var name = (String)parameters.get("name");
 
             // TODO special parameter for the base environment? Or should it be handled by another action?
 
             var pixiBinary = PixiBinary.getPixiBinaryPath();
             var bundlingPath = getBundlingPath();
 
-            LOGGER.warnWithFormat("Would install conda env from %s using %s to %s.", directory, pixiBinary,
-                bundlingPath);
+            var environmentResourcesFolder = Paths.get(directory, "knime_extension_environment");
 
-            // Load the example file
+            var installedEnvRoot = bundlingPath.resolve(name);
 
-            // TODO
-            // Replace by really needed resources
-            // - Add all resources to the build.properties
-            // - Remove the example foo.txt file
-            var filePath = Paths.get(directory, "foo.txt");
-            var exampleContent = Files.readString(filePath);
-            LOGGER.warn("Read from foo.txt: " + exampleContent);
+            // Move channel to bundling folder
+            FileUtil.copyDir(environmentResourcesFolder.resolve("channel").toFile(),
+                installedEnvRoot.resolve("channel").toFile());
+
+            // Pixi init
+            var pb = new ProcessBuilder(pixiBinary, "init", "-i",
+                environmentResourcesFolder.resolve("environment.yml").toAbsolutePath().toString());
+            pb.directory(installedEnvRoot.toFile());
+            var process = pb.start();
+            var exitValue = process.waitFor();
+            if (exitValue != 0) {
+                // TODO read stdout/stderr
+                throw new IllegalStateException("pixi init failed with " + exitValue);
+            }
+
+            // Pixi install
+            var pb2 = new ProcessBuilder(pixiBinary, "install");
+            pb2.directory(installedEnvRoot.toFile());
+            var process2 = pb.start();
+            var exitValue2 = process2.waitFor();
+            if (exitValue2 != 0) {
+                // TODO read stdout/stderr
+                throw new IllegalStateException("pixi install failed with " + exitValue);
+            }
+
+            var envPath =
+                installedEnvRoot.resolve(".pixi").resolve("envs").resolve("default").toAbsolutePath().toString();
+            var envPathFile = Paths.get(directory, CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
+            Files.writeString(envPathFile, envPath);
+
         } catch (Exception e) {
             e.printStackTrace();
             return error("Running action failed", e);

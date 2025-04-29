@@ -77,7 +77,7 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             var exitValue2 = process2.waitFor();
             if (exitValue2 != 0) {
                 // TODO read stdout/stderr
-                throw new IllegalStateException("pixi install failed with " + exitValue);
+                throw new IllegalStateException("pixi install failed with " + exitValue2);
             }
 
             var envPath =

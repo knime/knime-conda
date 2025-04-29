@@ -46,6 +46,8 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             var directory = (String)parameters.get("directory");
             var name = (String)parameters.get("name");
 
+            // TODO check if parameters are fine (not null or empty)
+
             // TODO special parameter for the base environment? Or should it be handled by another action?
 
             var pixiBinary = PixiBinary.getPixiBinaryPath();

@@ -1,0 +1,17 @@
+# TODO - Do we rather want a dependency to a feature which includes the platform
+# specific fragment? This way, we would not need to edit this whenever our plugin
+# setup changes. We just need to make sure the feature defines everything correctly
+metaRequirements.0.namespace = osgi.bundle
+metaRequirements.0.name = org.knime.conda.envbundling
+metaRequirements.0.range = [5.5.0,6.0.0)
+metaRequirements.0.greedy = true
+metaRequirements.0.optional = false
+
+metaRequirements.0.namespace = osgi.bundle
+metaRequirements.0.name = org.knime.conda.pixi.bin.win32.x86_64
+metaRequirements.0.range = [5.5.0,6.0.0)
+metaRequirements.0.greedy = true
+metaRequirements.0.optional = false
+
+instructions.install=\
+    org.knime.conda.envbundling.installcondaenvironment(directory:${artifact.location});

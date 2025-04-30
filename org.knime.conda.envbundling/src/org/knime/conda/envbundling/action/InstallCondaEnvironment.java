@@ -75,7 +75,7 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             // Pixi install
             var pb2 = new ProcessBuilder(pixiBinary, "install");
             pb2.directory(installedEnvRoot.toFile());
-            var process2 = pb.start();
+            var process2 = pb2.start();
             var exitValue2 = process2.waitFor();
             if (exitValue2 != 0) {
                 // TODO read stdout/stderr

@@ -46,8 +46,13 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             var directory = (String)parameters.get("directory");
             var name = (String)parameters.get("name");
 
-            // TODO check if parameters are fine (not null or empty)
-
+            if (directory == null || name == null) {
+                return error("Missing parameters", new IllegalArgumentException("Missing parameters"));
+            }
+            if (!Files.isDirectory(Paths.get(directory))) {
+                return error("Directory does not exist", new IllegalArgumentException("Directory does not exist"));
+            }
+            LOGGER.info("Installing conda environment " + name + "with pixi in " + directory);
             // TODO special parameter for the base environment? Or should it be handled by another action?
 
             var pixiBinary = PixiBinary.getPixiBinaryPath();

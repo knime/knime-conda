@@ -58,18 +58,16 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             var pixiBinary = PixiBinary.getPixiBinaryPath();
             var bundlingPath = getBundlingPath();
 
+            // As long paths shouldn't be too big of an issue, we just place the environment in the plugin
+            // folder and expect the (single!) channel folder relative to that
+            // TODO: Once we share packages with the base env, we need to get the paths for the channel
+            //       folders from the "parent" extensions like the base env plugin.
             var environmentResourcesFolder = Paths.get(directory, "knime_extension_environment");
-
-            var installedEnvRoot = bundlingPath.resolve(name);
-
-            // Move channel to bundling folder
-            FileUtil.copyDir(environmentResourcesFolder.resolve("channel").toFile(),
-                installedEnvRoot.resolve("channel").toFile());
 
             // Pixi init
             var pb = new ProcessBuilder(pixiBinary, "init", "-i",
                 environmentResourcesFolder.resolve("environment.yml").toAbsolutePath().toString());
-            pb.directory(installedEnvRoot.toFile());
+            pb.directory(environmentResourcesFolder.toFile());
             var process = pb.start();
             var exitValue = process.waitFor();
             if (exitValue != 0) {
@@ -79,7 +77,7 @@ public class InstallCondaEnvironment extends ProvisioningAction {
 
             // Pixi install
             var pb2 = new ProcessBuilder(pixiBinary, "install");
-            pb2.directory(installedEnvRoot.toFile());
+            pb2.directory(environmentResourcesFolder.toFile());
             var process2 = pb2.start();
             var exitValue2 = process2.waitFor();
             if (exitValue2 != 0) {
@@ -88,7 +86,7 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             }
 
             var envPath =
-                installedEnvRoot.resolve(".pixi").resolve("envs").resolve("default").toAbsolutePath().toString();
+                environmentResourcesFolder.resolve(".pixi").resolve("envs").resolve("default").toAbsolutePath().toString();
             var envPathFile = Paths.get(directory, CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
             Files.writeString(envPathFile, envPath);
 

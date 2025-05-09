@@ -92,6 +92,9 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             var envPathFile = Paths.get(directory, CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
             Files.writeString(envPathFile, envPath);
 
+            // Invalidate the CondaEnvironmentRegistry cache
+            CondaEnvironmentRegistry.invalidateCache();
+
         } catch (Exception e) {
             e.printStackTrace();
             return error("Running action failed", e);
@@ -102,6 +105,8 @@ public class InstallCondaEnvironment extends ProvisioningAction {
 
     @Override
     public IStatus undo(final Map<String, Object> parameters) {
+        // Invalidate the CondaEnvironmentRegistry cache
+        CondaEnvironmentRegistry.invalidateCache();
         return Status.OK_STATUS;
     }
 

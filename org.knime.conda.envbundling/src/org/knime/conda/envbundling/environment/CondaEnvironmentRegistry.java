@@ -59,6 +59,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
@@ -100,15 +101,19 @@ public final class CondaEnvironmentRegistry {
 
     private static final NodeLogger LOGGER = NodeLogger.getLogger(CondaEnvironmentRegistry.class);
 
-    // NOTE: The instance is initialized with the first access
-    private static class InstanceHolder {
-        private static final CondaEnvironmentRegistry INSTANCE = new CondaEnvironmentRegistry();
-    }
-
-    private final Map<String, CondaEnvironment> m_environments;
+    // Use AtomicReference to allow thread-safe invalidation and lazy initialization
+    private static final AtomicReference<Map<String, CondaEnvironment>> m_environments = new AtomicReference<>(null);
 
     private CondaEnvironmentRegistry() {
-        m_environments = registerExtensions();
+        // Private constructor to prevent instantiation
+    }
+
+    /**
+     * Invalidate the cached environments map. This should be called whenever an extension is installed or uninstalled.
+     */
+    public static void invalidateCache() {
+        LOGGER.info("Invalidating CondaEnvironmentRegistry cache.");
+        m_environments.set(null);
     }
 
     /**
@@ -118,12 +123,20 @@ public final class CondaEnvironmentRegistry {
      * @return the {@link CondaEnvironment} which contains the path to the environment on disk
      */
     public static CondaEnvironment getEnvironment(final String name) {
-        return InstanceHolder.INSTANCE.m_environments.get(name);
+        return getEnvironments().get(name);
     }
 
     /** @return a map of all environments that are installed. */
     public static Map<String, CondaEnvironment> getEnvironments() {
-        return InstanceHolder.INSTANCE.m_environments;
+        if (m_environments.get() == null) {
+            synchronized (m_environments) {
+                if (m_environments.get() == null) {
+                    LOGGER.info("Rebuilding CondaEnvironmentRegistry cache.");
+                    m_environments.set(registerExtensions());
+                }
+            }
+        }
+        return m_environments.get();
     }
 
     /** Loop through extensions and collect them in a Map */
@@ -138,7 +151,7 @@ public final class CondaEnvironmentRegistry {
                     final var name = env.getName();
                     if (environments.containsKey(name)) {
                         LOGGER.errorWithFormat("An environment with the name '%s' is already registered. "
-                            + "Please use an unique environment name.", name);
+                            + "Please use a unique environment name.", name);
                     } else {
                         environments.put(env.getName(), env);
                     }

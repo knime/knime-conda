@@ -11,7 +11,7 @@ properties([
     ]),
     parameters(workflowTests.getConfigurationsAsParameters()),
     buildDiscarder(logRotator(numToKeepStr: '5')),
-    disableConcurrentBuilds()
+    // disableConcurrentBuilds()
 ])
 
 try {

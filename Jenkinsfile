@@ -1,7 +1,7 @@
 #!groovy
 def BN = (BRANCH_NAME == 'master' || BRANCH_NAME.startsWith('releases/')) ? BRANCH_NAME : 'releases/2025-07'
 
-library "knime-pipeline@AP-24269-use-pixi-pack-for-bundlinginstall"
+library "knime-pipeline@AP-24269-prevent-setting-destination-in-p2-iu-install"
 
 properties([
     // provide a list of upstream jobs which should trigger a rebuild of this job

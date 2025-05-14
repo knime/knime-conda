@@ -58,7 +58,7 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             var pixiBinary = PixiBinary.getPixiBinaryPath();
             var bundlingPath = getBundlingPath();
 
-            var environmentResourcesFolder = Paths.get(directory, "knime_extension_environment");
+            var environmentResourcesFolder = Paths.get(directory, "env");
 
             var installedEnvRoot = bundlingPath.resolve(name);
 

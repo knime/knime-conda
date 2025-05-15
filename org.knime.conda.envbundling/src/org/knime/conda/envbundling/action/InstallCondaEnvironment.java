@@ -45,128 +45,303 @@
  */
 package org.knime.conda.envbundling.action;
 
-import java.net.URI;
-import java.net.URISyntaxException;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 
+import org.apache.commons.io.file.PathUtils;
+import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.equinox.p2.engine.spi.ProvisioningAction;
 import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
 import org.knime.conda.envbundling.pixi.PixiBinary;
+import org.knime.conda.envbundling.pixi.PixiBinary.CallResult;
 import org.knime.core.node.NodeLogger;
 import org.knime.core.util.FileUtil;
-import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
 
-/*
- * TODO
- * - document expected format of the environment fragment that calls the action
- * - implement the undo method
- * - implement proper error handling (do we need to catch runtime exceptions?)
- * - how do we version this? If the format changes, we might want to support the old format
- *     + update the action automatically if the client requires a newer version of the action
- * - uninstall action
- */
-
 /**
- * Provisioning action that installs a conda environment.
+ * <p>
+ * Provisioning action that installs a Pixi/Conda environment contained in a fragment bundle.<br/>
+ * The fragment <strong>must</strong> adhere to the following structure (relative to the fragment root):
+ * </p>
+ *
+ * <pre>
+ * ├─ META-INF/
+ * ├─ env/
+ * │   ├─ environment.yml   # Environment file referencing the local "./channel" directory
+ * │   └─ channel/          # Local Conda channel (sub‑directories "noarch" / platform‑specific)
+ * │       └─ ...
+ * └─ ...
+ * </pre>
+ *
+ * <h3>Parameters</h3>
+ * <table border="1" cellpadding="4" cellspacing="0">
+ * <tr>
+ * <th>Name</th>
+ * <th>Type</th>
+ * <th>Required</th>
+ * <th>Description</th>
+ * </tr>
+ * <tr>
+ * <td><code>directory</code></td>
+ * <td>String</td>
+ * <td>✔</td>
+ * <td>Path to the artifact location (usually set to <code>${artifact.location}</code> in <code>p2.inf</code>), which
+ * contains the <em>env</em> folder as shown above.</td>
+ * </tr>
+ * <tr>
+ * <td><code>name</code></td>
+ * <td>String</td>
+ * <td>✔</td>
+ * <td>Name of the environment.&nbsp;Used as sub‑directory below <code>${installation}/bundling</code>.</td>
+ * </tr>
+ * </table>
+ *
+ * <p>
+ * After successful execution the following additional artefacts are created:
+ * </p>
+ * <ul>
+ * <li><code>${installation}/bundling/&lt;name&gt;/pixi.toml</code> and the full environment under
+ * <code>${installation}/bundling/&lt;name&gt;/.pixi/envs/default</code></li>
+ * <li><code>plugins/&lt;fragment&gt;/environment_path.txt</code> containing the absolute path to the new environment
+ * (one line)</li>
+ * </ul>
+ *
+ * <p>
+ * The {@link #undo(Map)} method removes the environment directory as well as the <code>environment_path.txt</code> file
+ * and clears the {@link CondaEnvironmentRegistry} cache.
+ * </p>
  *
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
  */
-public class InstallCondaEnvironment extends ProvisioningAction {
+public final class InstallCondaEnvironment extends ProvisioningAction {
 
-    private static final NodeLogger LOGGER = NodeLogger.getLogger(InstallCondaEnvironment.class);
+    /* --------------------------------------------------------------------- */
+    /* Logging                                                               */
+    /* --------------------------------------------------------------------- */
 
-    private static final Bundle BUNDLE = FrameworkUtil.getBundle(ProvisioningAction.class);
+    private static final NodeLogger NODE_LOGGER = NodeLogger.getLogger(InstallCondaEnvironment.class);
+
+    private static final ILog BUNDLE_LOG = Platform.getLog(FrameworkUtil.getBundle(InstallCondaEnvironment.class));
+
+    /** Log <em>error</em> level messages to both KNIME's {@link NodeLogger} (`knime.log`) and eclipse log. */
+    private static void logError(final String message) {
+        NODE_LOGGER.error(message);
+        BUNDLE_LOG.log(Status.error(message));
+    }
+
+    /** Log <em>info</em> level messages to both KNIME's {@link NodeLogger} (`knime.log`) and eclipse log. */
+    private static void logInfo(final String message) {
+        NODE_LOGGER.info(message);
+        BUNDLE_LOG.log(Status.info(message));
+    }
+
+    /* --------------------------------------------------------------------- */
+    /* Parameter handling                                                    */
+    /* --------------------------------------------------------------------- */
+
+    /**
+     * @param directory the path to the fragment directory that executes the action. The directory must have the
+     *            expected structure as documented in {@link InstallCondaEnvironment}.
+     * @param name the environment name
+     */
+    private record Parameters(Path directory, String name) {
+
+        /**
+         * Parses and validates the parameter map.
+         *
+         * @throws IllegalArgumentException if any required argument is missing or malformed
+         */
+        private static Parameters from(final Map<String, Object> parameters) {
+            var directory = (String)parameters.get("directory");
+            if (directory == null) {
+                throw new IllegalArgumentException("The provisioning action parameter 'directory' is missing.");
+            }
+            var directoryPath = Paths.get(directory);
+            if (!Files.isDirectory(directoryPath)) {
+                throw new IllegalArgumentException(String.format(
+                    "The provisioning action parameter 'directory' with the value '%s' does not point to a directory.",
+                    directory));
+            }
+
+            var name = (String)parameters.get("name");
+            if (name == null) {
+                throw new IllegalArgumentException("The provisioning action parameter 'name' is missing.");
+            }
+            if (name.isBlank()) {
+                throw new IllegalArgumentException("The provisioning action parameter 'name' is blank.");
+            }
+
+            return new Parameters(directoryPath, name);
+        }
+    }
+
+    /* --------------------------------------------------------------------- */
+    /* Execute                                                               */
+    /* --------------------------------------------------------------------- */
 
     @Override
-    public IStatus execute(final Map<String, Object> parameters) {
+    public IStatus execute(final Map<String, Object> parameterMap) {
         try {
-            // TODO get the parameters (path to pixi.toml, pixi.lock, channel?
-            var directory = (String)parameters.get("directory");
-            var name = (String)parameters.get("name");
+            var p = Parameters.from(parameterMap);
 
-            if (directory == null || name == null) {
-                return error("Missing parameters", new IllegalArgumentException("Missing parameters"));
+            logInfo("Installing conda environment '" + p.name + "' from fragment: " + p.directory);
+
+            var installationRoot = p.directory.getParent().getParent();
+            var bundlingRoot = getBundlingRoot(installationRoot);
+            var envResourcesFolder = p.directory.resolve("env");
+            var envDestinationRoot = bundlingRoot.resolve(p.name);
+            checkDestinationDirectory(envDestinationRoot);
+            Files.createDirectories(envDestinationRoot);
+
+            /* ------------------------------------------------------------- */
+            /* 1) Copy environment.yml adjusting the channel path            */
+            /* ------------------------------------------------------------- */
+            var environmentYmlSrc = envResourcesFolder.resolve("environment.yml");
+            var environmentYmlDst = envDestinationRoot.resolve("environment.yml");
+
+            var channelDirSrc = envResourcesFolder.resolve("channel");
+            if (!Files.isDirectory(channelDirSrc)) {
+                throw new IllegalStateException(
+                    "Expected 'channel' directory next to environment.yml in " + envResourcesFolder);
             }
-            if (!Files.isDirectory(Paths.get(directory))) {
-                return error("Directory does not exist", new IllegalArgumentException("Directory does not exist"));
-            }
-            LOGGER.info("Installing conda environment " + name + "with pixi in " + directory);
-            // TODO special parameter for the base environment? Or should it be handled by another action?
+            var envContent = Files.readString(environmentYmlSrc, StandardCharsets.UTF_8);
+            var relativeChannelPath = envDestinationRoot.toAbsolutePath().relativize(channelDirSrc.toAbsolutePath());
+            envContent =
+                envContent.replace("  - ./channel", "  - " + relativeChannelPath.toString().replace('\\', '/'));
+            Files.writeString(environmentYmlDst, envContent, StandardCharsets.UTF_8);
 
-            var pixiBinary = PixiBinary.getPixiBinaryPath();
-            var bundlingPath = getBundlingPath();
-
-            var environmentResourcesFolder = Paths.get(directory, "knime_extension_environment");
-
-            var installedEnvRoot = bundlingPath.resolve(name);
-
-            // Move channel to bundling folder
-            FileUtil.copyDir(environmentResourcesFolder.resolve("channel").toFile(),
-                installedEnvRoot.resolve("channel").toFile());
-
-            // Pixi init
-            var pb = new ProcessBuilder(pixiBinary, "init", "-i",
-                environmentResourcesFolder.resolve("environment.yml").toAbsolutePath().toString());
-            pb.directory(installedEnvRoot.toFile());
-            var process = pb.start();
-            var exitValue = process.waitFor();
-            if (exitValue != 0) {
-                // TODO read stdout/stderr
-                throw new IllegalStateException("pixi init failed with " + exitValue);
-            }
-
-            // Pixi install
-            var pb2 = new ProcessBuilder(pixiBinary, "install");
-            pb2.directory(installedEnvRoot.toFile());
-            var process2 = pb2.start();
-            var exitValue2 = process2.waitFor();
-            if (exitValue2 != 0) {
-                // TODO read stdout/stderr
-                throw new IllegalStateException("pixi install failed with " + exitValue2);
+            /* ------------------------------------------------------------- */
+            /* 2) Run "pixi init -i environment.yml"                         */
+            /* ------------------------------------------------------------- */
+            var initResult = PixiBinary.callPixi(envDestinationRoot, "init", "-i", environmentYmlDst.toString());
+            if (!initResult.isSuccess()) {
+                logError(formatPixiFailure("pixi init", initResult));
+                return Status.error("Failed to initialise Pixi project (exit code " + initResult.returnCode() + ")");
             }
 
-            var envPath =
-                installedEnvRoot.resolve(".pixi").resolve("envs").resolve("default").toAbsolutePath().toString();
-            var envPathFile = Paths.get(directory, CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
-            Files.writeString(envPathFile, envPath);
+            /* ------------------------------------------------------------- */
+            /* 3) Install the environment                                    */
+            /* ------------------------------------------------------------- */
+            var installResult = PixiBinary.callPixi(envDestinationRoot, "install");
+            if (!installResult.isSuccess()) {
+                logError(formatPixiFailure("pixi install", installResult));
+                return Status
+                    .error("Installing the Pixi environment failed (exit code " + installResult.returnCode() + ")");
+            }
+
+            /* ------------------------------------------------------------- */
+            /* 4) Write environment_path.txt                                 */
+            /* ------------------------------------------------------------- */
+            var envPath = envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
+            var envPathFile = p.directory.resolve(CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
+            Path envPathToWrite;
+            if (envPath.toAbsolutePath().startsWith(installationRoot.toAbsolutePath())) {
+                // write relative path if the environment is inside the installation root
+                envPathToWrite = installationRoot.toAbsolutePath().relativize(envPath.toAbsolutePath());
+            } else {
+                // write absolute path if the environment is outside the installation root
+                envPathToWrite = envPath.toAbsolutePath();
+            }
+            Files.writeString(envPathFile, envPathToWrite.toString(), StandardCharsets.UTF_8);
 
             // Invalidate the CondaEnvironmentRegistry cache
             CondaEnvironmentRegistry.invalidateCache();
 
+            logInfo("Environment installed successfully: " + envPath);
         } catch (Exception e) {
-            e.printStackTrace();
-            return error("Running action failed", e);
+            logError("Exception while installing environment: " + e.getMessage());
+            return Status.error("Running InstallCondaEnvironment action failed", e);
         }
 
         return Status.OK_STATUS;
     }
 
+    /* --------------------------------------------------------------------- */
+    /* Undo                                                                  */
+    /* --------------------------------------------------------------------- */
+
     @Override
-    public IStatus undo(final Map<String, Object> parameters) {
-        // Invalidate the CondaEnvironmentRegistry cache
-        CondaEnvironmentRegistry.invalidateCache();
+    public IStatus undo(final Map<String, Object> parameterMap) {
+        // TODO move into utility class to be reused in uninstall action
+        try {
+            var p = Parameters.from(parameterMap);
+
+            var installationRoot = p.directory.getParent().getParent();
+            var bundlingRoot = getBundlingRoot(installationRoot);
+            var envDestinationRoot = bundlingRoot.resolve(p.name);
+            var envPathFile = p.directory.resolve(CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
+
+            // Delete environment directory (ignore if it does not exist)
+            if (Files.exists(envDestinationRoot)) {
+                FileUtil.deleteRecursively(envDestinationRoot.toFile());
+                logInfo("Removed environment directory: " + envDestinationRoot);
+            }
+
+            // Delete environment_path.txt file
+            Files.deleteIfExists(envPathFile);
+
+            CondaEnvironmentRegistry.invalidateCache();
+        } catch (Exception e) {
+            logError("Exception while undoing InstallCondaEnvironment: " + e.getMessage());
+            return Status.error("Undoing InstallCondaEnvironment action failed", e);
+        }
+
         return Status.OK_STATUS;
     }
 
-    private static Status error(final String message, final Throwable throwable) {
-        return new Status(IStatus.ERROR, BUNDLE.getSymbolicName(), message, throwable);
+    /* --------------------------------------------------------------------- */
+    /* Helpers                                                               */
+    /* --------------------------------------------------------------------- */
+
+    private static String formatPixiFailure(final String command, final CallResult result) {
+        return command + " failed with exit code " + result.returnCode() + "\nSTDOUT:\n" + result.stdout()
+            + "\nSTDERR:\n" + result.stderr();
     }
 
-    private static Path getBundlingPath() throws URISyntaxException {
-        // TODO is this correct?
-        // What about the environment variable?
-        // Before, it was relative to the plugins but now it's relative to the root installation
-        var url = Platform.getInstallLocation().getURL();
-        var externalForm = url.toExternalForm().replace(" ", "%20"); // Escape spaces // TODO other characters could still cause failures
-        var uri = new URI(externalForm);
-        var installPath = Paths.get(uri);
-        return installPath.resolve("bundling").toAbsolutePath();
+    private static Path getBundlingRoot(final Path installationRoot) throws IOException {
+        var bundlingPathFromVar = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
+        Path path;
+        if (bundlingPathFromVar != null && !bundlingPathFromVar.isBlank()) {
+            path = Paths.get(bundlingPathFromVar);
+        } else {
+            path = installationRoot.resolve("bundling").toAbsolutePath();
+        }
+
+        if (Files.notExists(path)) {
+            try {
+                Files.createDirectories(path);
+                logInfo("Created bundling root directory: " + path);
+            } catch (IOException ioe) {
+                throw new IOException("Unable to create bundling directory " + path + ": " + ioe.getMessage(), ioe);
+            }
+        }
+        return path;
+    }
+
+    /** Throws if the destination directory already exists and is not empty or not writable. */
+    private static void checkDestinationDirectory(final Path destination) throws IOException {
+        if (!Files.exists(destination)) {
+            return;
+        }
+        if (Files.isDirectory(destination)) {
+            // check if the directory is empty and writable
+            if (!PathUtils.isEmptyDirectory(destination)) {
+                throw new IOException(
+                    "Environment destination directory already exists and is not empty: " + destination);
+            }
+            if (!Files.isWritable(destination)) {
+                throw new IOException("Environment destination directory is not writable: " + destination);
+            }
+        } else {
+            // if it exists but is not a directory, throw an exception
+            throw new IOException("Environment destination path exists and is not a directory: " + destination);
+        }
     }
 }

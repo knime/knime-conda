@@ -48,7 +48,14 @@
  */
 package org.knime.conda.envbundling.pixi;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.Path;
@@ -57,53 +64,144 @@ import org.knime.core.util.FileUtil;
 import org.osgi.framework.FrameworkUtil;
 
 /**
- * Utility to get the path to the pixi binary.
+ * Utility to locate and invoke the bundled <em>pixi</em> CLI.
  *
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
  */
 public final class PixiBinary {
-    /*
-    * TODO Cache path to binary (or initialize on class load)
-    * TODO Improve exception handling
-    */
+
+    /** Thread‑safe cache for the resolved pixi path. */
+    private static final AtomicReference<String> CACHED_PATH = new AtomicReference<>();
 
     private PixiBinary() {
+        /* utility class */
     }
 
     /**
-     * @return the path to the pixi binary
-     * @throws IllegalStateException if the pixi binary could not be located
+     * Encapsulates the result of invoking the {@code pixi} CLI.
+     *
+     * @param isSuccess {@code true} iff {@code returnCode == 0}
+     * @param returnCode the process' exit code
+     * @param stdout aggregated content written to <em>stdout</em>
+     * @param stderr aggregated content written to <em>stderr</em>
      */
-    public static String getPixiBinaryPath() {
-        var bundle = FrameworkUtil.getBundle(PixiBinary.class);
-        var fragments = Platform.getFragments(bundle);
+    public record CallResult(boolean isSuccess, int returnCode, String stdout, String stderr) {
+    }
 
-        if (fragments.length < 1) {
-            throw new IllegalStateException("Could not locate pixi binary because no pixi fragment is installed.");
-        } else if (fragments.length > 1) {
-            throw new IllegalStateException(
-                "Could not locate pixi binary because multiple pixi fragment are installed.");
+    /**
+     * Returns the absolute path of the bundled <em>pixi</em> executable.
+     *
+     * @return the absolute path (never {@code null})
+     * @throws PixiBinaryLocationException if the binary cannot be located
+     */
+    public static String getPixiBinaryPath() throws PixiBinaryLocationException {
+        // fast path – use cached value when available
+        String path = CACHED_PATH.get();
+        if (path != null) {
+            return path;
         }
 
-        var url = FileLocator.find(fragments[0], relativePixiPath(), null);
-        if (url == null) {
-            throw new IllegalStateException("Could not locate pixi binary.");
-        }
+        synchronized (CACHED_PATH) {
+            // re‑check to avoid double work
+            path = CACHED_PATH.get();
+            if (path != null) {
+                return path;
+            }
 
-        try {
-            var pixiFile = FileUtil.getFileFromURL(FileLocator.toFileURL(url));
-            return pixiFile.getAbsolutePath();
-        } catch (IOException ex) {
-            throw new IllegalStateException("Could not locate pixi binary because could not convert url to file url.",
-                ex);
+            var bundle = FrameworkUtil.getBundle(PixiBinary.class);
+            if (bundle == null) {
+                throw new PixiBinaryLocationException("Cannot determine bundle for PixiBinary class.");
+            }
+
+            var fragments = Platform.getFragments(bundle);
+
+            if (fragments == null || fragments.length == 0) {
+                throw new PixiBinaryLocationException(
+                    "Could not locate pixi binary because no pixi fragment is installed.");
+            }
+            if (fragments.length > 1) {
+                throw new PixiBinaryLocationException(
+                    "Could not locate pixi binary because multiple pixi fragments are installed.");
+            }
+
+            var url = FileLocator.find(fragments[0], relativePixiPath(), null);
+            if (url == null) {
+                throw new PixiBinaryLocationException("Could not locate pixi binary inside fragment.");
+            }
+
+            try {
+                var pixiFile = FileUtil.getFileFromURL(FileLocator.toFileURL(url));
+                path = pixiFile.getAbsolutePath();
+                CACHED_PATH.set(path);
+                return path;
+            } catch (IOException ex) {
+                throw new PixiBinaryLocationException(
+                    "Could not locate pixi binary because the URL could not be converted to a file.", ex);
+            }
         }
     }
 
+    /**
+     * Executes the <em>pixi</em> binary in the given working directory and waits for it to finish.
+     * <p>
+     * If the process itself finishes and returns a non‑zero exit code, this is <em>not</em> treated as an exception;
+     * the {@link CallResult#isSuccess()} flag simply becomes {@code false}.
+     *
+     * @param workingDirectory the directory that should be used as the process' working directory (must not be
+     *            {@code null}
+     * @param args additional arguments to pass to the process (excluding the executable itself)
+     * @return a {@link CallResult} containing the process' exit status and captured I/O
+     * @throws PixiBinaryLocationException if the pixi executable cannot be found
+     * @throws IOException if the process cannot be started or its streams cannot be read
+     * @throws InterruptedException if the current thread is interrupted while waiting for the process
+     */
+    public static CallResult callPixi(final java.nio.file.Path workingDirectory, final String... args)
+        throws PixiBinaryLocationException, IOException, InterruptedException {
+        Objects.requireNonNull(workingDirectory, "workingDirectory must not be null");
+
+        var pixiPath = getPixiBinaryPath();
+
+        var pb = new ProcessBuilder(pixiPath);
+        pb.command().addAll(Arrays.asList(args));
+        pb.directory(workingDirectory.toFile());
+        pb.redirectErrorStream(false);
+
+        var process = pb.start();
+        String stdout;
+        String stderr;
+
+        // NOTE: pixi output is always UTF-8
+        try (var stdoutReader =
+            new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+                var stderrReader =
+                    new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+            stdout = stdoutReader.lines().collect(Collectors.joining(System.lineSeparator()));
+            stderr = stderrReader.lines().collect(Collectors.joining(System.lineSeparator()));
+        }
+
+        int returnCode = process.waitFor();
+        return new CallResult(returnCode == 0, returnCode, stdout, stderr);
+    }
+
+    /** Returns the relative path of the pixi executable inside the fragment bundle. */
     private static Path relativePixiPath() {
         if (Platform.OS_WIN32.equals(Platform.getOS())) {
             return new Path("bin/pixi.exe");
         } else {
             return new Path("bin/pixi");
+        }
+    }
+
+    /** Checked exception used when the pixi executable cannot be resolved. */
+    public static final class PixiBinaryLocationException extends Exception {
+        private static final long serialVersionUID = 1L;
+
+        private PixiBinaryLocationException(final String message) {
+            super(message);
+        }
+
+        private PixiBinaryLocationException(final String message, final Throwable cause) {
+            super(message, cause);
         }
     }
 }

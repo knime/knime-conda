@@ -69,7 +69,7 @@ def testInstallCondaEnvAction(String baseBranch) {
                 // Check if environment was created in bundling folder and report test result
                 def envVersion = nodeLabel == "windows" ? "_0.1.0" : "" // Windows also has a version number in the path
                 def envDir = "knime test.app/bundling/org_knime_conda_envbundling_testext${envVersion}/.pixi/envs/default"
-                reportTestResult("CondaEnvBundling", "environment_created_${nodeLabel}", fileExists(envDir), "Environment directory does not exist: ${envDir}")
+                reportTestResult("CondaEnvBundling", "environment_created", fileExists(envDir), "Environment directory does not exist: ${envDir}")
             }
         }
     }

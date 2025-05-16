@@ -197,21 +197,7 @@ public final class InstallCondaEnvironment extends ProvisioningAction {
             var bundlingRoot = getBundlingRoot(installationRoot);
             var envResourcesFolder = p.directory.resolve("env");
             var envDestinationRoot = bundlingRoot.resolve(p.name);
-
-            if (Files.exists(envDestinationRoot)) {
-                if (Files.isDirectory(envDestinationRoot)) {
-                    if (!PathUtils.isEmptyDirectory(envDestinationRoot)) {
-                        return Status.error(
-                            "Environment destination directory already exists and is not empty: " + envDestinationRoot);
-                    }
-                    if (!Files.isWritable(envDestinationRoot)) {
-                        return Status.error("Environment destination directory is not writable: " + envDestinationRoot);
-                    }
-                } else {
-                    return Status
-                        .error("Environment destination path exists and is not a directory: " + envDestinationRoot);
-                }
-            }
+            checkDestinationDirectory(envDestinationRoot);
             Files.createDirectories(envDestinationRoot);
 
             /* ------------------------------------------------------------- */
@@ -337,5 +323,25 @@ public final class InstallCondaEnvironment extends ProvisioningAction {
             }
         }
         return path;
+    }
+
+    /** Throws if the destination directory already exists and is not empty or not writable. */
+    private static void checkDestinationDirectory(final Path destination) throws IOException {
+        if (!Files.exists(destination)) {
+            return;
+        }
+        if (Files.isDirectory(destination)) {
+            // check if the directory is empty and writable
+            if (!PathUtils.isEmptyDirectory(destination)) {
+                throw new IOException(
+                    "Environment destination directory already exists and is not empty: " + destination);
+            }
+            if (!Files.isWritable(destination)) {
+                throw new IOException("Environment destination directory is not writable: " + destination);
+            }
+        } else {
+            // if it exists but is not a directory, throw an exception
+            throw new IOException("Environment destination path exists and is not a directory: " + destination);
+        }
     }
 }

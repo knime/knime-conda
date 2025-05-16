@@ -291,7 +291,7 @@ public final class InstallCondaEnvironment {
     /* --------------------------------------------------------------------- */
 
     private static void uninstallEnvironment(final Path artifactLocation, final String environmentName)
-        throws IOException, PixiBinaryLocationException, InterruptedException {
+        throws IOException {
         logInfo("Uninstalling conda environment '" + environmentName + "' from fragment: " + artifactLocation);
 
         var installationRoot = artifactLocation.getParent().getParent();

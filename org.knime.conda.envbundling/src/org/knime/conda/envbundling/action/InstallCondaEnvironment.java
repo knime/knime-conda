@@ -242,7 +242,7 @@ public final class InstallCondaEnvironment {
                 "Expected 'channel' directory next to environment.yml in " + envResourcesFolder);
         }
         var envContent = Files.readString(environmentYmlSrc, StandardCharsets.UTF_8);
-        var relativeChannelPath = envDestinationRoot.toAbsolutePath().relativize(channelDirSrc.toAbsolutePath());
+        var relativeChannelPath = computeChannelPath(envDestinationRoot, channelDirSrc);
         envContent = envContent.replace("  - ./channel", "  - " + relativeChannelPath.toString().replace('\\', '/'));
         Files.writeString(environmentYmlDst, envContent, StandardCharsets.UTF_8);
 
@@ -414,6 +414,21 @@ public final class InstallCondaEnvironment {
         } else {
             // if it exists but is not a directory, throw an exception
             throw new IOException("Environment destination path exists and is not a directory: " + destination);
+        }
+    }
+
+    /**
+     * The relative path to the channel directory from the environment root. Falls back to an absolute path if the
+     * environment root is on a separate volume.
+     */
+    private static Path computeChannelPath(final Path envDestinationRoot, final Path channelDirSrc) {
+        try {
+            return envDestinationRoot.toAbsolutePath().relativize(channelDirSrc.toAbsolutePath());
+        } catch (IllegalArgumentException ex) { // NOSONAR - we have a workaround if relativize fails
+            // Different roots/volumes – fall back to absolute path
+            logInfo(
+                "Channel directory is on a different volume; using absolute path in environment.yml: " + channelDirSrc);
+            return channelDirSrc.toAbsolutePath();
         }
     }
 }

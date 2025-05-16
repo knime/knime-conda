@@ -15,48 +15,76 @@ properties([
 ])
 
 try {
-    // provide the name of the update site project
     knimetools.defaultTychoBuild('org.knime.update.conda')
-
-    // Specifying configurations is optional. If omitted, the default configurations will be used
-    // (see jenkins-pipeline-libraries/vars/workflowTests.groovy).
-    // In almost all cases you can *remove* this defintion.
-    def testConfigurations = [
-        "ubuntu18.04 && python3",
-        "windows && python3"
-    ]
-
-//    workflowTests.runTests(
-//        dependencies: [
-//            // A list of repositories required for running workflow tests. All repositories that are required for a minimal
-//            // KNIME AP installation are added by default and don't need to be specified here. Currently these are:
-//            //
-//            // 'knime-tp', 'knime-shared', 'knime-core', 'knime-base', 'knime-workbench', 'knime-expressions',
-//            // 'knime-js-core','knime-svg', 'knime-product'
-//            //
-//            // All features (not plug-ins!) in the specified repositories will be installed.
-//            repositories: ['knime-conda'],
-//            // an optional list of additional bundles/plug-ins from the repositories above that must be installed
-//            ius: ['org.knime.json.tests']
-//        ],
-//        // this is optional and defaults to false
-//        withAssertions: true,
-//        // this is optional and only needs to be provided if non-default configurations are used, see above
-//        configurations: testConfigurations
-//    )
+    testInstallCondaEnvAction(BN)
 
     stage('Sonarqube analysis') {
         env.lastStage = env.STAGE_NAME
-        // Passing the test configuration is optional but must be done when they are used above in the workflow tests.
-        // Therefore you can *remove* the argument in almost all cases.
-        // In case you don't have any workflow tests but still want a Sonarqube analysis, pass an empty list, i.e. [].
-        workflowTests.runSonar(testConfigurations)
+        // Passing an empty test configuration as we do not have any workflow tests
+        // TODO remove empty test configuration when adding workflow tests
+        workflowTests.runSonar([])
     }
 } catch (ex) {
     currentBuild.result = 'FAILURE'
     throw ex
 } finally {
     notifications.notifyBuild(currentBuild.result);
+}
+
+def reportTestResult(String suite, String name, boolean success, String failureMessage) {
+    def xml = """
+        <testsuite name=\"${suite}\" tests=\"1\" failures=\"${success ? 0 : 1}\">
+          <testcase classname=\"${suite}\" name=\"${name}\">${success ? '' : "<failure message=\"${failureMessage.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}\"/>"}</testcase>
+        </testsuite>
+    """.stripIndent()
+    writeFile file: "${suite}-${name}-result.xml", text: xml
+    junit "${suite}-${name}-result.xml"
+}
+
+def testInstallCondaEnvAction(String baseBranch) {
+    def branch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
+
+    def testBody = { nodeLabel ->
+        node("workflow-tests && ${nodeLabel}") {
+            stage("Install Conda Environment Action Tests on ${nodeLabel}") {
+                knimetools.materializeResources(['common.inc'])
+
+                def String compositeRepo = "https://jenkins.devops.knime.com/p2/knime/composites/${baseBranch}"
+                def String condaRepo = "https://jenkins.devops.knime.com/p2/knime/knime-conda/${branch}"
+
+                sh label: 'Create minimal installation', script: """
+                    source common.inc
+                    installIU org.knime.minimal.product \"${compositeRepo}\" knime_minimal.app \"\" \"\" \"\" 1
+                """
+
+                // Test basic installation
+                sh label: 'Copy minimal installation', script: """
+                    cp -a knime_minimal.app "knime test.app"
+                """
+                sh label: 'Install test extension', script: """
+                    source common.inc
+                    installIU org.knime.features.conda.envbundling.testext.feature.group \"${condaRepo},${compositeRepo}\" \"knime test.app\" \"\" \"\" \"\" 1
+                """
+                // Check if environment was created in bundling folder and report test result
+                def envVersion = nodeLabel == "windows" ? "_0.1.0" : "" // Windows also has a version number in the path
+                def envDir = "knime test.app/bundling/org_knime_conda_envbundling_testext${envVersion}/.pixi/envs/default"
+                reportTestResult("CondaEnvBundling", "environment_created", fileExists(envDir), "Environment directory does not exist: ${envDir}")
+
+                // Test uninstallation
+                sh label: 'Uninstall test extension', script: """
+                    source common.inc
+                    uninstallIU org.knime.features.conda.envbundling.testext.feature.group \"knime test.app\"
+                """
+                reportTestResult("CondaEnvBundling", "environment_deleted", !fileExists(envDir), "Environment directory still exist after feature uninstallation: ${envDir}")
+            }
+        }
+    }
+
+    parallel(
+        'ubuntu22.04': { testBody('ubuntu22.04') },
+        'windows': { testBody('windows') },
+        'macosx': { testBody('macosx') },
+    )
 }
 
 /* vim: set shiftwidth=4 expandtab smarttab: */

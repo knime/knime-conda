@@ -69,14 +69,51 @@ def testInstallCondaEnvAction(String baseBranch) {
                 // Check if environment was created in bundling folder and report test result
                 def envVersion = nodeLabel == "windows" ? "_0.1.0" : "" // Windows also has a version number in the path
                 def envDir = "knime test.app/bundling/org_knime_conda_envbundling_testext${envVersion}/.pixi/envs/default"
-                reportTestResult("CondaEnvBundling", "environment_created", fileExists(envDir), "Environment directory does not exist: ${envDir}")
+                reportTestResult("CondaEnvBundling", "should install environment", fileExists(envDir), "Environment directory does not exist: ${envDir}")
 
                 // Test uninstallation
                 sh label: 'Uninstall test extension', script: """
                     source common.inc
                     uninstallIU org.knime.features.conda.envbundling.testext.feature.group \"knime test.app\"
                 """
-                reportTestResult("CondaEnvBundling", "environment_deleted", !fileExists(envDir), "Environment directory still exist after feature uninstallation: ${envDir}")
+                reportTestResult("CondaEnvBundling", "should uninstall environment", !fileExists(envDir), "Environment directory still exist after feature uninstallation: ${envDir}")
+
+                // Clean up
+                sh label: 'Delete knime test.app', script: """
+                    rm -rf "knime test.app"
+                """
+
+                // Create a temporary directory for KNIME_PYTHON_BUNDLING_PATH
+                def bundlingPath = "${env.WORKSPACE}/bundling_${nodeLabel}_${UUID.randomUUID().toString()}"
+                sh "mkdir -p \"${bundlingPath}\""
+
+                sh label: 'Copy minimal installation', script: """
+                    cp -a knime_minimal.app "knime test.app"
+                """
+
+                withEnv(["KNIME_PYTHON_BUNDLING_PATH=${bundlingPath}"]) {
+                    sh label: 'Install test extension', script: """
+                        source common.inc
+                        installIU org.knime.features.conda.envbundling.testext.feature.group \"${condaRepo},${compositeRepo}\" \"knime test.app\" \"\" \"\" \"\" 1
+                    """
+
+                    // Check if environment was created in bundling folder and report test result
+                    def envVersion = nodeLabel == "windows" ? "_0.1.0" : "" // Windows also has a version number in the path
+                    def envDir = "${bundlingPath}/org_knime_conda_envbundling_testext${envVersion}/.pixi/envs/default"
+                    reportTestResult("CondaEnvBundling", "should install environment into custom path", fileExists(envDir), "Environment directory does not exist: ${envDir}")
+
+                    // Test uninstallation
+                    sh label: 'Uninstall test extension', script: """
+                        source common.inc
+                        uninstallIU org.knime.features.conda.envbundling.testext.feature.group \"knime test.app\"
+                    """
+                    reportTestResult("CondaEnvBundling", "should uninstall environment from custom path", !fileExists(envDir), "Environment directory still exist after feature uninstallation: ${envDir}")
+                }
+
+                // Clean up
+                sh label: 'Delete knime test.app', script: """
+                    rm -rf "knime test.app"
+                """
             }
         }
     }

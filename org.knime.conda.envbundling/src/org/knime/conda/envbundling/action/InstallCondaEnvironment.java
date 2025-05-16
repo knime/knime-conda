@@ -120,7 +120,7 @@ import org.osgi.framework.FrameworkUtil;
  *
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
  */
-public class InstallCondaEnvironment extends ProvisioningAction {
+public final class InstallCondaEnvironment extends ProvisioningAction {
 
     /* --------------------------------------------------------------------- */
     /* Logging                                                               */
@@ -201,14 +201,15 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             if (Files.exists(envDestinationRoot)) {
                 if (Files.isDirectory(envDestinationRoot)) {
                     if (!PathUtils.isEmptyDirectory(envDestinationRoot)) {
-                        return error(
+                        return Status.error(
                             "Environment destination directory already exists and is not empty: " + envDestinationRoot);
                     }
                     if (!Files.isWritable(envDestinationRoot)) {
-                        return error("Environment destination directory is not writable: " + envDestinationRoot);
+                        return Status.error("Environment destination directory is not writable: " + envDestinationRoot);
                     }
                 } else {
-                    return error("Environment destination path exists and is not a directory: " + envDestinationRoot);
+                    return Status
+                        .error("Environment destination path exists and is not a directory: " + envDestinationRoot);
                 }
             }
             Files.createDirectories(envDestinationRoot);
@@ -236,7 +237,7 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             var initResult = PixiBinary.callPixi(envDestinationRoot, "init", "-i", environmentYmlDst.toString());
             if (!initResult.isSuccess()) {
                 logError(formatPixiFailure("pixi init", initResult));
-                return error("Failed to initialise Pixi project (exit code " + initResult.returnCode() + ")");
+                return Status.error("Failed to initialise Pixi project (exit code " + initResult.returnCode() + ")");
             }
 
             /* ------------------------------------------------------------- */
@@ -245,7 +246,8 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             var installResult = PixiBinary.callPixi(envDestinationRoot, "install");
             if (!installResult.isSuccess()) {
                 logError(formatPixiFailure("pixi install", installResult));
-                return error("Installing the Pixi environment failed (exit code " + installResult.returnCode() + ")");
+                return Status
+                    .error("Installing the Pixi environment failed (exit code " + installResult.returnCode() + ")");
             }
 
             /* ------------------------------------------------------------- */
@@ -269,7 +271,7 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             logInfo("Environment installed successfully: " + envPath);
         } catch (Exception e) {
             logError("Exception while installing environment: " + e.getMessage());
-            return error("Running InstallCondaEnvironment action failed", e);
+            return Status.error("Running InstallCondaEnvironment action failed", e);
         }
 
         return Status.OK_STATUS;
@@ -302,7 +304,7 @@ public class InstallCondaEnvironment extends ProvisioningAction {
             CondaEnvironmentRegistry.invalidateCache();
         } catch (Exception e) {
             logError("Exception while undoing InstallCondaEnvironment: " + e.getMessage());
-            return error("Undoing InstallCondaEnvironment action failed", e);
+            return Status.error("Undoing InstallCondaEnvironment action failed", e);
         }
 
         return Status.OK_STATUS;
@@ -311,14 +313,6 @@ public class InstallCondaEnvironment extends ProvisioningAction {
     /* --------------------------------------------------------------------- */
     /* Helpers                                                               */
     /* --------------------------------------------------------------------- */
-
-    private static IStatus error(final String message) {
-        return new Status(IStatus.ERROR, "org.knime.conda.envbundling", message);
-    }
-
-    private static IStatus error(final String message, final Throwable throwable) {
-        return new Status(IStatus.ERROR, "org.knime.conda.envbundling", message, throwable);
-    }
 
     private static String formatPixiFailure(final String command, final CallResult result) {
         return command + " failed with exit code " + result.returnCode() + "\nSTDOUT:\n" + result.stdout()

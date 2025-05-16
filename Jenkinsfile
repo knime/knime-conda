@@ -70,6 +70,13 @@ def testInstallCondaEnvAction(String baseBranch) {
                 def envVersion = nodeLabel == "windows" ? "_0.1.0" : "" // Windows also has a version number in the path
                 def envDir = "knime test.app/bundling/org_knime_conda_envbundling_testext${envVersion}/.pixi/envs/default"
                 reportTestResult("CondaEnvBundling", "environment_created", fileExists(envDir), "Environment directory does not exist: ${envDir}")
+
+                // Test uninstallation
+                sh label: 'Uninstall test extension', script: """
+                    source common.inc
+                    uninstallIU org.knime.features.conda.envbundling.testext.feature.group \"knime test.app\"
+                """
+                reportTestResult("CondaEnvBundling", "environment_deleted", !fileExists(envDir), "Environment directory still exist after feature uninstallation: ${envDir}")
             }
         }
     }

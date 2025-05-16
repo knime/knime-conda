@@ -11,20 +11,20 @@ properties([
     ]),
     parameters(workflowTests.getConfigurationsAsParameters()),
     buildDiscarder(logRotator(numToKeepStr: '5')),
-    // disableConcurrentBuilds()
+    disableConcurrentBuilds()
 ])
 
 try {
     knimetools.defaultTychoBuild('org.knime.update.conda')
     testInstallCondaEnvAction(BN)
 
-    // stage('Sonarqube analysis') {
-    //     env.lastStage = env.STAGE_NAME
-    //     // Passing the test configuration is optional but must be done when they are used above in the workflow tests.
-    //     // Therefore you can *remove* the argument in almost all cases.
-    //     // In case you don't have any workflow tests but still want a Sonarqube analysis, pass an empty list, i.e. [].
-    //     workflowTests.runSonar(testConfigurations)
-    // }
+    stage('Sonarqube analysis') {
+        env.lastStage = env.STAGE_NAME
+        // Passing the test configuration is optional but must be done when they are used above in the workflow tests.
+        // Therefore you can *remove* the argument in almost all cases.
+        // In case you don't have any workflow tests but still want a Sonarqube analysis, pass an empty list, i.e. [].
+        workflowTests.runSonar(testConfigurations)
+    }
 } catch (ex) {
     currentBuild.result = 'FAILURE'
     throw ex

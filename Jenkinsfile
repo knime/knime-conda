@@ -101,49 +101,75 @@ def runCondaEnvBundlingTest(nodeLabel, basePath, envType, condaRepo, compositeRe
     def envDir = getEnvDir(basePath, nodeLabel)
     if (envType == "withEnv") {
         withEnv(["KNIME_PYTHON_BUNDLING_PATH=${basePath}"]) {
+            boolean installSuccess = true
+            try {
+                sh label: 'Install test extension', script: """
+                    source common.inc
+                    installIU org.knime.features.conda.envbundling.testext.feature.group \"${condaRepo},${compositeRepo}\" \"knime test.app\" \"\" \"\" \"\" 1
+                """
+            } catch (ex) {
+                installSuccess = false
+            }
+            reportTestResult(
+                "CondaEnvBundling",
+                "should install environment into custom path",
+                installSuccess && fileExists(envDir),
+                installSuccess ? "Environment directory does not exist: ${envDir}" : "Install step failed"
+            )
+
+            boolean uninstallSuccess = false
+            if (installSuccess) {
+                try {
+                    sh label: 'Uninstall test extension', script: """
+                        source common.inc
+                        uninstallIU org.knime.features.conda.envbundling.testext.feature.group \"knime test.app\"
+                    """
+                    uninstallSuccess = true
+                } catch (ex) {
+                    uninstallSuccess = false
+                }
+            }
+            reportTestResult(
+                "CondaEnvBundling",
+                "should uninstall environment from custom path",
+                installSuccess && uninstallSuccess && !fileExists(envDir),
+                !installSuccess ? "Install step failed, uninstall not attempted" : (uninstallSuccess ? "Environment directory still exist after feature uninstallation: ${envDir}" : "Uninstall step failed")
+            )
+        }
+    } else {
+        boolean installSuccess = true
+        try {
             sh label: 'Install test extension', script: """
                 source common.inc
                 installIU org.knime.features.conda.envbundling.testext.feature.group \"${condaRepo},${compositeRepo}\" \"knime test.app\" \"\" \"\" \"\" 1
             """
-            reportTestResult(
-                "CondaEnvBundling",
-                "should install environment into custom path",
-                fileExists(envDir),
-                "Environment directory does not exist: ${envDir}"
-            )
-
-            sh label: 'Uninstall test extension', script: """
-                source common.inc
-                uninstallIU org.knime.features.conda.envbundling.testext.feature.group \"knime test.app\"
-            """
-            reportTestResult(
-                "CondaEnvBundling",
-                "should uninstall environment from custom path",
-                !fileExists(envDir),
-                "Environment directory still exist after feature uninstallation: ${envDir}"
-            )
+        } catch (ex) {
+            installSuccess = false
         }
-    } else {
-        sh label: 'Install test extension', script: """
-            source common.inc
-            installIU org.knime.features.conda.envbundling.testext.feature.group \"${condaRepo},${compositeRepo}\" \"knime test.app\" \"\" \"\" \"\" 1
-        """
         reportTestResult(
             "CondaEnvBundling",
             "should install environment",
-            fileExists(envDir),
-            "Environment directory does not exist: ${envDir}"
+            installSuccess && fileExists(envDir),
+            installSuccess ? "Environment directory does not exist: ${envDir}" : "Install step failed"
         )
 
-        sh label: 'Uninstall test extension', script: """
-            source common.inc
-            uninstallIU org.knime.features.conda.envbundling.testext.feature.group \"knime test.app\"
-        """
+        boolean uninstallSuccess = false
+        if (installSuccess) {
+            try {
+                sh label: 'Uninstall test extension', script: """
+                    source common.inc
+                    uninstallIU org.knime.features.conda.envbundling.testext.feature.group \"knime test.app\"
+                """
+                uninstallSuccess = true
+            } catch (ex) {
+                uninstallSuccess = false
+            }
+        }
         reportTestResult(
             "CondaEnvBundling",
             "should uninstall environment",
-            !fileExists(envDir),
-            "Environment directory still exist after feature uninstallation: ${envDir}"
+            installSuccess && uninstallSuccess && !fileExists(envDir),
+            !installSuccess ? "Install step failed, uninstall not attempted" : (uninstallSuccess ? "Environment directory still exist after feature uninstallation: ${envDir}" : "Uninstall step failed")
         )
     }
     // Clean up

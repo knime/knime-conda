@@ -61,7 +61,7 @@ def testInstallCondaEnvAction(String baseBranch) {
                 // Test basic installation
                 runCondaEnvBundlingTest(
                     nodeLabel,
-                    "knime test.app/bundling",
+                    (nodeLabel == "macosx" ? "knime test.app/Contents/Eclipse/bundling/" : "knime test.app/bundling"),
                     "",
                     condaRepo,
                     compositeRepo

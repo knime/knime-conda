@@ -31,16 +31,6 @@ try {
     notifications.notifyBuild(currentBuild.result);
 }
 
-def reportTestResult(String suite, String name, boolean success, String failureMessage) {
-    def xml = """
-        <testsuite name=\"${suite}\" tests=\"1\" failures=\"${success ? 0 : 1}\">
-          <testcase classname=\"${suite}\" name=\"${name}\">${success ? '' : "<failure message=\"${failureMessage.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}\"/>"}</testcase>
-        </testsuite>
-    """.stripIndent()
-    writeFile file: "${suite}-${name}-result.xml", text: xml
-    junit "${suite}-${name}-result.xml"
-}
-
 def testInstallCondaEnvAction(String baseBranch) {
     def branch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
 
@@ -52,30 +42,38 @@ def testInstallCondaEnvAction(String baseBranch) {
                 def String compositeRepo = "https://jenkins.devops.knime.com/p2/knime/composites/${baseBranch}"
                 def String condaRepo = "https://jenkins.devops.knime.com/p2/knime/knime-conda/${branch}"
 
-                sh label: 'Create minimal installation', script: """
-                    source common.inc
-                    installIU org.knime.minimal.product \"${compositeRepo}\" knime_minimal.app \"\" \"\" \"\" 1
-                """
+                try {
+                    sh label: 'Create minimal installation', script: """
+                        source common.inc
+                        installIU org.knime.minimal.product \"${compositeRepo}\" knime_minimal.app \"\" \"\" \"\" 2
+                    """
 
-                // Test basic installation
-                sh label: 'Copy minimal installation', script: """
-                    cp -a knime_minimal.app "knime test.app"
-                """
-                sh label: 'Install test extension', script: """
-                    source common.inc
-                    installIU org.knime.features.conda.envbundling.testext.feature.group \"${condaRepo},${compositeRepo}\" \"knime test.app\" \"\" \"\" \"\" 1
-                """
-                // Check if environment was created in bundling folder and report test result
-                def envVersion = nodeLabel == "windows" ? "_0.1.0" : "" // Windows also has a version number in the path
-                def envDir = "knime test.app/bundling/org_knime_conda_envbundling_testext${envVersion}/.pixi/envs/default"
-                reportTestResult("CondaEnvBundling", "environment_created", fileExists(envDir), "Environment directory does not exist: ${envDir}")
+                    // Test basic installation
+                    runCondaEnvBundlingTest(
+                        nodeLabel,
+                        (nodeLabel == "macosx" ? "knime test.app/Contents/Eclipse/bundling/" : "knime test.app/bundling"),
+                        "",
+                        condaRepo,
+                        compositeRepo
+                    )
 
-                // Test uninstallation
-                sh label: 'Uninstall test extension', script: """
-                    source common.inc
-                    uninstallIU org.knime.features.conda.envbundling.testext.feature.group \"knime test.app\"
-                """
-                reportTestResult("CondaEnvBundling", "environment_deleted", !fileExists(envDir), "Environment directory still exist after feature uninstallation: ${envDir}")
+                    // Create a temporary directory for KNIME_PYTHON_BUNDLING_PATH
+                    def bundlingPath = "${env.WORKSPACE}/bundling_${nodeLabel}_${UUID.randomUUID().toString()}"
+                    sh "mkdir -p \"${bundlingPath}\""
+
+                    runCondaEnvBundlingTest(
+                        nodeLabel,
+                        bundlingPath,
+                        "withEnv",
+                        condaRepo,
+                        compositeRepo
+                    )
+                } finally {
+                    // Clean up
+                    sh label: 'Delete knime_minimal.app', script: """
+                        rm -rf "knime_minimal.app"
+                    """
+                }
             }
         }
     }
@@ -85,6 +83,81 @@ def testInstallCondaEnvAction(String baseBranch) {
         'windows': { testBody('windows') },
         'macosx': { testBody('macosx') },
     )
+}
+
+def getEnvDir(basePath, nodeLabel) {
+    def envVersion = nodeLabel == "windows" ? "_0.1.0" : ""
+    return "${basePath}/org_knime_conda_envbundling_testext${envVersion}/.pixi/envs/default"
+}
+
+def runCondaEnvBundlingTest(nodeLabel, basePath, envType, condaRepo, compositeRepo) {
+    sh label: 'Copy minimal installation', script: """
+        cp -a knime_minimal.app "knime test.app"
+    """
+    def envDir = getEnvDir(basePath, nodeLabel)
+
+    def installTest = {
+        sh label: 'Install test extension', script: """
+            source common.inc
+            installIU org.knime.features.conda.envbundling.testext.feature.group \"${condaRepo},${compositeRepo}\" \"knime test.app\" \"\" \"\" \"\" 2
+        """
+        if (!fileExists(envDir)) {
+            error("Environment directory does not exist: ${envDir}")
+        }
+    }
+
+    def uninstallTest = { boolean installSuccess ->
+        if (!installSuccess) {
+            error("Install step failed, uninstall not attempted")
+        }
+        sh label: 'Uninstall test extension', script: """
+            source common.inc
+            uninstallIU org.knime.features.conda.envbundling.testext.feature.group \"knime test.app\"
+        """
+        if (fileExists(envDir)) {
+            error("Environment directory still exist after feature uninstallation: ${envDir}")
+        }
+    }
+
+    try {
+        if (envType == "withEnv") {
+            withEnv(["KNIME_PYTHON_BUNDLING_PATH=${basePath}"]) {
+                boolean installSuccess = runTest("should install environment into custom path", installTest)
+                runTest("should uninstall environment from custom path") { uninstallTest(installSuccess) }
+            }
+        } else {
+            boolean installSuccess = runTest("should install environment", installTest)
+            runTest("should uninstall environment") { uninstallTest(installSuccess) }
+        }
+    } finally {
+        // Clean up
+        sh label: 'Delete knime test.app', script: """
+            rm -rf "knime test.app"
+        """
+    }
+}
+
+def runTest(String testName, Closure testLambda) {
+    boolean success = true
+    String failureMessage = ""
+    try {
+        testLambda()
+    } catch (ex) {
+        success = false
+        failureMessage = ex.getMessage()
+    }
+    reportTestResult("CondaEnvBundling", testName, success, failureMessage)
+    return success
+}
+
+def reportTestResult(String suite, String name, boolean success, String failureMessage) {
+    def xml = """
+        <testsuite name=\"${suite}\" tests=\"1\" failures=\"${success ? 0 : 1}\">
+          <testcase classname=\"${suite}\" name=\"${name}\">${success ? '' : "<failure message=\"${failureMessage.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}\"/>"}</testcase>
+        </testsuite>
+    """.stripIndent()
+    writeFile file: "${suite}-${name}-result.xml", text: xml
+    junit "${suite}-${name}-result.xml"
 }
 
 /* vim: set shiftwidth=4 expandtab smarttab: */

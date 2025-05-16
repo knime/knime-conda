@@ -51,6 +51,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import org.apache.commons.io.file.PathUtils;
 import org.eclipse.core.runtime.ILog;
@@ -181,6 +182,9 @@ public final class InstallCondaEnvironment {
      */
     private record Parameters(Path directory, String name) {
 
+        /** Allowed: ASCII letters, digits, dash, underscore, dot. 1–64 chars. */
+        private static final Pattern VALID_ENV_NAME = Pattern.compile("^[A-Za-z0-9._-]{1,64}$"); // NOSONAR - only ASCII
+
         /**
          * Parses and validates the parameter map.
          *
@@ -202,8 +206,9 @@ public final class InstallCondaEnvironment {
             if (name == null) {
                 throw new IllegalArgumentException("The provisioning action parameter 'name' is missing.");
             }
-            if (name.isBlank()) {
-                throw new IllegalArgumentException("The provisioning action parameter 'name' is blank.");
+            if (!VALID_ENV_NAME.matcher(name).matches()) {
+                throw new IllegalArgumentException("The provisioning action parameter 'name' must match "
+                    + VALID_ENV_NAME.pattern() + " but was: '" + name + "'");
             }
 
             return new Parameters(directoryPath, name);

@@ -61,15 +61,25 @@ import org.eclipse.equinox.p2.engine.spi.ProvisioningAction;
 import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
 import org.knime.conda.envbundling.pixi.PixiBinary;
 import org.knime.conda.envbundling.pixi.PixiBinary.CallResult;
+import org.knime.conda.envbundling.pixi.PixiBinary.PixiBinaryLocationException;
 import org.knime.core.node.NodeLogger;
 import org.knime.core.util.FileUtil;
 import org.osgi.framework.FrameworkUtil;
 
 /**
  * <p>
- * Provisioning action that installs a Pixi/Conda environment contained in a fragment bundle.<br/>
- * The fragment <strong>must</strong> adhere to the following structure (relative to the fragment root):
+ * Provisioning <em>actions</em> that install <strong>or</strong> uninstall a Pixi/Conda environment shipped inside an
+ * Eclipse fragment bundle.<br/>
+ * Because both directions share most of the file-system logic (path calculation, validation, cache handling, …), they
+ * are implemented in this single helper class:
  * </p>
+ *
+ * <ul>
+ * <li>{@link InstallAction} &nbsp;–&nbsp;creates the environment.</li>
+ * <li>{@link UninstallAction} –&nbsp;removes the same environment again.</li>
+ * </ul>
+ *
+ * <h3>Expected fragment layout</h3>
  *
  * <pre>
  * ├─ META-INF/
@@ -80,7 +90,7 @@ import org.osgi.framework.FrameworkUtil;
  * └─ ...
  * </pre>
  *
- * <h3>Parameters</h3>
+ * <h3>Action parameters</h3>
  * <table border="1" cellpadding="4" cellspacing="0">
  * <tr>
  * <th>Name</th>
@@ -92,35 +102,53 @@ import org.osgi.framework.FrameworkUtil;
  * <td><code>directory</code></td>
  * <td>String</td>
  * <td>✔</td>
- * <td>Path to the artifact location (usually set to <code>${artifact.location}</code> in <code>p2.inf</code>), which
- * contains the <em>env</em> folder as shown above.</td>
+ * <td>Path to the fragment root (usually <code>${artifact.location}</code> in <code>p2.inf</code>); must contain the
+ * <em>env</em> folder shown above.</td>
  * </tr>
  * <tr>
  * <td><code>name</code></td>
  * <td>String</td>
  * <td>✔</td>
- * <td>Name of the environment.&nbsp;Used as sub‑directory below <code>${installation}/bundling</code>.</td>
+ * <td>Name of the environment; becomes the sub-directory under <code>${installation}/bundling</code>.</td>
  * </tr>
  * </table>
  *
- * <p>
- * After successful execution the following additional artefacts are created:
- * </p>
+ * <h3>Side effects</h3>
  * <ul>
- * <li><code>${installation}/bundling/&lt;name&gt;/pixi.toml</code> and the full environment under
- * <code>${installation}/bundling/&lt;name&gt;/.pixi/envs/default</code></li>
- * <li><code>plugins/&lt;fragment&gt;/environment_path.txt</code> containing the absolute path to the new environment
- * (one line)</li>
+ * <li><strong>Install:</strong> creates <code>${installation}/bundling/&lt;name&gt;/pixi.toml</code>, installs the full
+ * environment under <code>${installation}/bundling/&lt;name&gt;/.pixi/envs/default</code>, and writes a one-line
+ * <code>plugins/&lt;fragment&gt;/environment_path.txt</code> pointing to it.</li>
+ * <li><strong>Uninstall</strong> (or <code>undo()</code>): deletes the environment directory and
+ * <code>environment_path.txt</code>, then invalidates {@link CondaEnvironmentRegistry}.</li>
  * </ul>
  *
- * <p>
- * The {@link #undo(Map)} method removes the environment directory as well as the <code>environment_path.txt</code> file
- * and clears the {@link CondaEnvironmentRegistry} cache.
- * </p>
+ * <h3>Example <code>p2.inf</code></h3>
+ *
+ * <pre>
+ * metaRequirements.0.namespace = org.eclipse.equinox.p2.iu
+ * metaRequirements.0.name = org.knime.features.conda.envbundling.feature.group
+ * metaRequirements.0.range = [5.5.0,6.0.0)
+ * metaRequirements.0.greedy = true
+ * metaRequirements.0.optional = false
+ * instructions.install=\
+ *     org.knime.conda.envbundling.installcondaenvironment(\
+ *         directory:${artifact.location},\
+ *         name:my_unique_environment_name\
+ *     );
+ *
+ * instructions.uninstall=\
+ *     org.knime.conda.envbundling.uninstallcondaenvironment(\
+ *         directory:${artifact.location},\
+ *         name:my_unique_environment_name\
+ *     );
+ * </pre>
  *
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
  */
-public final class InstallCondaEnvironment extends ProvisioningAction {
+public final class InstallCondaEnvironment {
+
+    private InstallCondaEnvironment() {
+    }
 
     /* --------------------------------------------------------------------- */
     /* Logging                                                               */
@@ -183,117 +211,156 @@ public final class InstallCondaEnvironment extends ProvisioningAction {
     }
 
     /* --------------------------------------------------------------------- */
-    /* Execute                                                               */
+    /* Installing environments                                               */
     /* --------------------------------------------------------------------- */
 
-    @Override
-    public IStatus execute(final Map<String, Object> parameterMap) {
-        try {
-            var p = Parameters.from(parameterMap);
+    private static void installEnvironment(final Path artifactLocation, final String environmentName)
+        throws IOException, PixiBinaryLocationException, InterruptedException {
+        logInfo("Installing conda environment '" + environmentName + "' from fragment: " + artifactLocation);
 
-            logInfo("Installing conda environment '" + p.name + "' from fragment: " + p.directory);
+        var installationRoot = artifactLocation.getParent().getParent();
+        var bundlingRoot = getBundlingRoot(installationRoot);
+        var envResourcesFolder = artifactLocation.resolve("env");
+        var envDestinationRoot = bundlingRoot.resolve(environmentName);
+        checkDestinationDirectory(envDestinationRoot);
+        Files.createDirectories(envDestinationRoot);
 
-            var installationRoot = p.directory.getParent().getParent();
-            var bundlingRoot = getBundlingRoot(installationRoot);
-            var envResourcesFolder = p.directory.resolve("env");
-            var envDestinationRoot = bundlingRoot.resolve(p.name);
-            checkDestinationDirectory(envDestinationRoot);
-            Files.createDirectories(envDestinationRoot);
+        /* ------------------------------------------------------------- */
+        /* 1) Copy environment.yml adjusting the channel path            */
+        /* ------------------------------------------------------------- */
+        var environmentYmlSrc = envResourcesFolder.resolve("environment.yml");
+        var environmentYmlDst = envDestinationRoot.resolve("environment.yml");
 
-            /* ------------------------------------------------------------- */
-            /* 1) Copy environment.yml adjusting the channel path            */
-            /* ------------------------------------------------------------- */
-            var environmentYmlSrc = envResourcesFolder.resolve("environment.yml");
-            var environmentYmlDst = envDestinationRoot.resolve("environment.yml");
+        var channelDirSrc = envResourcesFolder.resolve("channel");
+        if (!Files.isDirectory(channelDirSrc)) {
+            throw new IllegalStateException(
+                "Expected 'channel' directory next to environment.yml in " + envResourcesFolder);
+        }
+        var envContent = Files.readString(environmentYmlSrc, StandardCharsets.UTF_8);
+        var relativeChannelPath = envDestinationRoot.toAbsolutePath().relativize(channelDirSrc.toAbsolutePath());
+        envContent = envContent.replace("  - ./channel", "  - " + relativeChannelPath.toString().replace('\\', '/'));
+        Files.writeString(environmentYmlDst, envContent, StandardCharsets.UTF_8);
 
-            var channelDirSrc = envResourcesFolder.resolve("channel");
-            if (!Files.isDirectory(channelDirSrc)) {
-                throw new IllegalStateException(
-                    "Expected 'channel' directory next to environment.yml in " + envResourcesFolder);
-            }
-            var envContent = Files.readString(environmentYmlSrc, StandardCharsets.UTF_8);
-            var relativeChannelPath = envDestinationRoot.toAbsolutePath().relativize(channelDirSrc.toAbsolutePath());
-            envContent =
-                envContent.replace("  - ./channel", "  - " + relativeChannelPath.toString().replace('\\', '/'));
-            Files.writeString(environmentYmlDst, envContent, StandardCharsets.UTF_8);
-
-            /* ------------------------------------------------------------- */
-            /* 2) Run "pixi init -i environment.yml"                         */
-            /* ------------------------------------------------------------- */
-            var initResult = PixiBinary.callPixi(envDestinationRoot, "init", "-i", environmentYmlDst.toString());
-            if (!initResult.isSuccess()) {
-                logError(formatPixiFailure("pixi init", initResult));
-                return Status.error("Failed to initialise Pixi project (exit code " + initResult.returnCode() + ")");
-            }
-
-            /* ------------------------------------------------------------- */
-            /* 3) Install the environment                                    */
-            /* ------------------------------------------------------------- */
-            var installResult = PixiBinary.callPixi(envDestinationRoot, "install");
-            if (!installResult.isSuccess()) {
-                logError(formatPixiFailure("pixi install", installResult));
-                return Status
-                    .error("Installing the Pixi environment failed (exit code " + installResult.returnCode() + ")");
-            }
-
-            /* ------------------------------------------------------------- */
-            /* 4) Write environment_path.txt                                 */
-            /* ------------------------------------------------------------- */
-            var envPath = envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
-            var envPathFile = p.directory.resolve(CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
-            Path envPathToWrite;
-            if (envPath.toAbsolutePath().startsWith(installationRoot.toAbsolutePath())) {
-                // write relative path if the environment is inside the installation root
-                envPathToWrite = installationRoot.toAbsolutePath().relativize(envPath.toAbsolutePath());
-            } else {
-                // write absolute path if the environment is outside the installation root
-                envPathToWrite = envPath.toAbsolutePath();
-            }
-            Files.writeString(envPathFile, envPathToWrite.toString(), StandardCharsets.UTF_8);
-
-            // Invalidate the CondaEnvironmentRegistry cache
-            CondaEnvironmentRegistry.invalidateCache();
-
-            logInfo("Environment installed successfully: " + envPath);
-        } catch (Exception e) {
-            logError("Exception while installing environment: " + e.getMessage());
-            return Status.error("Running InstallCondaEnvironment action failed", e);
+        /* ------------------------------------------------------------- */
+        /* 2) Run "pixi init -i environment.yml"                         */
+        /* ------------------------------------------------------------- */
+        var initResult = PixiBinary.callPixi(envDestinationRoot, "init", "-i", environmentYmlDst.toString());
+        if (!initResult.isSuccess()) {
+            logError(formatPixiFailure("pixi init", initResult));
+            throw new IOException("Failed to initialise Pixi project (exit code " + initResult.returnCode() + ")");
         }
 
-        return Status.OK_STATUS;
+        /* ------------------------------------------------------------- */
+        /* 3) Install the environment                                    */
+        /* ------------------------------------------------------------- */
+        var installResult = PixiBinary.callPixi(envDestinationRoot, "install");
+        if (!installResult.isSuccess()) {
+            logError(formatPixiFailure("pixi install", installResult));
+            throw new IOException(
+                "Installing the Pixi environment failed (exit code " + installResult.returnCode() + ")");
+        }
+
+        /* ------------------------------------------------------------- */
+        /* 4) Write environment_path.txt                                 */
+        /* ------------------------------------------------------------- */
+        var envPath = envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
+        var envPathFile = artifactLocation.resolve(CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
+        Path envPathToWrite;
+        if (envPath.toAbsolutePath().startsWith(installationRoot.toAbsolutePath())) {
+            // write relative path if the environment is inside the installation root
+            envPathToWrite = installationRoot.toAbsolutePath().relativize(envPath.toAbsolutePath());
+        } else {
+            // write absolute path if the environment is outside the installation root
+            envPathToWrite = envPath.toAbsolutePath();
+        }
+        Files.writeString(envPathFile, envPathToWrite.toString(), StandardCharsets.UTF_8);
+
+        logInfo("Environment installed successfully: " + envPath);
+
+        // Invalidate the CondaEnvironmentRegistry cache
+        CondaEnvironmentRegistry.invalidateCache();
     }
 
     /* --------------------------------------------------------------------- */
-    /* Undo                                                                  */
+    /* Uninstalling Environments                                             */
     /* --------------------------------------------------------------------- */
 
-    @Override
-    public IStatus undo(final Map<String, Object> parameterMap) {
-        // TODO move into utility class to be reused in uninstall action
-        try {
-            var p = Parameters.from(parameterMap);
+    private static void uninstallEnvironment(final Path artifactLocation, final String environmentName)
+        throws IOException {
+        logInfo("Uninstalling conda environment '" + environmentName + "' from fragment: " + artifactLocation);
 
-            var installationRoot = p.directory.getParent().getParent();
-            var bundlingRoot = getBundlingRoot(installationRoot);
-            var envDestinationRoot = bundlingRoot.resolve(p.name);
-            var envPathFile = p.directory.resolve(CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
+        var installationRoot = artifactLocation.getParent().getParent();
+        var bundlingRoot = getBundlingRoot(installationRoot);
+        var envDestinationRoot = bundlingRoot.resolve(environmentName);
+        var envPathFile = artifactLocation.resolve(CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
 
-            // Delete environment directory (ignore if it does not exist)
-            if (Files.exists(envDestinationRoot)) {
-                FileUtil.deleteRecursively(envDestinationRoot.toFile());
-                logInfo("Removed environment directory: " + envDestinationRoot);
-            }
-
-            // Delete environment_path.txt file
-            Files.deleteIfExists(envPathFile);
-
-            CondaEnvironmentRegistry.invalidateCache();
-        } catch (Exception e) {
-            logError("Exception while undoing InstallCondaEnvironment: " + e.getMessage());
-            return Status.error("Undoing InstallCondaEnvironment action failed", e);
+        // Delete environment directory (ignore if it does not exist)
+        if (Files.exists(envDestinationRoot)) {
+            FileUtil.deleteRecursively(envDestinationRoot.toFile());
+            logInfo("Removed environment directory: " + envDestinationRoot);
         }
 
-        return Status.OK_STATUS;
+        // Delete environment_path.txt file
+        Files.deleteIfExists(envPathFile);
+
+        // Invalidate the CondaEnvironmentRegistry cache
+        CondaEnvironmentRegistry.invalidateCache();
+    }
+
+    /* --------------------------------------------------------------------- */
+    /* Actions                                                               */
+    /* --------------------------------------------------------------------- */
+
+    /** Installs the environment contained in the fragment bundle. See {@link InstallCondaEnvironment} for details. */
+    public static final class InstallAction extends ProvisioningAction {
+
+        @Override
+        public IStatus execute(final Map<String, Object> parameterMap) {
+            try {
+                var p = Parameters.from(parameterMap);
+                installEnvironment(p.directory, p.name);
+            } catch (Exception e) {
+                logError("Exception while installing environment: " + e.getMessage());
+                return Status.error("Running InstallCondaEnvironment action failed", e);
+            }
+
+            return Status.OK_STATUS;
+        }
+
+        @Override
+        public IStatus undo(final Map<String, Object> parameterMap) {
+            try {
+                var p = Parameters.from(parameterMap);
+                uninstallEnvironment(p.directory, p.name);
+            } catch (Exception e) {
+                logError("Exception while undoing InstallCondaEnvironment: " + e.getMessage());
+                return Status.error("Undoing InstallCondaEnvironment action failed", e);
+            }
+
+            return Status.OK_STATUS;
+        }
+    }
+
+    /** Uninstalls the environment that was previously installed by {@link InstallAction}. */
+    public static final class UninstallAction extends ProvisioningAction {
+
+        @Override
+        public IStatus execute(final Map<String, Object> parameterMap) {
+            try {
+                var p = Parameters.from(parameterMap);
+                uninstallEnvironment(p.directory, p.name);
+            } catch (Exception e) {
+                logError("Exception while installing environment: " + e.getMessage());
+                return Status.error("Running InstallCondaEnvironment action failed", e);
+            }
+
+            return Status.OK_STATUS;
+        }
+
+        @Override
+        public IStatus undo(final Map<String, Object> parameterMap) {
+            return Status.OK_STATUS;
+        }
     }
 
     /* --------------------------------------------------------------------- */

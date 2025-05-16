@@ -73,9 +73,7 @@ import org.osgi.framework.FrameworkUtil;
  *
  * <pre>
  * ├─ META-INF/
- * ├─ env/                  # &lt;directory specified by the {@code
- * directory
- * } parameter&gt;
+ * ├─ env/
  * │   ├─ environment.yml   # Environment file referencing the local "./channel" directory
  * │   └─ channel/          # Local Conda channel (sub‑directories "noarch" / platform‑specific)
  * │       └─ ...
@@ -94,7 +92,8 @@ import org.osgi.framework.FrameworkUtil;
  * <td><code>directory</code></td>
  * <td>String</td>
  * <td>✔</td>
- * <td>Absolute path to the <em>env</em> folder shown above. TODO this is incorrect</td>
+ * <td>Path to the artifact location (usually set to <code>${artifact.location}</code> in <code>p2.inf</code>), which
+ * contains the <em>env</em> folder as shown above.</td>
  * </tr>
  * <tr>
  * <td><code>name</code></td>

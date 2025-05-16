@@ -48,14 +48,13 @@ def testInstallCondaEnvAction(String baseBranch) {
     def testBody = { nodeLabel ->
         node("workflow-tests && ${nodeLabel}") {
             stage("Install Conda Environment Action Tests on ${nodeLabel}") {
-                knimetools.materializeResources(['common.inc', 'workflowTests.inc'])
+                knimetools.materializeResources(['common.inc'])
 
                 def String compositeRepo = "https://jenkins.devops.knime.com/p2/knime/composites/${baseBranch}"
                 def String condaRepo = "https://jenkins.devops.knime.com/p2/knime/knime-conda/${branch}"
 
                 sh label: 'Create minimal installation', script: """
                     source common.inc
-                    source workflowTests.inc
                     installIU org.knime.minimal.product \"${compositeRepo}\" knime_minimal.app \"\" \"\" \"\" 1
                 """
 
@@ -65,7 +64,6 @@ def testInstallCondaEnvAction(String baseBranch) {
                 """
                 sh label: 'Install test extension', script: """
                     source common.inc
-                    source workflowTests.inc
                     installIU org.knime.features.conda.envbundling.testext.feature.group \"${condaRepo},${compositeRepo}\" \"knime test.app\" \"\" \"\" \"\" 1
                 """
                 // Check if environment was created in bundling folder and report test result

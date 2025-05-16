@@ -50,10 +50,14 @@ package org.knime.conda.envbundling.pixi;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -141,6 +145,12 @@ public final class PixiBinary {
         }
     }
 
+    private static String readStdstream(final InputStream stream) throws IOException {
+        try (var r = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            return r.lines().collect(Collectors.joining(System.lineSeparator()));
+        }
+    }
+
     /**
      * Executes the <em>pixi</em> binary in the given working directory and waits for it to finish.
      * <p>
@@ -167,20 +177,35 @@ public final class PixiBinary {
         pb.redirectErrorStream(false);
 
         var process = pb.start();
-        String stdout;
-        String stderr;
+        var stdStreamsReadersExec = Executors.newFixedThreadPool(2);
 
-        // NOTE: pixi output is always UTF-8
-        try (var stdoutReader =
-            new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
-                var stderrReader =
-                    new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
-            stdout = stdoutReader.lines().collect(Collectors.joining(System.lineSeparator()));
-            stderr = stderrReader.lines().collect(Collectors.joining(System.lineSeparator()));
+        try {
+            // Note that the streams are read in parallel to avoid blocking the process
+            var stdoutFuture = stdStreamsReadersExec.submit(() -> readStdstream(process.getInputStream()));
+            var stderrFuture = stdStreamsReadersExec.submit(() -> readStdstream(process.getErrorStream()));
+
+            boolean finished = process.waitFor(20, TimeUnit.MINUTES);
+            if (!finished) {
+                process.destroy();
+                throw new IOException("Timed out waiting for pixi to finish");
+            }
+
+            // Fully consume the streams
+            String stdout;
+            String stderr;
+            try {
+                stdout = stdoutFuture.get();
+                stderr = stderrFuture.get();
+            } catch (ExecutionException ex) { // NOSONAR - the cause is relevant and re-thrown
+                // propagate the *root cause* as an IOException
+                throw new IOException("Failed to read pixi output", ex.getCause());
+            }
+
+            var returnCode = process.exitValue();
+            return new CallResult(returnCode == 0, returnCode, stdout, stderr);
+        } finally {
+            stdStreamsReadersExec.shutdownNow();
         }
-
-        int returnCode = process.waitFor();
-        return new CallResult(returnCode == 0, returnCode, stdout, stderr);
     }
 
     /** Returns the relative path of the pixi executable inside the fragment bundle. */

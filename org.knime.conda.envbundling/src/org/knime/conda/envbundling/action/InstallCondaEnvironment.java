@@ -165,6 +165,12 @@ public final class InstallCondaEnvironment {
         BUNDLE_LOG.log(Status.error(message));
     }
 
+    /** Log <em>error</em> level messages to both KNIME's {@link NodeLogger} (`knime.log`) and eclipse log. */
+    private static void logError(final String message, final Throwable t) {
+        NODE_LOGGER.error(message, t);
+        BUNDLE_LOG.log(Status.error(message, t));
+    }
+
     /** Log <em>info</em> level messages to both KNIME's {@link NodeLogger} (`knime.log`) and eclipse log. */
     private static void logInfo(final String message) {
         NODE_LOGGER.info(message);
@@ -325,7 +331,7 @@ public final class InstallCondaEnvironment {
                 var p = Parameters.from(parameterMap);
                 installEnvironment(p.directory, p.name);
             } catch (Exception e) {
-                logError("Exception while installing environment: " + e.getMessage());
+                logError("Exception while installing environment: " + e.getMessage(), e);
                 return Status.error("Running InstallCondaEnvironment action failed", e);
             }
 
@@ -338,7 +344,7 @@ public final class InstallCondaEnvironment {
                 var p = Parameters.from(parameterMap);
                 uninstallEnvironment(p.directory, p.name);
             } catch (Exception e) {
-                logError("Exception while undoing InstallCondaEnvironment: " + e.getMessage());
+                logError("Exception while undoing InstallCondaEnvironment: " + e.getMessage(), e);
                 return Status.error("Undoing InstallCondaEnvironment action failed", e);
             }
 
@@ -355,7 +361,7 @@ public final class InstallCondaEnvironment {
                 var p = Parameters.from(parameterMap);
                 uninstallEnvironment(p.directory, p.name);
             } catch (Exception e) {
-                logError("Exception while installing environment: " + e.getMessage());
+                logError("Exception while installing environment: " + e.getMessage(), e);
                 return Status.error("Running InstallCondaEnvironment action failed", e);
             }
 

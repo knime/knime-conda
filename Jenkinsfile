@@ -89,9 +89,20 @@ def runCondaEnvBundlingTest(bundlingPath, envType, condaRepo, compositeRepo) {
             source common.inc
             installIU org.knime.features.conda.envbundling.testext.feature.group \"${condaRepo},${compositeRepo}\" \"knime test.app\" \"\" \"\" \"\" 2
         """
+
+        // 1. Environment directory must exist
         if (!fileExists(envDir)) {
             error("Environment directory does not exist: ${envDir}")
         }
+
+        // 2. Environment must contain exactly one package: tzdata 2025b
+        sh label: 'Verify bundled environment content', script: """
+            micromamba list -p \"${envDir}\" | grep 'tzdata' || {
+            echo "✖ tzdata 2025b not found in ${envDir}:"
+            micromamba list -p \"${envDir}\"
+            exit 1
+            }
+        """
     }
 
     def uninstallTest = { boolean installSuccess ->

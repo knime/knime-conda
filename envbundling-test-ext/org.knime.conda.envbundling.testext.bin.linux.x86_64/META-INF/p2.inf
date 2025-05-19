@@ -6,11 +6,11 @@ metaRequirements.0.optional = false
 instructions.install=\
     org.knime.conda.envbundling.installcondaenvironment(\
         directory:${artifact.location},\
-        name:org_knime_conda_envbundling_testext\
+        name:org_knime_conda_envbundling_testext_0.1.0\
     );
 
 instructions.uninstall=\
     org.knime.conda.envbundling.uninstallcondaenvironment(\
         directory:${artifact.location},\
-        name:org_knime_conda_envbundling_testext\
+        name:org_knime_conda_envbundling_testext_0.1.0\
     );

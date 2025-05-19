@@ -45,7 +45,6 @@ def testInstallCondaEnvAction(String baseBranch) {
 
                     // Test basic installation
                     runCondaEnvBundlingTest(
-                        nodeLabel,
                         (nodeLabel == "macosx" ? "knime test.app/Contents/Eclipse/bundling/" : "knime test.app/bundling"),
                         "",
                         condaRepo,
@@ -57,7 +56,6 @@ def testInstallCondaEnvAction(String baseBranch) {
                     sh "mkdir -p \"${bundlingPath}\""
 
                     runCondaEnvBundlingTest(
-                        nodeLabel,
                         bundlingPath,
                         "withEnv",
                         condaRepo,
@@ -80,16 +78,11 @@ def testInstallCondaEnvAction(String baseBranch) {
     )
 }
 
-def getEnvDir(basePath, nodeLabel) {
-    def envVersion = nodeLabel == "windows" ? "_0.1.0" : ""
-    return "${basePath}/org_knime_conda_envbundling_testext${envVersion}/.pixi/envs/default"
-}
-
-def runCondaEnvBundlingTest(nodeLabel, basePath, envType, condaRepo, compositeRepo) {
+def runCondaEnvBundlingTest(bundlingPath, envType, condaRepo, compositeRepo) {
     sh label: 'Copy minimal installation', script: """
         cp -a knime_minimal.app "knime test.app"
     """
-    def envDir = getEnvDir(basePath, nodeLabel)
+    def envDir = "${bundlingPath}/org_knime_conda_envbundling_testext_0.1.0/.pixi/envs/default"
 
     def installTest = {
         sh label: 'Install test extension', script: """
@@ -116,7 +109,7 @@ def runCondaEnvBundlingTest(nodeLabel, basePath, envType, condaRepo, compositeRe
 
     try {
         if (envType == "withEnv") {
-            withEnv(["KNIME_PYTHON_BUNDLING_PATH=${basePath}"]) {
+            withEnv(["KNIME_PYTHON_BUNDLING_PATH=${bundlingPath}"]) {
                 boolean installSuccess = runTest("should install environment into custom path", installTest)
                 runTest("should uninstall environment from custom path") { uninstallTest(installSuccess) }
             }

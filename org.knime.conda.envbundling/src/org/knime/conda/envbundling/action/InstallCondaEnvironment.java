@@ -361,8 +361,8 @@ public final class InstallCondaEnvironment {
                 var p = Parameters.from(parameterMap);
                 uninstallEnvironment(p.directory, p.name);
             } catch (Exception e) {
-                logError("Exception while installing environment: " + e.getMessage(), e);
-                return Status.error("Running InstallCondaEnvironment action failed", e);
+                logError("Exception while uninstalling environment: " + e.getMessage(), e);
+                return Status.error("Running UninstallCondaEnvironment action failed", e);
             }
 
             return Status.OK_STATUS;
@@ -370,6 +370,15 @@ public final class InstallCondaEnvironment {
 
         @Override
         public IStatus undo(final Map<String, Object> parameterMap) {
+            // Undo the unstall action by installing the environment again
+            try {
+                var p = Parameters.from(parameterMap);
+                installEnvironment(p.directory, p.name);
+            } catch (Exception e) {
+                logError("Exception while undoing UninstallCondaEnvironment: " + e.getMessage(), e);
+                return Status.error("Undoing UninstallCondaEnvironment action failed", e);
+            }
+
             return Status.OK_STATUS;
         }
     }

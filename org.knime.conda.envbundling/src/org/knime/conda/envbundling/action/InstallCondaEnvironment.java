@@ -301,14 +301,22 @@ public final class InstallCondaEnvironment {
         logInfo("Uninstalling conda environment '" + environmentName + "' from fragment: " + artifactLocation);
 
         var installationRoot = artifactLocation.getParent().getParent();
-        var bundlingRoot = getBundlingRoot(installationRoot);
-        var envDestinationRoot = bundlingRoot.resolve(environmentName);
         var envPathFile = artifactLocation.resolve(CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
 
-        // Delete environment directory (ignore if it does not exist)
-        if (Files.exists(envDestinationRoot)) {
-            FileUtil.deleteRecursively(envDestinationRoot.toFile());
-            logInfo("Removed environment directory: " + envDestinationRoot);
+        // Read the environment path from the file
+        var envPathText = Files.readString(envPathFile, StandardCharsets.UTF_8).trim();
+        var envPath = installationRoot.resolve(envPathText);
+
+        /* <bundling_root>/<env_name>/.pixi/envs/default/
+         *                 ^^^^^^^^^^            ^^^^^^^
+         *                 envRoot               envPath
+         */
+        var envRoot = envPath.getParent().getParent().getParent();
+
+        // Delete environment root directory
+        if (Files.exists(envRoot)) {
+            FileUtil.deleteRecursively(envRoot.toFile());
+            logInfo("Removed environment directory: " + envRoot);
         }
 
         // Delete environment_path.txt file

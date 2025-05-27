@@ -252,8 +252,9 @@ public final class InstallCondaEnvironment {
         envContent = envContent.replace("  - ./channel", "  - " + relativeChannelPath.toString().replace('\\', '/'));
         // pixi does not support pypi-options in environment.yml (checked for pixi 0.47.0).
         // -> We need to remove the --no-index and --find-links ./pypi options from the environment.yml file.
-        envContent = envContent.replaceAll(
-            "^(\\s*- --no-index\\s*\\n|\\s*- --find-links ./pypi\\s*\\n)", "");
+        envContent = envContent //
+            .replace("- --no-index", "") //
+            .replace("- --find-links ./pypi", ""); //
         Files.writeString(environmentYmlDst, envContent, StandardCharsets.UTF_8);
 
         /* ------------------------------------------------------------- */
@@ -272,10 +273,10 @@ public final class InstallCondaEnvironment {
         var relativePypiPath = getRelativeChannelPath(envDestinationRoot, pypiDirSrc);
         var pypiOptions = String.format("""
 
-        [pypi-options]
-        find-links = [{path = "%s"}]
-        index-url = "file://$(pwd)/%s"
-        """, relativePypiPath.toString().replace('\\', '/'), relativePypiPath.toString().replace('\\', '/'));
+                [pypi-options]
+                find-links = [{path = "%s"}]
+                index-url = "file://$(pwd)/%s"
+                """, relativePypiPath.toString().replace('\\', '/'), relativePypiPath.toString().replace('\\', '/'));
         Files.writeString(pixiTomlPath, pypiOptions, StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.APPEND);
 
         /* ------------------------------------------------------------- */

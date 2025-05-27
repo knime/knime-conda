@@ -248,8 +248,12 @@ public final class InstallCondaEnvironment {
                 "Expected 'channel' directory next to environment.yml in " + envResourcesFolder);
         }
         var envContent = Files.readString(environmentYmlSrc, StandardCharsets.UTF_8);
-        var relativeChannelPath = computeChannelPath(envDestinationRoot, channelDirSrc);
+        var relativeChannelPath = getRelativeChannelPath(envDestinationRoot, channelDirSrc);
         envContent = envContent.replace("  - ./channel", "  - " + relativeChannelPath.toString().replace('\\', '/'));
+        // pixi does not support pypi-options in environment.yml (checked for pixi 0.47.0).
+        // -> We need to remove the --no-index and --find-links ./pypi options from the environment.yml file.
+        envContent = envContent.replaceAll(
+            "^(\\s*- --no-index\\s*\\n|\\s*- --find-links ./pypi\\s*\\n)", "");
         Files.writeString(environmentYmlDst, envContent, StandardCharsets.UTF_8);
 
         /* ------------------------------------------------------------- */
@@ -260,6 +264,19 @@ public final class InstallCondaEnvironment {
             logError(formatPixiFailure("pixi init", initResult));
             throw new IOException("Failed to initialise Pixi project (exit code " + initResult.returnCode() + ")");
         }
+        /* ------------------------------------------------------------- */
+        /* 2b) Modify the pixi.toml to contain the pypi-options          */
+        /* ------------------------------------------------------------- */
+        var pixiTomlPath = envDestinationRoot.resolve("pixi.toml");
+        var pypiDirSrc = envResourcesFolder.resolve("pypi");
+        var relativePypiPath = getRelativeChannelPath(envDestinationRoot, pypiDirSrc);
+        var pypiOptions = String.format("""
+
+        [pypi-options]
+        find-links = [{path = "%s"}]
+        index-url = "file://$(pwd)/%s"
+        """, relativePypiPath.toString().replace('\\', '/'), relativePypiPath.toString().replace('\\', '/'));
+        Files.writeString(pixiTomlPath, pypiOptions, StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.APPEND);
 
         /* ------------------------------------------------------------- */
         /* 3) Install the environment                                    */
@@ -444,7 +461,7 @@ public final class InstallCondaEnvironment {
      * The relative path to the channel directory from the environment root. Falls back to an absolute path if the
      * environment root is on a separate volume.
      */
-    private static Path computeChannelPath(final Path envDestinationRoot, final Path channelDirSrc) {
+    private static Path getRelativeChannelPath(final Path envDestinationRoot, final Path channelDirSrc) {
         try {
             return envDestinationRoot.toAbsolutePath().relativize(channelDirSrc.toAbsolutePath());
         } catch (IllegalArgumentException ex) { // NOSONAR - we have a workaround if relativize fails

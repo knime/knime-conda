@@ -269,14 +269,14 @@ public final class InstallCondaEnvironment {
         /* 2b) Modify the pixi.toml to contain the pypi-options          */
         /* ------------------------------------------------------------- */
         var pixiTomlPath = envDestinationRoot.resolve("pixi.toml");
-        var pypiDirSrc = envResourcesFolder.resolve("pypi");
-        var relativePypiPath = getRelativeChannelPath(envDestinationRoot, pypiDirSrc);
+        var pypiDirSrc = envResourcesFolder.resolve("pypi").toAbsolutePath();
+        var pypiIndexURL = pypiDirSrc.toUri().toURL();
         var pypiOptions = String.format("""
 
                 [pypi-options]
                 find-links = [{path = "%s"}]
-                index-url = "file://$(pwd)/%s"
-                """, relativePypiPath.toString().replace('\\', '/'), relativePypiPath.toString().replace('\\', '/'));
+                index-url = "%s"
+                """, pypiDirSrc.toString().replace("\\", "\\\\"), pypiIndexURL);
         Files.writeString(pixiTomlPath, pypiOptions, StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.APPEND);
 
         /* ------------------------------------------------------------- */

@@ -275,7 +275,7 @@ public final class InstallCondaEnvironment {
 
                 [pypi-options]
                 find-links = [{path = "%s"}]
-                index-url = "file://$(pwd)/%s"
+                index-url = "file:%s"
                 """, relativePypiPath.toString().replace('\\', '/'), relativePypiPath.toString().replace('\\', '/'));
         Files.writeString(pixiTomlPath, pypiOptions, StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.APPEND);
 

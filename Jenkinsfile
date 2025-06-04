@@ -83,6 +83,7 @@ def runCondaEnvBundlingTest(bundlingPath, envType, condaRepo, compositeRepo) {
         cp -a knime_minimal.app "knime test.app"
     """
     def envDir = "${bundlingPath}/org_knime_conda_envbundling_testext_0.1.0/.pixi/envs/default"
+    def pixiCacheDir = bundlingPath + "/.pixi-cache"
 
     def installTest = {
         sh label: 'Install test extension', script: """
@@ -95,7 +96,16 @@ def runCondaEnvBundlingTest(bundlingPath, envType, condaRepo, compositeRepo) {
             error("Environment directory does not exist: ${envDir}")
         }
 
-        // 2. Environment must contain exactly one package: tzdata 2025b
+        // 2. Pixi cache directory must exist and not be empty
+        if (!fileExists(pixiCacheDir)) {
+            error("Pixi cache directory does not exist: ${pixiCacheDir}")
+        }
+        def cacheContents = sh(script: "ls -A '${pixiCacheDir}'", returnStdout: true).trim()
+        if (!cacheContents) {
+            error("Pixi cache directory is empty: ${pixiCacheDir}")
+        }
+
+        // 3. Environment must contain exactly one package: tzdata 2025b
         sh label: 'Verify bundled environment content', script: """
             micromamba list -p \"${envDir}\" | grep 'tzdata' || {
             echo "✖ tzdata 2025b not found in ${envDir}:"

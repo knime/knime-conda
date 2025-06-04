@@ -1,0 +1,7 @@
+- Focus on the intended purpose of the commit.
+- Write concise and clear commit messages.
+- The first line must be a short summary (max 50 characters).
+- Leave a blank line after the summary.
+- If the commit is not self-explanatory, add a brief, clear description after the blank line. Keep it concise and relevant.
+- Do not include unnecessary details or repeat information.
+- Use the imperative mood (e.g., "Fix bug", "Add feature", "Update docs").

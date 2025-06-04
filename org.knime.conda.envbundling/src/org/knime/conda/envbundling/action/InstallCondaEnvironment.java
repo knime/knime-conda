@@ -148,6 +148,8 @@ import org.osgi.framework.FrameworkUtil;
  */
 public final class InstallCondaEnvironment {
 
+    private static final String PIXI_CACHE_DIRECTORY_NAME = ".pixi-cache";
+
     private InstallCondaEnvironment() {
     }
 
@@ -283,7 +285,9 @@ public final class InstallCondaEnvironment {
         /* ------------------------------------------------------------- */
         /* 4) Run "pixi init -i environment.yml"                         */
         /* ------------------------------------------------------------- */
-        var initResult = PixiBinary.callPixi(envDestinationRoot, "init", "-i", environmentYmlDst.toString());
+        var pixiCacheDir = bundlingRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath().toString();
+        var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDir);
+        var initResult = PixiBinary.callPixi(envDestinationRoot, envVars, "init", "-i", environmentYmlDst.toString());
         if (!initResult.isSuccess()) {
             logError(formatPixiFailure("pixi init", initResult));
             throw new IOException("Failed to initialise Pixi project (exit code " + initResult.returnCode() + ")");
@@ -304,8 +308,7 @@ public final class InstallCondaEnvironment {
 
         /* ------------------------------------------------------------- */
         /* 5) Install the environment                                    */
-        /* ------------------------------------------------------------- */
-        var installResult = PixiBinary.callPixi(envDestinationRoot, "install");
+        var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install");
         if (!installResult.isSuccess()) {
             logError(formatPixiFailure("pixi install", installResult));
             throw new IOException(

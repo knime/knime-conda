@@ -54,6 +54,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -167,6 +168,22 @@ public final class PixiBinary {
      */
     public static CallResult callPixi(final java.nio.file.Path workingDirectory, final String... args)
         throws PixiBinaryLocationException, IOException, InterruptedException {
+        return callPixi(workingDirectory, null, args);
+    }
+
+    /**
+     * Executes the <em>pixi</em> binary in the given working directory with optional environment variables.
+     *
+     * @param workingDirectory the directory that should be used as the process' working directory (must not be null)
+     * @param envVars additional environment variables to set (may be null)
+     * @param args additional arguments to pass to the process (excluding the executable itself)
+     * @return a {@link CallResult} containing the process' exit status and captured I/O
+     * @throws PixiBinaryLocationException if the pixi executable cannot be found
+     * @throws IOException if the process cannot be started or its streams cannot be read
+     * @throws InterruptedException if the current thread is interrupted while waiting for the process
+     */
+    public static CallResult callPixi(final java.nio.file.Path workingDirectory, final Map<String, String> envVars, final String... args)
+        throws PixiBinaryLocationException, IOException, InterruptedException {
         Objects.requireNonNull(workingDirectory, "workingDirectory must not be null");
 
         var pixiPath = getPixiBinaryPath();
@@ -175,6 +192,10 @@ public final class PixiBinary {
         pb.command().addAll(Arrays.asList(args));
         pb.directory(workingDirectory.toFile());
         pb.redirectErrorStream(false);
+
+        if (envVars != null) {
+            pb.environment().putAll(envVars);
+        }
 
         var process = pb.start();
         var stdStreamsReadersExec = Executors.newFixedThreadPool(2);

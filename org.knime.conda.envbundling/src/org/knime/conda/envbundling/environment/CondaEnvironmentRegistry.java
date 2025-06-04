@@ -110,6 +110,8 @@ public final class CondaEnvironmentRegistry {
 
     /**
      * Invalidate the cached environments map. This should be called whenever an extension is installed or uninstalled.
+     *
+     * @since 5.5
      */
     public static void invalidateCache() {
         LOGGER.info("Invalidating CondaEnvironmentRegistry cache.");

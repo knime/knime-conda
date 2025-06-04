@@ -145,6 +145,7 @@ import org.osgi.framework.FrameworkUtil;
  * </pre>
  *
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
+ * @since 5.5
  */
 public final class InstallCondaEnvironment {
 

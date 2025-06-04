@@ -143,6 +143,11 @@ def runCondaEnvBundlingTest(bundlingPath, envType, condaRepo, compositeRepo) {
         sh label: 'Delete knime test.app', script: """
             rm -rf "knime test.app"
         """
+        if (envType == "withEnv") {
+            sh label: 'Delete external bundling directory', script: """
+                rm -rf "${bundlingPath}"
+            """
+        }
     }
 }
 

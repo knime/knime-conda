@@ -233,11 +233,34 @@ public final class InstallCondaEnvironment {
         var bundlingRoot = getBundlingRoot(installationRoot);
         var envResourcesFolder = artifactLocation.resolve("env");
         var envDestinationRoot = bundlingRoot.resolve(environmentName);
+
+        // Check if the destination directory does not exist or is empty and writable before doing anything else
         checkDestinationDirectory(envDestinationRoot);
+
+        /* ------------------------------------------------------------- */
+        /* 1) Write environment_path.txt                                 */
+        /* ------------------------------------------------------------- */
+        // Note that we do this first to ensure that the environment path is always written, even if the installation
+        // fails later to be able to clean up the environment directory.
+        var envPath = envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
+        var envPathFile = artifactLocation.resolve(CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
+        Path envPathToWrite;
+        if (envPath.toAbsolutePath().startsWith(installationRoot.toAbsolutePath())) {
+            // write relative path if the environment is inside the installation root
+            envPathToWrite = installationRoot.toAbsolutePath().relativize(envPath.toAbsolutePath());
+        } else {
+            // write absolute path if the environment is outside the installation root
+            envPathToWrite = envPath.toAbsolutePath();
+        }
+        Files.writeString(envPathFile, envPathToWrite.toString(), StandardCharsets.UTF_8);
+
+        /* ------------------------------------------------------------- */
+        /* 2) Create the environment root directory                      */
+        /* ------------------------------------------------------------- */
         Files.createDirectories(envDestinationRoot);
 
         /* ------------------------------------------------------------- */
-        /* 1) Copy environment.yml adjusting the channel path            */
+        /* 3) Copy environment.yml adjusting the channel path            */
         /* ------------------------------------------------------------- */
         var environmentYmlSrc = envResourcesFolder.resolve("environment.yml");
         var environmentYmlDst = envDestinationRoot.resolve("environment.yml");
@@ -258,7 +281,7 @@ public final class InstallCondaEnvironment {
         Files.writeString(environmentYmlDst, envContent, StandardCharsets.UTF_8);
 
         /* ------------------------------------------------------------- */
-        /* 2) Run "pixi init -i environment.yml"                         */
+        /* 4) Run "pixi init -i environment.yml"                         */
         /* ------------------------------------------------------------- */
         var initResult = PixiBinary.callPixi(envDestinationRoot, "init", "-i", environmentYmlDst.toString());
         if (!initResult.isSuccess()) {
@@ -266,7 +289,7 @@ public final class InstallCondaEnvironment {
             throw new IOException("Failed to initialise Pixi project (exit code " + initResult.returnCode() + ")");
         }
         /* ------------------------------------------------------------- */
-        /* 2b) Modify the pixi.toml to contain the pypi-options          */
+        /* 4b) Modify the pixi.toml to contain the pypi-options          */
         /* ------------------------------------------------------------- */
         var pixiTomlPath = envDestinationRoot.resolve("pixi.toml");
         var pypiDirSrc = envResourcesFolder.resolve("pypi").toAbsolutePath();
@@ -280,7 +303,7 @@ public final class InstallCondaEnvironment {
         Files.writeString(pixiTomlPath, pypiOptions, StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.APPEND);
 
         /* ------------------------------------------------------------- */
-        /* 3) Install the environment                                    */
+        /* 5) Install the environment                                    */
         /* ------------------------------------------------------------- */
         var installResult = PixiBinary.callPixi(envDestinationRoot, "install");
         if (!installResult.isSuccess()) {
@@ -288,21 +311,6 @@ public final class InstallCondaEnvironment {
             throw new IOException(
                 "Installing the Pixi environment failed (exit code " + installResult.returnCode() + ")");
         }
-
-        /* ------------------------------------------------------------- */
-        /* 4) Write environment_path.txt                                 */
-        /* ------------------------------------------------------------- */
-        var envPath = envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
-        var envPathFile = artifactLocation.resolve(CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
-        Path envPathToWrite;
-        if (envPath.toAbsolutePath().startsWith(installationRoot.toAbsolutePath())) {
-            // write relative path if the environment is inside the installation root
-            envPathToWrite = installationRoot.toAbsolutePath().relativize(envPath.toAbsolutePath());
-        } else {
-            // write absolute path if the environment is outside the installation root
-            envPathToWrite = envPath.toAbsolutePath();
-        }
-        Files.writeString(envPathFile, envPathToWrite.toString(), StandardCharsets.UTF_8);
 
         logInfo("Environment installed successfully: " + envPath);
 

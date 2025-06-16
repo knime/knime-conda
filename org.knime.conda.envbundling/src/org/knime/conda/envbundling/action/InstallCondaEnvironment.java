@@ -263,53 +263,30 @@ public final class InstallCondaEnvironment {
         Files.createDirectories(envDestinationRoot);
 
         /* ------------------------------------------------------------- */
-        /* 3) Copy environment.yml adjusting the channel path            */
+        /* 3) Create the pixi.lock/toml files with local URLs/Paths      */
         /* ------------------------------------------------------------- */
-        var environmentYmlSrc = envResourcesFolder.resolve("environment.yml");
-        var environmentYmlDst = envDestinationRoot.resolve("environment.yml");
+        var pixiLockSrc = artifactLocation.resolve("pixi.lock");
+        var pixiLockDst = envDestinationRoot.resolve("pixi.lock");
+        var pixiTomlDst = envDestinationRoot.resolve("pixi.toml");
 
-        var channelDirSrc = envResourcesFolder.resolve("channel");
-        if (!Files.isDirectory(channelDirSrc)) {
-            throw new IllegalStateException(
-                "Expected 'channel' directory next to environment.yml in " + envResourcesFolder);
-        }
-        var envContent = Files.readString(environmentYmlSrc, StandardCharsets.UTF_8);
-        var relativeChannelPath = getRelativeChannelPath(envDestinationRoot, channelDirSrc);
-        envContent = envContent.replace("  - ./channel", "  - " + relativeChannelPath.toString().replace('\\', '/'));
-        // pixi does not support pypi-options in environment.yml (checked for pixi 0.47.0).
-        // -> We need to remove the --no-index and --find-links ./pypi options from the environment.yml file.
-        envContent = envContent //
-            .replace("- --no-index", "") //
-            .replace("- --find-links ./pypi", ""); //
-        Files.writeString(environmentYmlDst, envContent, StandardCharsets.UTF_8);
+        // Read the lockfile and make the URLs local and write it to the destination
+        var pixiLockfile = PixiLockfileUtil.readLockfile(pixiLockSrc);
+        PixiLockfileUtil.makeURLsLocal(pixiLockfile, "default", envResourcesFolder);
+        PixiLockfileUtil.writeLockfile(pixiLockfile, pixiLockDst);
+
+        // Create a minimal pixi.toml file in the destination
+        Files.writeString(pixiTomlDst, """
+                [workspace]
+                channels = []
+                platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+                """);
 
         /* ------------------------------------------------------------- */
-        /* 4) Run "pixi init -i environment.yml"                         */
+        /* 4) Install the environment                                    */
         /* ------------------------------------------------------------- */
         var pixiCacheDir = bundlingRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath().toString();
         var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDir);
-        var initResult = PixiBinary.callPixi(envDestinationRoot, envVars, "init", "-i", environmentYmlDst.toString());
-        if (!initResult.isSuccess()) {
-            logError(formatPixiFailure("pixi init", initResult));
-            throw new IOException("Failed to initialise Pixi project (exit code " + initResult.returnCode() + ")");
-        }
-        /* ------------------------------------------------------------- */
-        /* 4b) Modify the pixi.toml to contain the pypi-options          */
-        /* ------------------------------------------------------------- */
-        var pixiTomlPath = envDestinationRoot.resolve("pixi.toml");
-        var pypiDirSrc = envResourcesFolder.resolve("pypi").toAbsolutePath();
-        var pypiIndexURL = pypiDirSrc.toUri().toURL();
-        var pypiOptions = String.format("""
-
-                [pypi-options]
-                find-links = [{path = "%s"}]
-                index-url = "%s"
-                """, pypiDirSrc.toString().replace("\\", "\\\\"), pypiIndexURL);
-        Files.writeString(pixiTomlPath, pypiOptions, StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.APPEND);
-
-        /* ------------------------------------------------------------- */
-        /* 5) Install the environment                                    */
-        var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install");
+        var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install", "--frozen");
         if (!installResult.isSuccess()) {
             logError(formatPixiFailure("pixi install", installResult));
             throw new IOException(
@@ -467,21 +444,6 @@ public final class InstallCondaEnvironment {
         } else {
             // if it exists but is not a directory, throw an exception
             throw new IOException("Environment destination path exists and is not a directory: " + destination);
-        }
-    }
-
-    /**
-     * The relative path to the channel directory from the environment root. Falls back to an absolute path if the
-     * environment root is on a separate volume.
-     */
-    private static Path getRelativeChannelPath(final Path envDestinationRoot, final Path channelDirSrc) {
-        try {
-            return envDestinationRoot.toAbsolutePath().relativize(channelDirSrc.toAbsolutePath());
-        } catch (IllegalArgumentException ex) { // NOSONAR - we have a workaround if relativize fails
-            // Different roots/volumes – fall back to absolute path
-            logInfo(
-                "Channel directory is on a different volume; using absolute path in environment.yml: " + channelDirSrc);
-            return channelDirSrc.toAbsolutePath();
         }
     }
 }

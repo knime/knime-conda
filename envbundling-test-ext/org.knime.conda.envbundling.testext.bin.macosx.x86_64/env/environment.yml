@@ -1,5 +1,0 @@
-channels:
-  - ./channel
-  - nodefaults
-dependencies:
-  - tzdata=2025b=h78e105d_0

@@ -1,0 +1,17 @@
+[workspace]
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+
+# Dependencies of the default environment
+# these are contained in the env/ folder
+[dependencies]
+tzdata = "*"
+
+# Dependencies of other environments
+# these are not contained in the env/ folder but should not cause issues during installation
+[feature.other-env.dependencies]
+python = "*"
+
+
+[environments]
+other-env = {features = ["other-env"], no-default-feature = true}

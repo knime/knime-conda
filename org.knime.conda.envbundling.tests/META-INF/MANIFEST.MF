@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: KNIME Conda Testing
+Bundle-SymbolicName: org.knime.conda.envbundling.tests;singleton:=true
+Bundle-Version: 5.5.0.qualifier
+Bundle-ClassPath: .
+Bundle-Vendor: KNIME AG, Zurich, Switzerland
+Fragment-Host: org.knime.conda.envbundling;bundle-version="[5.5.0.qualifier,6.0.0)"
+Require-Bundle: junit-jupiter-api;bundle-version="5.10.2"
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+Automatic-Module-Name: org.knime.conda.tests

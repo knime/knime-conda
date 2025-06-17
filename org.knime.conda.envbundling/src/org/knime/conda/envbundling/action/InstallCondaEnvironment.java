@@ -84,10 +84,18 @@ import org.osgi.framework.FrameworkUtil;
  *
  * <pre>
  * ├─ META-INF/
+ * ├─ pixi.lock                    # Pixi lockfile
  * ├─ env/
- * │   ├─ environment.yml   # Environment file referencing the local "./channel" directory
- * │   └─ channel/          # Local Conda channel (sub‑directories "noarch" / platform‑specific)
- * │       └─ ...
+ * │   ├─ channel/                 # Local Conda channel
+ * │   │   ├─ linux-64/            # Platform-specific packages ("linux-64", "win-64", "osx-64", "osx-arm64")
+ * │   │   │   ├─ package1.conda
+ * │   │   │   └─ package2.conda
+ * │   │   └─ noarch/              # Noarch packages
+ * │   │       ├─ package1.conda
+ * │   │       └─ package2.conda
+ * │   └─ pypi/                    # Local PyPI index
+ * │       ├─ package1.whl
+ * │       └─ package2.whl
  * └─ ...
  * </pre>
  *
@@ -104,7 +112,7 @@ import org.osgi.framework.FrameworkUtil;
  * <td>String</td>
  * <td>✔</td>
  * <td>Path to the fragment root (usually <code>${artifact.location}</code> in <code>p2.inf</code>); must contain the
- * <em>env</em> folder shown above.</td>
+ * <em>env</em> folder and <em>pixi.lock</em> shown above.</td>
  * </tr>
  * <tr>
  * <td><code>name</code></td>

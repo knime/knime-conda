@@ -140,10 +140,11 @@ class PixiLockfileUtilTest {
         Map<String, Object> postEnvDef = ((Map<String, Map<String, Object>>)lockfile.get("environments")).get(envName);
 
         // channel list replaced with single file:// URL
-        assertEquals(List.of(Map.of("url", channelPath.toUri().toURL().toString())), postEnvDef.get("channels"));
+        assertEquals(List.of(Map.of("url", channelPath.toUri().toURL().toString())), postEnvDef.get("channels"),
+            "channels should be replaced with local file URL");
         // pypi index links removed
-        assertFalse(postEnvDef.containsKey("indexes"));
-        assertFalse(postEnvDef.containsKey("find-links"));
+        assertFalse(postEnvDef.containsKey("indexes"), "indexes should be removed");
+        assertFalse(postEnvDef.containsKey("find-links"), "find-links should be removed");
 
         // env packages rewritten to local paths
         @SuppressWarnings("unchecked")
@@ -151,16 +152,19 @@ class PixiLockfileUtilTest {
             ((Map<String, List<Map<String, String>>>)postEnvDef.get("packages")).get("linux-64");
 
         assertEquals(channelPath.resolve("linux-64/libarrow-20.0.0-h314c690_7_cpu.conda").toString(),
-            linuxPkgs.get(0).get("conda"));
-        assertEquals(pypiPath.resolve("package-1.0.0.tar.gz").toString(), linuxPkgs.get(1).get("pypi"));
+            linuxPkgs.get(0).get("conda"), "conda package path should be rewritten to local");
+        assertEquals(pypiPath.resolve("package-1.0.0.tar.gz").toString(), linuxPkgs.get(1).get("pypi"),
+            "pypi package path should be rewritten to local");
 
         /* ---------- full package list assertions ---------- */
         assertEquals(channelPath.resolve("linux-64/libarrow-20.0.0-h314c690_7_cpu.conda").toString(),
-            fullConda.get("conda"));
+            fullConda.get("conda"), "fullConda conda path should be rewritten to local");
         assertEquals("linux-64", fullConda.get("subdir"), "subdir must be added for conda packages");
-        assertFalse(fullConda.containsKey("channel"), "channel field must be stripped");
+        assertEquals(channelPath.toUri().toURL().toString(), fullConda.get("channel"),
+            "channel should be replaced with local file URL");
 
-        assertEquals(pypiPath.resolve("package-1.0.0.tar.gz").toString(), fullPypi.get("pypi"));
+        assertEquals(pypiPath.resolve("package-1.0.0.tar.gz").toString(), fullPypi.get("pypi"),
+            "fullPypi pypi path should be rewritten to local");
     }
 
     // --------------------------------------------------------------------
@@ -177,4 +181,3 @@ class PixiLockfileUtilTest {
         assertEquals(original, reloaded, "YAML write → read must be loss-less");
     }
 }
-

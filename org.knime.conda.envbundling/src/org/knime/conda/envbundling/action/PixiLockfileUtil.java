@@ -163,12 +163,11 @@ final class PixiLockfileUtil {
     }
 
     private static void makeFullPackagePathsLocal(final Map<String, Object> lockfile, final Path condaChannelPath,
-        final Path pypiIndexPath) {
+        final Path pypiIndexPath) throws MalformedURLException {
+        var condaChannelUrl = condaChannelPath.toUri().toURL().toString();
         @SuppressWarnings("unchecked")
         var fullPackagesList = (List<Map<String, String>>)lockfile.get("packages");
         for (var packageEntry : fullPackagesList) {
-
-            // Replace the conda package URL with a local file path
             if (packageEntry.containsKey("conda")) {
                 var packageFileUrl = packageEntry.get("conda");
                 packageEntry.put("conda", swapToLocalPathConda(condaChannelPath, packageFileUrl));
@@ -181,7 +180,7 @@ final class PixiLockfileUtil {
             packageEntry.computeIfPresent("pypi", (key, name) -> swapToLocalPathPypi(pypiIndexPath, name));
 
             // Remove the channel field if it exists, as it is not needed in the Pixi lockfile
-            packageEntry.remove("channel");
+            packageEntry.put("channel", condaChannelUrl);
         }
     }
 

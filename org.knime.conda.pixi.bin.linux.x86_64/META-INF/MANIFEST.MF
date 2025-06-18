@@ -3,7 +3,7 @@ Bundle-ManifestVersion: 2
 Bundle-Version: 5.5.0.qualifier
 Bundle-Vendor: KNIME AG, Zurich, Switzerland
 Bundle-ActivationPolicy: lazy
-Fragment-Host: org.knime.conda.envbundling;bundle-version="5.5.0"
+Fragment-Host: org.knime.conda.envinstall;bundle-version="5.5.0"
 Eclipse-BundleShape: dir
 Bundle-SymbolicName: org.knime.conda.pixi.bin.linux.x86_64
 Automatic-Module-Name: org.knime.conda.pixi.bin.linux.x86_64

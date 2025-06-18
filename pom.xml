@@ -34,12 +34,12 @@
 		<module>org.knime.features.conda.envinstall</module>
 		<module>org.knime.conda.tests</module>
 		<module>org.knime.features.conda</module>
-		<module>envbundling-test-ext/org.knime.conda.envbundling.testext.bin</module>
-		<module>envbundling-test-ext/org.knime.conda.envbundling.testext.bin.linux.x86_64</module>
-		<module>envbundling-test-ext/org.knime.conda.envbundling.testext.bin.macosx.aarch64</module>
-		<module>envbundling-test-ext/org.knime.conda.envbundling.testext.bin.macosx.x86_64</module>
-		<module>envbundling-test-ext/org.knime.conda.envbundling.testext.bin.win32.x86_64</module>
-		<module>envbundling-test-ext/org.knime.features.conda.envbundling.testext</module>
+		<module>envinstall-test-ext/org.knime.conda.envinstall.testext.bin</module>
+		<module>envinstall-test-ext/org.knime.conda.envinstall.testext.bin.linux.x86_64</module>
+		<module>envinstall-test-ext/org.knime.conda.envinstall.testext.bin.macosx.aarch64</module>
+		<module>envinstall-test-ext/org.knime.conda.envinstall.testext.bin.macosx.x86_64</module>
+		<module>envinstall-test-ext/org.knime.conda.envinstall.testext.bin.win32.x86_64</module>
+		<module>envinstall-test-ext/org.knime.features.conda.envinstall.testext</module>
 		<module>org.knime.update.conda</module>
 	</modules>
 

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         name="org_knime_conda_envinstall_testext"
+         point="org.knime.conda.envinstall.CondaEnvironment">
+   </extension>
+</plugin>

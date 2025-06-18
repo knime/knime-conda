@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<?eclipse version="3.4"?>
-<plugin>
-   <extension
-         name="org_knime_conda_envbundling_testext"
-         point="org.knime.conda.envbundling.CondaEnvironment">
-   </extension>
-</plugin>

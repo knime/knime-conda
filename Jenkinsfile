@@ -44,7 +44,7 @@ def testInstallCondaEnvAction(String baseBranch) {
                     """
 
                     // Test basic installation
-                    runCondaEnvBundlingTest(
+                    runCondaEnvInstallationTest(
                         (nodeLabel == "macosx" ? "knime test.app/Contents/Eclipse/bundling/" : "knime test.app/bundling"),
                         "",
                         condaRepo,
@@ -55,7 +55,7 @@ def testInstallCondaEnvAction(String baseBranch) {
                     def bundlingPath = "${env.WORKSPACE}/bundling_${nodeLabel}_${UUID.randomUUID().toString()}"
                     sh "mkdir -p \"${bundlingPath}\""
 
-                    runCondaEnvBundlingTest(
+                    runCondaEnvInstallationTest(
                         bundlingPath,
                         "withEnv",
                         condaRepo,
@@ -78,17 +78,17 @@ def testInstallCondaEnvAction(String baseBranch) {
     )
 }
 
-def runCondaEnvBundlingTest(bundlingPath, envType, condaRepo, compositeRepo) {
+def runCondaEnvInstallationTest(bundlingPath, envType, condaRepo, compositeRepo) {
     sh label: 'Copy minimal installation', script: """
         cp -a knime_minimal.app "knime test.app"
     """
-    def envDir = "${bundlingPath}/org_knime_conda_envbundling_testext_0.1.0/.pixi/envs/default"
+    def envDir = "${bundlingPath}/org_knime_conda_envinstall_testext_0.1.0/.pixi/envs/default"
     def pixiCacheDir = bundlingPath + "/.pixi-cache"
 
     def installTest = {
         sh label: 'Install test extension', script: """
             source common.inc
-            installIU org.knime.features.conda.envbundling.testext.feature.group \"${condaRepo},${compositeRepo}\" \"knime test.app\" \"\" \"\" \"\" 2
+            installIU org.knime.features.conda.envinstall.testext.feature.group \"${condaRepo},${compositeRepo}\" \"knime test.app\" \"\" \"\" \"\" 2
         """
 
         // 1. Environment directory must exist
@@ -121,7 +121,7 @@ def runCondaEnvBundlingTest(bundlingPath, envType, condaRepo, compositeRepo) {
         }
         sh label: 'Uninstall test extension', script: """
             source common.inc
-            uninstallIU org.knime.features.conda.envbundling.testext.feature.group \"knime test.app\"
+            uninstallIU org.knime.features.conda.envinstall.testext.feature.group \"knime test.app\"
         """
         if (fileExists(envDir)) {
             error("Environment directory still exist after feature uninstallation: ${envDir}")
@@ -160,7 +160,7 @@ def runTest(String testName, Closure testLambda) {
         success = false
         failureMessage = ex.getMessage()
     }
-    reportTestResult("CondaEnvBundling", testName, success, failureMessage)
+    reportTestResult("CondaEnvInstallation", testName, success, failureMessage)
     return success
 }
 

@@ -12,3 +12,4 @@ Require-Bundle: org.eclipse.core.runtime;bundle-version="[3.20.100,4.0.0)",
  org.yaml.snakeyaml;bundle-version="[2.4.0,3.0.0)"
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Automatic-Module-Name: org.knime.conda.envinstall
+Export-Package: org.knime.conda.envinstall.action;x-friends:="org.knime.conda.envbundling"

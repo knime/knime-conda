@@ -59,7 +59,6 @@ import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.equinox.p2.engine.spi.ProvisioningAction;
-import org.knime.conda.envinstall.environment.CondaEnvironmentRegistry;
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
@@ -156,6 +155,9 @@ import org.osgi.framework.FrameworkUtil;
  * @since 5.5
  */
 public final class InstallCondaEnvironment {
+
+    /** The name of the file that contains the path to the environment location */
+    public static final String ENVIRONMENT_PATH_FILE = "environment_path.txt";
 
     private static final String PIXI_CACHE_DIRECTORY_NAME = ".pixi-cache";
 
@@ -254,7 +256,7 @@ public final class InstallCondaEnvironment {
         // Note that we do this first to ensure that the environment path is always written, even if the installation
         // fails later to be able to clean up the environment directory.
         var envPath = envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
-        var envPathFile = artifactLocation.resolve(CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
+        var envPathFile = artifactLocation.resolve(ENVIRONMENT_PATH_FILE);
         Path envPathToWrite;
         if (envPath.toAbsolutePath().startsWith(installationRoot.toAbsolutePath())) {
             // write relative path if the environment is inside the installation root
@@ -316,7 +318,7 @@ public final class InstallCondaEnvironment {
         logInfo("Uninstalling conda environment '" + environmentName + "' from fragment: " + artifactLocation);
 
         var installationRoot = artifactLocation.getParent().getParent();
-        var envPathFile = artifactLocation.resolve(CondaEnvironmentRegistry.ENVIRONMENT_PATH_FILE);
+        var envPathFile = artifactLocation.resolve(ENVIRONMENT_PATH_FILE);
 
         // Read the environment path from the file
         var envPathText = Files.readString(envPathFile, StandardCharsets.UTF_8).trim();

@@ -69,6 +69,7 @@ import org.eclipse.core.runtime.IExtensionPoint;
 import org.eclipse.core.runtime.IExtensionRegistry;
 import org.eclipse.core.runtime.Platform;
 import org.knime.conda.envbundling.CondaEnvironmentBundlingUtils;
+import org.knime.conda.envinstall.action.InstallCondaEnvironment;
 import org.knime.core.node.NodeLogger;
 import org.osgi.framework.Bundle;
 
@@ -91,8 +92,10 @@ public final class CondaEnvironmentRegistry {
      * The name of the file that contains the path to the environment location
      *
      * @since 5.4
+     * @deprecated use {@link InstallCondaEnvironment#ENVIRONMENT_PATH_FILE} instead.
      */
-    public static final String ENVIRONMENT_PATH_FILE = "environment_path.txt";
+    @Deprecated(since = "5.5")
+    public static final String ENVIRONMENT_PATH_FILE = InstallCondaEnvironment.ENVIRONMENT_PATH_FILE;
 
     /**
      * The new name of the folder containing the all conda environments.

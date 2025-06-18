@@ -46,7 +46,7 @@
  * History
  *   Jun 17, 2025 (benjaminwilhelm): created
  */
-package org.knime.conda.envbundling.action;
+package org.knime.conda.envinstall.action;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

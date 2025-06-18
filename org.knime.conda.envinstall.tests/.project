@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>org.knime.conda.envbundling.tests</name>
+	<name>org.knime.conda.envinstall.tests</name>
 	<comment></comment>
 	<projects>
 	</projects>

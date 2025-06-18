@@ -70,6 +70,7 @@ import org.eclipse.core.runtime.IExtensionRegistry;
 import org.eclipse.core.runtime.Platform;
 import org.knime.conda.envbundling.CondaEnvironmentBundlingUtils;
 import org.knime.conda.envinstall.action.InstallCondaEnvironment;
+import org.knime.conda.envinstall.action.InstallCondaEnvironment.EnvironmentInstallListener;
 import org.knime.core.node.NodeLogger;
 import org.osgi.framework.Bundle;
 
@@ -106,6 +107,21 @@ public final class CondaEnvironmentRegistry {
 
     // Use AtomicReference to allow thread-safe invalidation and lazy initialization
     private static final AtomicReference<Map<String, CondaEnvironment>> m_environments = new AtomicReference<>(null);
+
+    static {
+        InstallCondaEnvironment.registerEnvironmentInstallListener(new EnvironmentInstallListener() {
+            @Override
+            public void onInstallStart(final String environmentName) {
+                // No action needed at the start of the installation
+            }
+
+            @Override
+            public void onInstallEnd(final String environmentName) {
+                // Invalidate the cache when an environment is installed
+                invalidateCache();
+            }
+        });
+    }
 
     private CondaEnvironmentRegistry() {
         // Private constructor to prevent instantiation

@@ -50,7 +50,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Pattern;
 
 import org.apache.commons.io.file.PathUtils;
@@ -240,73 +242,75 @@ public final class InstallCondaEnvironment {
 
     private static void installEnvironment(final Path artifactLocation, final String environmentName)
         throws IOException, PixiBinaryLocationException, InterruptedException {
-        logInfo("Installing conda environment '" + environmentName + "' from fragment: " + artifactLocation);
+        notifyEnvironmentListeners(InstallPhase.START, environmentName);
+        try {
+            logInfo("Installing conda environment '" + environmentName + "' from fragment: " + artifactLocation);
 
-        var installationRoot = artifactLocation.getParent().getParent();
-        var bundlingRoot = getBundlingRoot(installationRoot);
-        var envResourcesFolder = artifactLocation.resolve("env");
-        var envDestinationRoot = bundlingRoot.resolve(environmentName);
+            var installationRoot = artifactLocation.getParent().getParent();
+            var bundlingRoot = getBundlingRoot(installationRoot);
+            var envResourcesFolder = artifactLocation.resolve("env");
+            var envDestinationRoot = bundlingRoot.resolve(environmentName);
 
-        // Check if the destination directory does not exist or is empty and writable before doing anything else
-        checkDestinationDirectory(envDestinationRoot);
+            // Check if the destination directory does not exist or is empty and writable before doing anything else
+            checkDestinationDirectory(envDestinationRoot);
 
-        /* ------------------------------------------------------------- */
-        /* 1) Write environment_path.txt                                 */
-        /* ------------------------------------------------------------- */
-        // Note that we do this first to ensure that the environment path is always written, even if the installation
-        // fails later to be able to clean up the environment directory.
-        var envPath = envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
-        var envPathFile = artifactLocation.resolve(ENVIRONMENT_PATH_FILE);
-        Path envPathToWrite;
-        if (envPath.toAbsolutePath().startsWith(installationRoot.toAbsolutePath())) {
-            // write relative path if the environment is inside the installation root
-            envPathToWrite = installationRoot.toAbsolutePath().relativize(envPath.toAbsolutePath());
-        } else {
-            // write absolute path if the environment is outside the installation root
-            envPathToWrite = envPath.toAbsolutePath();
+            /* ------------------------------------------------------------- */
+            /* 1) Write environment_path.txt                                 */
+            /* ------------------------------------------------------------- */
+            // Note that we do this first to ensure that the environment path is always written, even if the installation
+            // fails later to be able to clean up the environment directory.
+            var envPath = envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
+            var envPathFile = artifactLocation.resolve(ENVIRONMENT_PATH_FILE);
+            Path envPathToWrite;
+            if (envPath.toAbsolutePath().startsWith(installationRoot.toAbsolutePath())) {
+                // write relative path if the environment is inside the installation root
+                envPathToWrite = installationRoot.toAbsolutePath().relativize(envPath.toAbsolutePath());
+            } else {
+                // write absolute path if the environment is outside the installation root
+                envPathToWrite = envPath.toAbsolutePath();
+            }
+            Files.writeString(envPathFile, envPathToWrite.toString(), StandardCharsets.UTF_8);
+
+            /* ------------------------------------------------------------- */
+            /* 2) Create the environment root directory                      */
+            /* ------------------------------------------------------------- */
+            Files.createDirectories(envDestinationRoot);
+
+            /* ------------------------------------------------------------- */
+            /* 3) Create the pixi.lock/toml files with local URLs/Paths      */
+            /* ------------------------------------------------------------- */
+            var pixiLockSrc = artifactLocation.resolve("pixi.lock");
+            var pixiLockDst = envDestinationRoot.resolve("pixi.lock");
+            var pixiTomlDst = envDestinationRoot.resolve("pixi.toml");
+
+            // Read the lockfile and make the URLs local and write it to the destination
+            var pixiLockfile = PixiLockfileUtil.readLockfile(pixiLockSrc);
+            PixiLockfileUtil.makeURLsLocal(pixiLockfile, "default", envResourcesFolder);
+            PixiLockfileUtil.writeLockfile(pixiLockfile, pixiLockDst);
+
+            // Create a minimal pixi.toml file in the destination
+            Files.writeString(pixiTomlDst, """
+                    [workspace]
+                    channels = []
+                    platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+                    """);
+
+            /* ------------------------------------------------------------- */
+            /* 4) Install the environment                                    */
+            /* ------------------------------------------------------------- */
+            var pixiCacheDir = bundlingRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath().toString();
+            var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDir);
+            var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install", "--frozen");
+            if (!installResult.isSuccess()) {
+                logError(formatPixiFailure("pixi install", installResult));
+                throw new IOException(
+                    "Installing the Pixi environment failed (exit code " + installResult.returnCode() + ")");
+            }
+
+            logInfo("Environment installed successfully: " + envPath);
+        } finally {
+            notifyEnvironmentListeners(InstallPhase.END, environmentName);
         }
-        Files.writeString(envPathFile, envPathToWrite.toString(), StandardCharsets.UTF_8);
-
-        /* ------------------------------------------------------------- */
-        /* 2) Create the environment root directory                      */
-        /* ------------------------------------------------------------- */
-        Files.createDirectories(envDestinationRoot);
-
-        /* ------------------------------------------------------------- */
-        /* 3) Create the pixi.lock/toml files with local URLs/Paths      */
-        /* ------------------------------------------------------------- */
-        var pixiLockSrc = artifactLocation.resolve("pixi.lock");
-        var pixiLockDst = envDestinationRoot.resolve("pixi.lock");
-        var pixiTomlDst = envDestinationRoot.resolve("pixi.toml");
-
-        // Read the lockfile and make the URLs local and write it to the destination
-        var pixiLockfile = PixiLockfileUtil.readLockfile(pixiLockSrc);
-        PixiLockfileUtil.makeURLsLocal(pixiLockfile, "default", envResourcesFolder);
-        PixiLockfileUtil.writeLockfile(pixiLockfile, pixiLockDst);
-
-        // Create a minimal pixi.toml file in the destination
-        Files.writeString(pixiTomlDst, """
-                [workspace]
-                channels = []
-                platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
-                """);
-
-        /* ------------------------------------------------------------- */
-        /* 4) Install the environment                                    */
-        /* ------------------------------------------------------------- */
-        var pixiCacheDir = bundlingRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath().toString();
-        var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDir);
-        var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install", "--frozen");
-        if (!installResult.isSuccess()) {
-            logError(formatPixiFailure("pixi install", installResult));
-            throw new IOException(
-                "Installing the Pixi environment failed (exit code " + installResult.returnCode() + ")");
-        }
-
-        logInfo("Environment installed successfully: " + envPath);
-
-        // Invalidate the CondaEnvironmentRegistry cache
-        CondaEnvironmentRegistry.invalidateCache();
     }
 
     /* --------------------------------------------------------------------- */
@@ -315,32 +319,99 @@ public final class InstallCondaEnvironment {
 
     private static void uninstallEnvironment(final Path artifactLocation, final String environmentName)
         throws IOException {
-        logInfo("Uninstalling conda environment '" + environmentName + "' from fragment: " + artifactLocation);
+        notifyEnvironmentListeners(InstallPhase.START, environmentName);
+        try {
+            logInfo("Uninstalling conda environment '" + environmentName + "' from fragment: " + artifactLocation);
 
-        var installationRoot = artifactLocation.getParent().getParent();
-        var envPathFile = artifactLocation.resolve(ENVIRONMENT_PATH_FILE);
+            var installationRoot = artifactLocation.getParent().getParent();
+            var envPathFile = artifactLocation.resolve(ENVIRONMENT_PATH_FILE);
 
-        // Read the environment path from the file
-        var envPathText = Files.readString(envPathFile, StandardCharsets.UTF_8).trim();
-        var envPath = installationRoot.resolve(envPathText);
+            // Read the environment path from the file
+            var envPathText = Files.readString(envPathFile, StandardCharsets.UTF_8).trim();
+            var envPath = installationRoot.resolve(envPathText);
 
-        /* <bundling_root>/<env_name>/.pixi/envs/default/
-         *                 ^^^^^^^^^^            ^^^^^^^
-         *                 envRoot               envPath
-         */
-        var envRoot = envPath.getParent().getParent().getParent();
+            /* <bundling_root>/<env_name>/.pixi/envs/default/
+             *                 ^^^^^^^^^^            ^^^^^^^
+             *                 envRoot               envPath
+             */
+            var envRoot = envPath.getParent().getParent().getParent();
 
-        // Delete environment root directory
-        if (Files.exists(envRoot)) {
-            FileUtil.deleteRecursively(envRoot.toFile());
-            logInfo("Removed environment directory: " + envRoot);
+            // Delete environment root directory
+            if (Files.exists(envRoot)) {
+                FileUtil.deleteRecursively(envRoot.toFile());
+                logInfo("Removed environment directory: " + envRoot);
+            }
+
+            // Delete environment_path.txt file
+            Files.deleteIfExists(envPathFile);
+        } finally {
+            notifyEnvironmentListeners(InstallPhase.END, environmentName);
         }
+    }
 
-        // Delete environment_path.txt file
-        Files.deleteIfExists(envPathFile);
+    /* --------------------------------------------------------------------- */
+    /* Environment install listeners                                         */
+    /* --------------------------------------------------------------------- */
 
-        // Invalidate the CondaEnvironmentRegistry cache
-        CondaEnvironmentRegistry.invalidateCache();
+    /**
+     * Listener for environment installation events.
+     */
+    public interface EnvironmentInstallListener {
+        /**
+         * Called before environment installation starts.
+         *
+         * @param environmentName Which environment gets created
+         */
+        void onInstallStart(String environmentName);
+
+        /**
+         * Called after environment installation ends (success or failure).
+         *
+         * @param environmentName The environment that got created (or at least attempted to)
+         */
+        void onInstallEnd(String environmentName);
+    }
+
+    private static final List<EnvironmentInstallListener> ENV_INSTALL_LISTENERS = new CopyOnWriteArrayList<>();
+
+    /**
+     * Register a listener for environment installation events.
+     *
+     * @param listener Add this listener to be notified on environment installations
+     */
+    public static void registerEnvironmentInstallListener(final EnvironmentInstallListener listener) {
+        ENV_INSTALL_LISTENERS.add(listener); // NOSONAR - this is slow but happens rarely
+    }
+
+    /**
+     * De-register a listener for environment installation events.
+     *
+     * @param listener Remove a listener for environment installations
+     */
+    public static void deregisterEnvironmentInstallListener(final EnvironmentInstallListener listener) {
+        ENV_INSTALL_LISTENERS.remove(listener); // NOSONAR - this is slow but happens rarely
+    }
+
+    private enum InstallPhase {
+            START, END
+    }
+
+    /**
+     * Call all listeners for an install or uninstall event
+     */
+    private static void notifyEnvironmentListeners(final InstallPhase phase, final String environmentName) {
+        for (EnvironmentInstallListener l : ENV_INSTALL_LISTENERS) {
+            try {
+                if (phase == InstallPhase.START) {
+                    l.onInstallStart(environmentName);
+                } else {
+                    l.onInstallEnd(environmentName);
+                }
+            } catch (Exception e) { // NOSONAR - we want to catch all exceptions to not break the installation process
+                logError("Exception when notifying EnvironmentInstallListener about install " + phase + " : "
+                    + e.getMessage(), e);
+            }
+        }
     }
 
     /* --------------------------------------------------------------------- */

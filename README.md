@@ -15,6 +15,7 @@ The code is organized as follows:
 * _org.knime.conda_: All code for the Conda Integration
 * _org.knime.conda.tests_: JUnit tests for the Conda Integration
 * _org.knime.conda.envbundling_: Support for bundling Conda environments as KNIME plugins
+* _org.knime.conda.envinstall_: Provisioning action to install Conda environments from KNIME plugins
 
 ## Development Notes
 

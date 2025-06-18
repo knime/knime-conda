@@ -46,7 +46,7 @@
  * History
  *   Jun 16, 2025 (benjaminwilhelm): created
  */
-package org.knime.conda.envbundling.action;
+package org.knime.conda.envinstall.action;
 
 import java.io.IOException;
 import java.net.MalformedURLException;

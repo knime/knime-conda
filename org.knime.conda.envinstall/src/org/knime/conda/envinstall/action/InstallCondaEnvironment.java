@@ -43,7 +43,7 @@
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
  */
-package org.knime.conda.envbundling.action;
+package org.knime.conda.envinstall.action;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -59,10 +59,10 @@ import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.equinox.p2.engine.spi.ProvisioningAction;
-import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
-import org.knime.conda.envbundling.pixi.PixiBinary;
-import org.knime.conda.envbundling.pixi.PixiBinary.CallResult;
-import org.knime.conda.envbundling.pixi.PixiBinary.PixiBinaryLocationException;
+import org.knime.conda.envinstall.environment.CondaEnvironmentRegistry;
+import org.knime.conda.envinstall.pixi.PixiBinary;
+import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
+import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 import org.knime.core.node.NodeLogger;
 import org.knime.core.util.FileUtil;
 import org.osgi.framework.FrameworkUtil;
@@ -140,13 +140,13 @@ import org.osgi.framework.FrameworkUtil;
  * metaRequirements.0.greedy = true
  * metaRequirements.0.optional = false
  * instructions.install=\
- *     org.knime.conda.envbundling.installcondaenvironment(\
+ *     org.knime.conda.envinstall.installcondaenvironment(\
  *         directory:${artifact.location},\
  *         name:my_unique_environment_name\
  *     );
  *
  * instructions.uninstall=\
- *     org.knime.conda.envbundling.uninstallcondaenvironment(\
+ *     org.knime.conda.envinstall.uninstallcondaenvironment(\
  *         directory:${artifact.location},\
  *         name:my_unique_environment_name\
  *     );

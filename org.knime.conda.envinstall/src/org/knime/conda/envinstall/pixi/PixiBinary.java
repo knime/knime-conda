@@ -46,7 +46,7 @@
  * History
  *   Apr 28, 2025 (benjaminwilhelm): created
  */
-package org.knime.conda.envbundling.pixi;
+package org.knime.conda.envinstall.pixi;
 
 import java.io.BufferedReader;
 import java.io.IOException;

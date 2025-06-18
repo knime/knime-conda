@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <feature
-      id="org.knime.features.conda.envbundling"
+      id="org.knime.features.conda.envinstall"
       label="Conda Environment Installer"
       version="5.5.0.qualifier"
       provider-name="KNIME AG, Zurich, Switzerland">
@@ -728,7 +728,7 @@ propagated with or for interoperation with KNIME.
    </license>
 
    <plugin
-         id="org.knime.conda.envbundling"
+         id="org.knime.conda.envinstall"
          version="0.0.0"/>
 
    <plugin

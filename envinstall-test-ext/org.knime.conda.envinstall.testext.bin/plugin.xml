@@ -3,6 +3,6 @@
 <plugin>
    <extension
          name="org_knime_conda_envinstall_testext"
-         point="org.knime.conda.envinstall.CondaEnvironment">
+         point="org.knime.conda.envbundling.CondaEnvironment">
    </extension>
 </plugin>

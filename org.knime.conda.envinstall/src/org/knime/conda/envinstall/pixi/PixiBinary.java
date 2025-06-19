@@ -49,6 +49,7 @@
 package org.knime.conda.envinstall.pixi;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -65,7 +66,6 @@ import java.util.stream.Collectors;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.core.runtime.Platform;
-import org.knime.core.util.FileUtil;
 import org.osgi.framework.FrameworkUtil;
 
 /**
@@ -135,7 +135,7 @@ public final class PixiBinary {
             }
 
             try {
-                var pixiFile = FileUtil.getFileFromURL(FileLocator.toFileURL(url));
+                var pixiFile = new File(FileLocator.toFileURL(url).getPath());
                 path = pixiFile.getAbsolutePath();
                 CACHED_PATH.set(path);
                 return path;

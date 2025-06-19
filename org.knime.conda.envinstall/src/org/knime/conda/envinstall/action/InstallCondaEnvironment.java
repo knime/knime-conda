@@ -64,8 +64,6 @@ import org.eclipse.equinox.p2.engine.spi.ProvisioningAction;
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
-import org.knime.core.node.NodeLogger;
-import org.knime.core.util.FileUtil;
 import org.osgi.framework.FrameworkUtil;
 
 /**
@@ -170,25 +168,20 @@ public final class InstallCondaEnvironment {
     /* Logging                                                               */
     /* --------------------------------------------------------------------- */
 
-    private static final NodeLogger NODE_LOGGER = NodeLogger.getLogger(InstallCondaEnvironment.class);
-
     private static final ILog BUNDLE_LOG = Platform.getLog(FrameworkUtil.getBundle(InstallCondaEnvironment.class));
 
     /** Log <em>error</em> level messages to both KNIME's {@link NodeLogger} (`knime.log`) and eclipse log. */
     private static void logError(final String message) {
-        NODE_LOGGER.error(message);
         BUNDLE_LOG.log(Status.error(message));
     }
 
     /** Log <em>error</em> level messages to both KNIME's {@link NodeLogger} (`knime.log`) and eclipse log. */
     private static void logError(final String message, final Throwable t) {
-        NODE_LOGGER.error(message, t);
         BUNDLE_LOG.log(Status.error(message, t));
     }
 
     /** Log <em>info</em> level messages to both KNIME's {@link NodeLogger} (`knime.log`) and eclipse log. */
     private static void logInfo(final String message) {
-        NODE_LOGGER.info(message);
         BUNDLE_LOG.log(Status.info(message));
     }
 
@@ -338,7 +331,7 @@ public final class InstallCondaEnvironment {
 
             // Delete environment root directory
             if (Files.exists(envRoot)) {
-                FileUtil.deleteRecursively(envRoot.toFile());
+                PathUtils.deleteDirectory(envRoot);
                 logInfo("Removed environment directory: " + envRoot);
             }
 

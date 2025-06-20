@@ -129,7 +129,7 @@ import org.osgi.framework.FrameworkUtil;
  * environment under <code>${installation}/bundling/&lt;name&gt;/.pixi/envs/default</code>, and writes a one-line
  * <code>plugins/&lt;fragment&gt;/environment_path.txt</code> pointing to it.</li>
  * <li><strong>Uninstall</strong> (or <code>undo()</code>): deletes the environment directory and
- * <code>environment_path.txt</code>, then invalidates {@link CondaEnvironmentRegistry}.</li>
+ * <code>environment_path.txt</code>.</li>
  * </ul>
  *
  * <h3>Example <code>p2.inf</code></h3>

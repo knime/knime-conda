@@ -182,8 +182,8 @@ public final class PixiBinary {
      * @throws IOException if the process cannot be started or its streams cannot be read
      * @throws InterruptedException if the current thread is interrupted while waiting for the process
      */
-    public static CallResult callPixi(final java.nio.file.Path workingDirectory, final Map<String, String> envVars, final String... args)
-        throws PixiBinaryLocationException, IOException, InterruptedException {
+    public static CallResult callPixi(final java.nio.file.Path workingDirectory, final Map<String, String> envVars,
+        final String... args) throws PixiBinaryLocationException, IOException, InterruptedException {
         Objects.requireNonNull(workingDirectory, "workingDirectory must not be null");
 
         var pixiPath = getPixiBinaryPath();

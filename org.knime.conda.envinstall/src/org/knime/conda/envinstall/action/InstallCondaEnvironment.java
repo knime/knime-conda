@@ -257,8 +257,8 @@ public final class InstallCondaEnvironment {
             /* ------------------------------------------------------------- */
             /* 1) Write environment_path.txt                                 */
             /* ------------------------------------------------------------- */
-            // Note that we do this first to ensure that the environment path is always written, even if the installation
-            // fails later to be able to clean up the environment directory.
+            // Note that we do this first to ensure that the environment path is always written, even if the
+            // installation fails later to be able to clean up the environment directory.
             var envPath = envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
             var envPathFile = artifactLocation.resolve(ENVIRONMENT_PATH_FILE);
             Path envPathToWrite;

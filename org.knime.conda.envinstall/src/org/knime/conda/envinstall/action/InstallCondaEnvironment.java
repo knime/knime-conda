@@ -295,9 +295,9 @@ public final class InstallCondaEnvironment {
             var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDir);
             var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install", "--frozen");
             if (!installResult.isSuccess()) {
-                logError(formatPixiFailure("pixi install", installResult));
-                throw new IOException(
-                    "Installing the Pixi environment failed (exit code " + installResult.returnCode() + ")");
+                var failureDetails = formatPixiFailure("pixi install", installResult);
+                logError(failureDetails);
+                throw new IOException("Installing the Pixi environment failed: " + failureDetails);
             }
 
             logInfo("Environment installed successfully: " + envPath);

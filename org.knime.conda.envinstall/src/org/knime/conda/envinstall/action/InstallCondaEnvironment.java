@@ -65,6 +65,8 @@ import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 import org.osgi.framework.FrameworkUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * <p>
@@ -170,19 +172,24 @@ public final class InstallCondaEnvironment {
 
     private static final ILog BUNDLE_LOG = Platform.getLog(FrameworkUtil.getBundle(InstallCondaEnvironment.class));
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(InstallCondaEnvironment.class);
+
     /** Log <em>error</em> level messages to both KNIME's {@link NodeLogger} (`knime.log`) and eclipse log. */
     private static void logError(final String message) {
         BUNDLE_LOG.log(Status.error(message));
+        LOGGER.error(message);
     }
 
     /** Log <em>error</em> level messages to both KNIME's {@link NodeLogger} (`knime.log`) and eclipse log. */
     private static void logError(final String message, final Throwable t) {
         BUNDLE_LOG.log(Status.error(message, t));
+        LOGGER.error(message, t);
     }
 
     /** Log <em>info</em> level messages to both KNIME's {@link NodeLogger} (`knime.log`) and eclipse log. */
     private static void logInfo(final String message) {
         BUNDLE_LOG.log(Status.info(message));
+        LOGGER.warn("INFO: " + message); // TODO adapt level
     }
 
     /* --------------------------------------------------------------------- */

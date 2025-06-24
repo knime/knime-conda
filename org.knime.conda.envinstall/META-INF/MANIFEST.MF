@@ -10,5 +10,6 @@ Require-Bundle: org.eclipse.core.runtime;bundle-version="[3.20.100,4.0.0)",
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Automatic-Module-Name: org.knime.conda.envinstall
 Bundle-ClassPath: lib/snakeyaml-2.4.jar,
- .
+ .,
+ lib/slf4j-api-2.0.17.jar
 Export-Package: org.knime.conda.envinstall.action;x-friends:="org.knime.conda.envbundling"

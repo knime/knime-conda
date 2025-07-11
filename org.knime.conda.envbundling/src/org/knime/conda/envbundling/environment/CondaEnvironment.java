@@ -50,70 +50,65 @@ package org.knime.conda.envbundling.environment;
 
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
-import org.osgi.framework.Bundle;
+import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry.CondaEnvironmentExtension;
 
 /**
- * Represents an installed Conda environment.
+ * Represents a Conda environment. The environment might not be installed yet.
+ *
+ * TODO describe the state better
+ *
+ * TODO this is a complete new implementation. Check the backwards compatibility with the old one
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+ * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
  */
 public final class CondaEnvironment {
 
-    private final Bundle m_bundle;
+    private final CondaEnvironmentExtension m_extension;
 
-    private final Path m_path;
+    private final Future<Path> m_futureCondaEnvPath;
 
-    private final String m_name;
-
-    private final boolean m_requiresDownload;
-
-    CondaEnvironment(final Bundle bundle, final Path path, final String name, final boolean requiresDownload) {
-        m_bundle = bundle;
-        m_path = path;
-        m_name = name;
-        m_requiresDownload = requiresDownload;
-    }
-
-    /**
-     * @return the bundle that defines the environment
-     */
-    Bundle getBundle() {
-        return m_bundle;
+    // TODO constructor without future?
+    CondaEnvironment(final CondaEnvironmentExtension extension, final Future<Path> futureCondaEnvPath) {
+        m_extension = extension;
+        m_futureCondaEnvPath = futureCondaEnvPath;
     }
 
     /**
      * @return the name of the environment
      */
     public String getName() {
-        return m_name;
+        return m_extension.name();
     }
 
     /**
      * @return the path to the environment
      */
     public Path getPath() {
-        return m_path;
-    }
-
-    /**
-     * @return <code>true</code> if installing the conda environment requires downloading packages from the internet
-     * @since 5.1
-     */
-    boolean requiresDownload() {
-        return m_requiresDownload;
+        try {
+            return m_futureCondaEnvPath.get();
+        } catch (InterruptedException ex) {
+            // TODO we should forward the exception
+            Thread.currentThread().interrupt(); // restore interrupted status
+            throw new IllegalStateException("Interrupted while waiting for the Conda environment path to be available",
+                ex);
+        } catch (ExecutionException ex) {
+            // TODO we should forward the exception
+            throw new IllegalStateException("Error while waiting for the Conda environment path to be available",
+                ex.getCause());
+        }
     }
 
     @Override
     public boolean equals(final Object obj) {
         if (obj == this) {
             return true;
-        } else if (obj instanceof CondaEnvironment) {
-            var other = (CondaEnvironment)obj; // TODO use pattern matching in Java 17
-            return m_bundle.getBundleId() == other.m_bundle.getBundleId() //
-                && m_name.equals(other.m_name) //
-                && m_path.equals(other.m_path) //
-                && m_requiresDownload == other.m_requiresDownload;
+        } else if (obj instanceof CondaEnvironment o) {
+            // TODO there should never be two instances for the same extension, so this is a bit redundant
+            return Objects.equals(m_extension, o.m_extension);
         } else {
             return false;
         }
@@ -121,6 +116,6 @@ public final class CondaEnvironment {
 
     @Override
     public int hashCode() {
-        return Objects.hash(m_bundle.getBundleId(), m_name, m_path, m_requiresDownload);
+        return m_extension.hashCode();
     }
 }

@@ -416,27 +416,14 @@ public final class InstallCondaEnvironment {
 
         @Override
         public IStatus execute(final Map<String, Object> parameterMap) {
-            try {
-                var p = Parameters.from(parameterMap);
-                installEnvironment(p.directory, p.name);
-            } catch (Exception e) {
-                logError("Exception while installing environment: " + e.getMessage(), e);
-                return Status.error("Running InstallCondaEnvironment action failed", e);
-            }
-
+            logInfo("InstallCondaEnvironment not executed. Conda environments are managed during runtime.");
             return Status.OK_STATUS;
         }
 
         @Override
         public IStatus undo(final Map<String, Object> parameterMap) {
-            try {
-                var p = Parameters.from(parameterMap);
-                uninstallEnvironment(p.directory, p.name);
-            } catch (Exception e) {
-                logError("Exception while undoing InstallCondaEnvironment: " + e.getMessage(), e);
-                return Status.error("Undoing InstallCondaEnvironment action failed", e);
-            }
-
+            logInfo("Undoing InstallCondaEnvironment action not executed. "
+                + "Conda environments are managed during runtime.");
             return Status.OK_STATUS;
         }
     }
@@ -446,28 +433,14 @@ public final class InstallCondaEnvironment {
 
         @Override
         public IStatus execute(final Map<String, Object> parameterMap) {
-            try {
-                var p = Parameters.from(parameterMap);
-                uninstallEnvironment(p.directory, p.name);
-            } catch (Exception e) {
-                logError("Exception while uninstalling environment: " + e.getMessage(), e);
-                return Status.error("Running UninstallCondaEnvironment action failed", e);
-            }
-
+            logInfo("UninstallCondaEnvironment action not executed. Conda environments are managed during runtime.");
             return Status.OK_STATUS;
         }
 
         @Override
         public IStatus undo(final Map<String, Object> parameterMap) {
-            // Undo the unstall action by installing the environment again
-            try {
-                var p = Parameters.from(parameterMap);
-                installEnvironment(p.directory, p.name);
-            } catch (Exception e) {
-                logError("Exception while undoing UninstallCondaEnvironment: " + e.getMessage(), e);
-                return Status.error("Undoing UninstallCondaEnvironment action failed", e);
-            }
-
+            logInfo("Undoing UninstallCondaEnvironment action not executed. "
+                + "Conda environments are managed during runtime.");
             return Status.OK_STATUS;
         }
     }

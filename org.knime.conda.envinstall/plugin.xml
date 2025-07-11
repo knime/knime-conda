@@ -6,6 +6,7 @@
       <action
             class="org.knime.conda.envinstall.action.InstallCondaEnvironment$InstallAction"
             name="installcondaenvironment"
+            description="DEPRECATED - Do not use the install action. Conda environments are installed during runtime."
             version="1.0.0">
       </action>
    </extension>
@@ -14,6 +15,7 @@
       <action
             class="org.knime.conda.envinstall.action.InstallCondaEnvironment$UninstallAction"
             name="uninstallcondaenvironment"
+            description="DEPRECATED - Do not use the uninstall action. Conda environments are managed during runtime."
             version="1.0.0">
       </action>
    </extension>

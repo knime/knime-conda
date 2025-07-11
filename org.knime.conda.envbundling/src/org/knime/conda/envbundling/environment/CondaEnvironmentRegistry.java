@@ -44,97 +44,81 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Mar 21, 2022 (benjamin): created
+ *   Jul 11, 2025 (benjaminwilhelm): created
  */
 package org.knime.conda.envbundling.environment;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
-import org.apache.commons.io.FileUtils;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IExtension;
 import org.eclipse.core.runtime.IExtensionPoint;
 import org.eclipse.core.runtime.IExtensionRegistry;
 import org.eclipse.core.runtime.Platform;
-import org.knime.conda.envbundling.CondaEnvironmentBundlingUtils;
 import org.knime.conda.envinstall.action.InstallCondaEnvironment;
-import org.knime.conda.envinstall.action.InstallCondaEnvironment.EnvironmentInstallListener;
 import org.knime.core.node.NodeLogger;
 import org.osgi.framework.Bundle;
 
 /**
- * A registry for bundled conda channels.
  *
- * @author Benjamin Wilhelm, KNIME GmbH, Konstanz, Germany
+ * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
  */
 public final class CondaEnvironmentRegistry {
 
+    // TODO restructure?
+
+    // TODO get a better path
+    // NOTE: Either it should be separate per installation or the deletion/re-creation of the environments should be less strict
+    private static final Path CONDA_ENVIRONMENTS_ROOT =
+        Path.of("/Users/benjaminwilhelm/misc/tmp_knime_conda_envs_root");
+
     private static final String EXT_POINT_ID = "org.knime.conda.envbundling.CondaEnvironment";
-
-    /**
-     * The old name of the folder containing the environment. Each fragment of a plugin which registers a
-     * CondaEnvironment must have this folder at its root.
-     */
-    public static final String ENV_FOLDER_NAME = "env";
-
-    /**
-     * The name of the file that contains the path to the environment location
-     *
-     * @since 5.4
-     * @deprecated use {@link InstallCondaEnvironment#ENVIRONMENT_PATH_FILE} instead.
-     */
-    @Deprecated(since = "5.5")
-    public static final String ENVIRONMENT_PATH_FILE = InstallCondaEnvironment.ENVIRONMENT_PATH_FILE;
-
-    /**
-     * The new name of the folder containing the all conda environments.
-     */
-    public static final String BUNDLE_PREFIX = "bundling" + File.separator + "envs";
 
     private static final NodeLogger LOGGER = NodeLogger.getLogger(CondaEnvironmentRegistry.class);
 
-    // Use AtomicReference to allow thread-safe invalidation and lazy initialization
-    private static final AtomicReference<Map<String, CondaEnvironment>> m_environments = new AtomicReference<>(null);
+    private static CondaEnvironmentRegistry INSTANCE;
 
-    static {
-        InstallCondaEnvironment.registerEnvironmentInstallListener(new EnvironmentInstallListener() {
-            @Override
-            public void onInstallStart(final String environmentName) {
-                // No action needed at the start of the installation
-            }
+    private final Map<String, CondaEnvironment> m_environments;
 
-            @Override
-            public void onInstallEnd(final String environmentName) {
-                // Invalidate the cache when an environment is installed
-                invalidateCache();
-            }
-        });
+    public static CondaEnvironmentRegistry getInstance() {
+        if (INSTANCE == null) {
+            initialize();
+        }
+        return INSTANCE;
     }
 
-    private CondaEnvironmentRegistry() {
-        // Private constructor to prevent instantiation
-    }
+    private static synchronized void initialize() {
+        if (INSTANCE != null) {
+            return;
+        }
 
-    /**
-     * Invalidate the cached environments map. This should be called whenever an extension is installed or uninstalled.
-     *
-     * @since 5.5
-     */
-    public static void invalidateCache() {
-        LOGGER.info("Invalidating CondaEnvironmentRegistry cache.");
-        m_environments.set(null);
+        var executor = Executors.newSingleThreadExecutor();
+
+        // Start creation of all registered Conda environment extensions
+        var extensions = CondaEnvironmentRegistry.collectExtensions();
+        var environments = new HashMap<String, CondaEnvironment>();
+        for (var ext : extensions) {
+            var path = resolveOrInstallCondaEnvironment(ext, executor);
+            environments.put(ext.name(), new CondaEnvironment(ext, path));
+        }
+
+        INSTANCE = new CondaEnvironmentRegistry(environments);
+
+        // TODO look into the condaRoot folder and delete environments that are not in the registry anymore
     }
 
     /**
@@ -149,125 +133,121 @@ public final class CondaEnvironmentRegistry {
 
     /** @return a map of all environments that are installed. */
     public static Map<String, CondaEnvironment> getEnvironments() {
-        if (m_environments.get() == null) {
-            synchronized (m_environments) {
-                if (m_environments.get() == null) {
-                    LOGGER.info("Rebuilding CondaEnvironmentRegistry cache.");
-                    m_environments.set(registerExtensions());
-                }
-            }
-        }
-        return m_environments.get();
+        return getInstance().m_environments;
     }
 
-    /** Loop through extensions and collect them in a Map */
-    private static Map<String, CondaEnvironment> registerExtensions() {
-        final Map<String, CondaEnvironment> environments = new HashMap<>();
-        final IExtensionRegistry registry = Platform.getExtensionRegistry();
-        final IExtensionPoint point = registry.getExtensionPoint(EXT_POINT_ID);
-
-        for (final IExtension ext : point.getExtensions()) {
-            try {
-                extractEnvironment(ext).ifPresent(env -> {
-                    final var name = env.getName();
-                    if (environments.containsKey(name)) {
-                        LOGGER.errorWithFormat("An environment with the name '%s' is already registered. "
-                            + "Please use a unique environment name.", name);
-                    } else {
-                        environments.put(env.getName(), env);
-                    }
-                });
-            } catch (final Exception e) {
-                LOGGER.error("An exception occurred while registering an extension at extension point '" + EXT_POINT_ID
-                    + "'. Using Python nodes that require the environment will fail.", e);
-            }
-        }
-        return Collections.unmodifiableMap(environments);
+    private CondaEnvironmentRegistry(final HashMap<String, CondaEnvironment> environments) {
+        m_environments = Collections.unmodifiableMap(environments);
     }
 
-    /** Extract the {@link CondaEnvironment} from the given extension */
-    private static Optional<CondaEnvironment> extractEnvironment(final IExtension extension) {
-        final String bundleName = extension.getContributor().getName();
-
-        // Get the name of the environment
-        final String name = extension.getLabel();
-        if (name == null || name.isBlank()) {
-            LOGGER.errorWithFormat("The name of the Conda environment defined by the plugin '%s' is missing. "
-                + "Please specify a unique name.", bundleName);
-            return Optional.empty();
+    private static Future<Path> resolveOrInstallCondaEnvironment(final CondaEnvironmentExtension ext,
+        final ExecutorService executor) {
+        var condaRoot = CONDA_ENVIRONMENTS_ROOT;
+        var environmentRoot = condaRoot.resolve(ext.name());
+        if (Files.exists(environmentRoot)) {
+            // TODO check if the environment is still up-to-date
+            return CompletableFuture
+                .completedFuture(environmentRoot.resolve(".pixi").resolve("envs").resolve("default"));
         }
 
-        // Get the path to the environment
-        final var bundle = Platform.getBundle(bundleName);
+        // Install the environment
+        return executor.submit(() -> InstallCondaEnvironment
+            .installCondaEnvironment(findEnvironmentDefinition(ext.bundle()), ext.name(), condaRoot));
+    }
+
+    // Return the path to the fragment that contains the pixi files and packages
+    private static Path findEnvironmentDefinition(final Bundle bundle) throws CondaInstallationException {
+        var fragment = getFragmentBundle(bundle);
+        String bundleLocationString = FileLocator.getBundleFileLocation(fragment).orElseThrow().getAbsolutePath();
+        return Paths.get(bundleLocationString);
+    }
+
+    private static Bundle getFragmentBundle(final Bundle bundle) throws CondaInstallationException {
         final Bundle[] fragments = Platform.getFragments(bundle);
 
         if (fragments.length < 1) {
-            LOGGER.errorWithFormat(
+            throw new CondaInstallationException(String.format(
                 "Could not find a platform-specific fragment for the bundled Conda environment in plugin '%s' "
                     + "(operating system: %s, system architecture: %s).",
-                bundle, Platform.getOS(), Platform.getOSArch());
-            return Optional.empty();
+                bundle, Platform.getOS(), Platform.getOSArch()));
         }
         if (fragments.length > 1) {
             final String usedFragmentName = fragments[0].getSymbolicName();
             final String unusedFragmentNames =
                 Arrays.stream(fragments).skip(1).map(Bundle::getSymbolicName).collect(Collectors.joining(", "));
-            LOGGER.warnWithFormat(
+            throw new CondaInstallationException(String.format(
                 "Found %d platform specific fragments for the bundled Conda environment in plugin '%s' "
                     + "(operating system: %s, system architecture: %s). "
                     + "The fragment '%s' will be used. The fragments [%s] will be ignored.",
-                fragments.length, bundleName, Platform.getOS(), Platform.getOSArch(), usedFragmentName,
-                unusedFragmentNames);
+                fragments.length, bundle.getSymbolicName(), Platform.getOS(), Platform.getOSArch(), usedFragmentName,
+                unusedFragmentNames));
         }
-
-        Path path = null;
-
-        String bundleLocationString = FileLocator.getBundleFileLocation(fragments[0]).orElseThrow().getAbsolutePath();
-        Path bundleLocationPath = Paths.get(bundleLocationString);
-        Path installationDirectoryPath = bundleLocationPath.getParent().getParent();
-
-        // try to find environment_path.txt, if that is present, use that.
-        try {
-            var environmentPathFile =
-                CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], ENVIRONMENT_PATH_FILE);
-            var environmentPath = FileUtils.readFileToString(environmentPathFile.toFile(), StandardCharsets.UTF_8);
-            environmentPath = environmentPath.trim();
-            // Note: if environmentPath is absolute, resolve returns environmentPath directly
-            path = installationDirectoryPath.resolve(environmentPath);
-            LOGGER.debug("Found environment path '" + path + "' (before expansion: '" + environmentPath + "') for '"
-                + bundleName + "' in '" + environmentPathFile + "'");
-
-        } catch (IOException e) {
-            // No problem, we only introduced the environment_path.txt file in 5.4. Trying other env locations...
-            LOGGER.debug("No " + ENVIRONMENT_PATH_FILE + " file found for '" + bundleName + "'");
-
-            String knimePythonBundlingPath = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
-            if (knimePythonBundlingPath != null) {
-                path = Paths.get(knimePythonBundlingPath, name);
-                LOGGER.debug("KNIME_PYTHON_BUNDLING_PATH is set, expecting environment at '" + path + "' for '"
-                    + bundleName + "'");
-            } else {
-                path = installationDirectoryPath.resolve(BUNDLE_PREFIX).resolve(name);
-            }
-        }
-
-        if (!Files.exists(path)) {
-            try {
-                path = CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], ENV_FOLDER_NAME);
-                LOGGER.debug("Found environment for '" + bundleName + "' inside plugin folder: " + path);
-            } catch (final IOException ex) {
-                LOGGER.error(String.format("Could not find the path to the Conda environment for the plugin '%s'. "
-                    + "Did the installation of the plugin fail?", bundleName), ex);
-                return Optional.empty();
-            }
-        }
-
-        return Optional.of(new CondaEnvironment(bundle, path, name, requiresDownload(extension)));
-
+        return fragments[0];
     }
 
-    private static boolean requiresDownload(final IExtension extension) {
-        return Arrays.stream(extension.getConfigurationElements())
-            .anyMatch(e -> "requires-download".equals(e.getName()));
+    // TODO do we really need this?
+    private static final class CondaInstallationException extends Exception {
+        private static final long serialVersionUID = 1L;
+
+        public CondaInstallationException(final String message) {
+            super(message);
+        }
+
+        public CondaInstallationException(final String message, final Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /**
+     * Record to represent extension information. TODO describe params
+     */
+    public static record CondaEnvironmentExtension(Bundle bundle, String name, boolean requiresDownload) {
+    }
+
+    /**
+     * Collects all "CondaEnvironment" extensions.
+     *
+     * @return a list of {@link CondaEnvironmentExtension} representing the extensions.
+     */
+    private static List<CondaEnvironmentExtension> collectExtensions() {
+        List<CondaEnvironmentExtension> extensions = new ArrayList<>();
+        IExtensionRegistry registry = Platform.getExtensionRegistry();
+        IExtensionPoint point = registry.getExtensionPoint(EXT_POINT_ID);
+
+        if (point == null) {
+            LOGGER.warn("Extension point " + EXT_POINT_ID + " not found.");
+            return extensions;
+        }
+
+        for (IExtension ext : point.getExtensions()) {
+            Optional<CondaEnvironmentExtension> extensionInfo = extractExtensionInfo(ext);
+            extensionInfo.ifPresent(extensions::add);
+        }
+
+        return extensions;
+    }
+
+    /**
+     * Extracts the {@link CondaEnvironmentExtension} from the given extension.
+     *
+     * @param extension the extension to extract information from.
+     * @return an {@link Optional} containing the extracted information, or empty if invalid.
+     */
+    private static Optional<CondaEnvironmentExtension> extractExtensionInfo(final IExtension extension) {
+        var bundleName = extension.getContributor().getName();
+        var bundle = Platform.getBundle(bundleName);
+
+        var requiresDownload =
+            Arrays.stream(extension.getConfigurationElements()).anyMatch(e -> "requires-download".equals(e.getName()));
+
+        var envName = extension.getLabel();
+        if (envName == null || envName.isBlank()) {
+            LOGGER.errorWithFormat(
+                "The name of the Conda environment defined by the plugin '%s' is missing. " + "Specify a unique name.",
+                bundleName);
+            return Optional.empty();
+        }
+
+        return Optional.of(new CondaEnvironmentExtension(bundle, envName, requiresDownload));
     }
 }

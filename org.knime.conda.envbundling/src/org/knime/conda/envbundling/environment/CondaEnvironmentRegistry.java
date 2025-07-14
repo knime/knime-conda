@@ -48,6 +48,7 @@
  */
 package org.knime.conda.envbundling.environment;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -57,7 +58,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -72,6 +75,7 @@ import org.eclipse.core.runtime.Platform;
 import org.knime.conda.envinstall.action.InstallCondaEnvironment;
 import org.knime.core.node.NodeLogger;
 import org.osgi.framework.Bundle;
+import org.osgi.framework.Version;
 
 /**
  *
@@ -122,6 +126,56 @@ public final class CondaEnvironmentRegistry {
     }
 
     /**
+     * Information about a Conda environment on disk. This information is stored in a "metadata.properties" file next to
+     * the environment.
+     *
+     * @param version the version of the bundle that created this environment
+     * @param creationPath the root path of the environment, where the metadata file is located. This is used to detect
+     *            if an environment was moved by the user.
+     */
+    private record EnvironmentInformation(String version, String creationPath) {
+
+        private static final String METADATA_FILE_NAME = "metadata.properties";
+
+        /**
+         * Parses an env-metadata file and returns an EnvironmentInformation instance.
+         */
+        public static Optional<EnvironmentInformation> read(final Path environmentRoot) {
+            if (Files.exists(environmentRoot) && Files.isDirectory(environmentRoot)) {
+                try (var reader = Files.newBufferedReader(environmentRoot.resolve(METADATA_FILE_NAME))) {
+                    var props = new Properties();
+                    props.load(reader);
+                    var version = props.getProperty("version");
+                    var creationPath = props.getProperty("creationPath");
+                    return Optional.of(new EnvironmentInformation(version, creationPath));
+                } catch (IOException e) {
+                    LOGGER.warn("Could not read environment metadata from " + environmentRoot, e);
+                    return Optional.empty();
+                } catch (IllegalArgumentException e) {
+                    LOGGER.warn("Invalid environment metadata in " + environmentRoot, e);
+                    return Optional.empty();
+                }
+            } else {
+                return Optional.empty();
+            }
+        }
+
+        /**
+         * Writes this EnvironmentInformation to an env-metadata file.
+         *
+         * @throws IOException if writing the metadata file fails
+         */
+        public static void write(final Version version, final Path environmentRoot) throws IOException {
+            var props = new Properties();
+            props.setProperty("version", version.toString());
+            props.setProperty("creationPath", environmentRoot.toAbsolutePath().toString());
+            try (var writer = Files.newBufferedWriter(environmentRoot.resolve(METADATA_FILE_NAME))) {
+                props.store(writer, null);
+            }
+        }
+    }
+
+    /**
      * Get the Conda environment with the given name.
      *
      * @param name the unique name of the requested environment
@@ -144,22 +198,51 @@ public final class CondaEnvironmentRegistry {
         final ExecutorService executor) {
         var condaRoot = CONDA_ENVIRONMENTS_ROOT;
         var environmentRoot = condaRoot.resolve(ext.name());
-        if (Files.exists(environmentRoot)) {
-            // TODO check if the environment is still up-to-date
-            return CompletableFuture
-                .completedFuture(environmentRoot.resolve(".pixi").resolve("envs").resolve("default"));
+        var bundleVersion = ext.bundle.getVersion();
+
+        var envMeta = EnvironmentInformation.read(environmentRoot);
+        if (envMeta.isPresent()) {
+            var meta = envMeta.get();
+            if ("qualifier".equals(bundleVersion.getQualifier())) {
+                // In development - recreate the environment every time
+                LOGGER.info("Recreating environment " + ext.name() + " because the bundle "
+                    + ext.bundle.getSymbolicName() + " has a qualifier version.");
+            } else if (!Objects.equals(meta.version, bundleVersion.toString())) {
+                // Environment is not up-to-date - recreate it
+                LOGGER.info("Updating environment " + ext.name() + " because the bundle was updated from "
+                    + meta.version + " to " + ext.bundle.getVersion() + ".");
+            } else if (!Objects.equals(meta.creationPath, environmentRoot.toAbsolutePath().toString())) {
+                // Environment was moved - recreate it
+                LOGGER.info("Recreating environment " + ext.name() + " because conda environments root was moved. "
+                    + "The environment was originally created at " + meta.creationPath + " but is now at "
+                    + environmentRoot.toAbsolutePath() + ".");
+            } else {
+                // Environment is up-to-date
+                return CompletableFuture
+                    .completedFuture(environmentRoot.resolve(".pixi").resolve("envs").resolve("default"));
+            }
+        } else {
+            LOGGER.info("No existing environment found for " + ext.name() + " at " + environmentRoot);
         }
 
         // Install the environment
-        return executor.submit(() -> InstallCondaEnvironment
-            .installCondaEnvironment(findEnvironmentDefinition(ext.bundle()), ext.name(), condaRoot));
+        return executor.submit(() -> {
+            // TODO handle errors - Cleanup if the installation fails - otherwise there might be files left behind
+            var envPath = InstallCondaEnvironment.installCondaEnvironment(findEnvironmentDefinition(ext.bundle()),
+                ext.name(), condaRoot);
+
+            // Write metadata to the environment folder
+            EnvironmentInformation.write(bundleVersion, environmentRoot);
+
+            return envPath;
+        });
     }
 
     // Return the path to the fragment that contains the pixi files and packages
     private static Path findEnvironmentDefinition(final Bundle bundle) throws CondaInstallationException {
         var fragment = getFragmentBundle(bundle);
-        String bundleLocationString = FileLocator.getBundleFileLocation(fragment).orElseThrow().getAbsolutePath();
-        return Paths.get(bundleLocationString);
+        var bundleLocation = FileLocator.getBundleFileLocation(fragment).orElseThrow().getAbsolutePath();
+        return Paths.get(bundleLocation);
     }
 
     private static Bundle getFragmentBundle(final Bundle bundle) throws CondaInstallationException {

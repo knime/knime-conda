@@ -48,6 +48,7 @@
  */
 package org.knime.conda.envbundling.environment;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -83,12 +84,27 @@ import org.osgi.framework.Version;
  */
 public final class CondaEnvironmentRegistry {
 
-    // TODO restructure?
+    // TODO restructure!
 
-    // TODO get a better path
-    // NOTE: Either it should be separate per installation or the deletion/re-creation of the environments should be less strict
-    private static final Path CONDA_ENVIRONMENTS_ROOT =
-        Path.of("/Users/benjaminwilhelm/misc/tmp_knime_conda_envs_root");
+    private static final String CONDA_ENVIRONMENTS_ROOT_NAME = "conda-environments";
+
+    private static Path getCondaEnvironmentsRoot() throws CondaInstallationException {
+        var configLocation = Platform.getConfigurationLocation();
+        if (configLocation == null) {
+            throw new CondaInstallationException(
+                "A configuration location is required to store Conda environments but is not available. "
+                    + "Start KNIME with a configuration location.");
+        }
+        try {
+            // Use File to handle spaces and special characters in the path reliably
+            return new File(FileLocator.toFileURL(configLocation.getURL()).getPath())
+                .toPath()
+                .resolve(CONDA_ENVIRONMENTS_ROOT_NAME);
+        } catch (final IOException ex) {
+            throw new CondaInstallationException("Failed to convert the configuration location URL to a file path. "
+                + "Check your configuration location.", ex);
+        }
+    }
 
     private static final String EXT_POINT_ID = "org.knime.conda.envbundling.CondaEnvironment";
 
@@ -196,7 +212,12 @@ public final class CondaEnvironmentRegistry {
 
     private static Future<Path> resolveOrInstallCondaEnvironment(final CondaEnvironmentExtension ext,
         final ExecutorService executor) {
-        var condaRoot = CONDA_ENVIRONMENTS_ROOT;
+        Path condaRoot;
+        try {
+            condaRoot = getCondaEnvironmentsRoot();
+        } catch (CondaInstallationException ex) {
+            return CompletableFuture.failedFuture(ex);
+        }
         var environmentRoot = condaRoot.resolve(ext.name());
         var bundleVersion = ext.bundle.getVersion();
 

@@ -301,6 +301,50 @@ public final class InstallCondaEnvironment {
             }
 
             logInfo("Environment installed successfully: " + envPath);
+
+            /* ------------------------------------------------------------- */
+            /* 5) Try cleaning up old environment folder if it exists        */
+            /* ------------------------------------------------------------- */
+
+            // Files from previous versions might be left in the folder bundlingRoot/envs try to remove everything that
+            // has a similar name to the environment. Note that this code will not affect new environments because they
+            // do not use the "envs" folder anymore
+
+            var legacyEnvsPath = bundlingRoot.resolve("envs");
+            logInfo("Checking for legacy environment directories to clean up in: " + legacyEnvsPath);
+            // Take environment base name by removing everything after _channel org_knime_python_web_channel_bin_5.6.0
+            //                                                                      -> org_knime_python_web_
+            var legacyEnvironmentName = environmentName.replaceAll("_channel.*", "") + "_";
+            if (Files.isDirectory(legacyEnvsPath)) {
+                try (var stream = Files.list(legacyEnvsPath)) {
+                    var legacyDirs = stream
+                        .filter(
+                            p -> Files.isDirectory(p) && p.getFileName().toString().startsWith(legacyEnvironmentName))
+                        .toList();
+
+                    for (var dir : legacyDirs) {
+                        try {
+                            PathUtils.deleteDirectory(dir); // recursive delete
+                            logInfo("Removed legacy environment directory: " + dir);
+                        } catch (IOException ioe) {
+                            logError("Failed to remove legacy environment directory: " + dir, ioe);
+                            // continue with the next directory
+                        }
+                    }
+                } catch (IOException ioe) {
+                    logError("Failed to list legacy env directories in " + legacyEnvsPath, ioe);
+                }
+            }
+            // Also try to remove the legacy root/pkgs directory if it exists
+            var legacyPkgsPath = bundlingRoot.resolve("root").resolve("pkgs");
+            if (Files.isDirectory(legacyPkgsPath)) {
+                try {
+                    PathUtils.deleteDirectory(legacyPkgsPath);
+                    logInfo("Removed legacy pkgs directory: " + legacyPkgsPath);
+                } catch (IOException ioe) {
+                    logError("Failed to remove legacy pkgs directory: " + legacyPkgsPath, ioe);
+                }
+            }
         } finally {
             notifyEnvironmentListeners(InstallPhase.END, environmentName);
         }

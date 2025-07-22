@@ -57,6 +57,36 @@
 			<url>${knime.core.ui.p2}</url>
 		</repository>
 		<repository>
+			<id>p2-knime-ui</id>
+			<layout>p2</layout>
+			<url>${knime.ui.p2}</url>
+		</repository>
+		<repository>
+			<id>p2-knime-js-core</id>
+			<layout>p2</layout>
+			<url>${knime.js.core.p2}</url>
+		</repository>
+		<repository>
+			<id>p2-knime-gateway</id>
+			<layout>p2</layout>
+			<url>${knime.gateway.p2}</url>
+		</repository>
+		<repository>
+			<id>p2-knime-svg</id>
+			<layout>p2</layout>
+			<url>${knime.svg.p2}</url>
+		</repository>
+		<repository>
+			<id>p2-knime-cef</id>
+			<layout>p2</layout>
+			<url>${knime.cef.p2}</url>
+		</repository>
+		<repository>
+			<id>p2-knime-product</id>
+			<layout>p2</layout>
+			<url>${knime.product.p2}</url>
+		</repository>
+		<repository>
 			<id>p2-knime-base</id>
 			<layout>p2</layout>
 			<url>${knime.base.p2}</url>

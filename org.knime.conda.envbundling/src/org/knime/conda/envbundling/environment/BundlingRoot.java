@@ -44,66 +44,63 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Mar 30, 2022 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
+ *   Jul 22, 2025 (benjaminwilhelm): created
  */
 package org.knime.conda.envbundling.environment;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Objects;
 
-import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry.CondaEnvironmentExtension;
+import org.eclipse.core.runtime.FileLocator;
+import org.eclipse.core.runtime.Platform;
 
 /**
- * Represents a Conda environment. The environment might not be installed yet.
  *
- * TODO describe the state better
- *
- * TODO this is a complete new implementation. Check the backwards compatibility with the old one
- *
- * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
  */
-public final class CondaEnvironment {
+final class BundlingRoot {
 
-    private final CondaEnvironmentExtension m_extension;
+    private static final String CONDA_ENVIRONMENTS_ROOT_NAME = "conda-environments";
 
-    private final Path m_path;
+    private static BundlingRoot INSTANCE;
 
-    // TODO support for lazy path resolution, e.g. if the path is not yet known, it can be resolved later
+    private final Path m_bundlingRoot;
 
-    CondaEnvironment(final CondaEnvironmentExtension extension, final Path path) {
-        m_extension = extension;
-        m_path = path;
+    BundlingRoot(final Path bundlingRoot) {
+        m_bundlingRoot = bundlingRoot;
     }
 
-    /**
-     * @return the name of the environment
-     */
-    public String getName() {
-        return m_extension.name();
-    }
+    // TODO improve initialization logic
+    // Remember if it failed
+    // Do not synchronize every time
+    static synchronized BundlingRoot getInstance() throws CondaInstallationException {
+        if (INSTANCE == null) {
+            var configLocation = Platform.getConfigurationLocation();
+            if (configLocation == null) {
+                throw new CondaInstallationException(
+                    "A configuration location is required to store Conda environments but is not available. "
+                        + "Start KNIME with a configuration location.");
+            }
+            try {
+                // Use File to handle spaces and special characters in the path reliably
 
-    /**
-     * @return the path to the environment
-     */
-    public Path getPath() {
-        return m_path;
-    }
-
-    @Override
-    public boolean equals(final Object obj) {
-        if (obj == this) {
-            return true;
-        } else if (obj instanceof CondaEnvironment o) {
-            // TODO there should never be two instances for the same extension, so this is a bit redundant
-            return Objects.equals(m_extension, o.m_extension);
-        } else {
-            return false;
+                var path = new File(FileLocator.toFileURL(configLocation.getURL()).getPath()).toPath()
+                    .resolve(CONDA_ENVIRONMENTS_ROOT_NAME);
+                INSTANCE = new BundlingRoot(path);
+            } catch (final IOException ex) {
+                throw new CondaInstallationException("Failed to convert the configuration location URL to a file path. "
+                    + "Check your configuration location.", ex);
+            }
         }
+        return INSTANCE;
     }
 
-    @Override
-    public int hashCode() {
-        return m_extension.hashCode();
+    Path getRoot() {
+        return m_bundlingRoot;
+    }
+
+    Path getEnvironmentRoot(final String environmentName) {
+        return m_bundlingRoot.resolve(environmentName);
     }
 }

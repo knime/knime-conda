@@ -44,66 +44,22 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Mar 30, 2022 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
+ *   Jul 21, 2025 (benjaminwilhelm): created
  */
 package org.knime.conda.envbundling.environment;
 
-import java.nio.file.Path;
-import java.util.Objects;
-
-import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry.CondaEnvironmentExtension;
+import org.knime.core.util.IEarlyStartup;
 
 /**
- * Represents a Conda environment. The environment might not be installed yet.
  *
- * TODO describe the state better
  *
- * TODO this is a complete new implementation. Check the backwards compatibility with the old one
- *
- * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
  */
-public final class CondaEnvironment {
-
-    private final CondaEnvironmentExtension m_extension;
-
-    private final Path m_path;
-
-    // TODO support for lazy path resolution, e.g. if the path is not yet known, it can be resolved later
-
-    CondaEnvironment(final CondaEnvironmentExtension extension, final Path path) {
-        m_extension = extension;
-        m_path = path;
-    }
-
-    /**
-     * @return the name of the environment
-     */
-    public String getName() {
-        return m_extension.name();
-    }
-
-    /**
-     * @return the path to the environment
-     */
-    public Path getPath() {
-        return m_path;
-    }
+public class EarlyStartupCondaEnvironmentInstallation implements IEarlyStartup {
 
     @Override
-    public boolean equals(final Object obj) {
-        if (obj == this) {
-            return true;
-        } else if (obj instanceof CondaEnvironment o) {
-            // TODO there should never be two instances for the same extension, so this is a bit redundant
-            return Objects.equals(m_extension, o.m_extension);
-        } else {
-            return false;
-        }
+    public void run() {
+        CondaEnvironmentRegistry.initializeAtStartup();
     }
 
-    @Override
-    public int hashCode() {
-        return m_extension.hashCode();
-    }
 }

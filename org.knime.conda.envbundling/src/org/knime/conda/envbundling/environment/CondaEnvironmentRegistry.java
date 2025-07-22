@@ -168,15 +168,18 @@ public final class CondaEnvironmentRegistry {
 
         for (final IExtension ext : point.getExtensions()) {
             try {
-                extractEnvironment(ext).ifPresent(env -> {
-                    final var name = env.getName();
-                    if (environments.containsKey(name)) {
-                        LOGGER.errorWithFormat("An environment with the name '%s' is already registered. "
-                            + "Please use a unique environment name.", name);
-                    } else {
-                        environments.put(env.getName(), env);
-                    }
-                });
+                var envExt = CondaEnvironmentExtension.of(ext);
+                envExt //
+                    .flatMap(CondaEnvironmentRegistry::extractEnvironment) //
+                    .ifPresent(env -> {
+                        final var name = env.getName();
+                        if (environments.containsKey(name)) {
+                            LOGGER.errorWithFormat("An environment with the name '%s' is already registered. "
+                                + "Please use a unique environment name.", name);
+                        } else {
+                            environments.put(env.getName(), env);
+                        }
+                    });
             } catch (final Exception e) {
                 LOGGER.error("An exception occurred while registering an extension at extension point '" + EXT_POINT_ID
                     + "'. Using Python nodes that require the environment will fail.", e);
@@ -186,50 +189,19 @@ public final class CondaEnvironmentRegistry {
     }
 
     /** Extract the {@link CondaEnvironment} from the given extension */
-    private static Optional<CondaEnvironment> extractEnvironment(final IExtension extension) {
-        final String bundleName = extension.getContributor().getName();
-
-        // Get the name of the environment
-        final String name = extension.getLabel();
-        if (name == null || name.isBlank()) {
-            LOGGER.errorWithFormat("The name of the Conda environment defined by the plugin '%s' is missing. "
-                + "Please specify a unique name.", bundleName);
-            return Optional.empty();
-        }
-
-        // Get the path to the environment
-        final var bundle = Platform.getBundle(bundleName);
-        final Bundle[] fragments = Platform.getFragments(bundle);
-
-        if (fragments.length < 1) {
-            LOGGER.errorWithFormat(
-                "Could not find a platform-specific fragment for the bundled Conda environment in plugin '%s' "
-                    + "(operating system: %s, system architecture: %s).",
-                bundle, Platform.getOS(), Platform.getOSArch());
-            return Optional.empty();
-        }
-        if (fragments.length > 1) {
-            final String usedFragmentName = fragments[0].getSymbolicName();
-            final String unusedFragmentNames =
-                Arrays.stream(fragments).skip(1).map(Bundle::getSymbolicName).collect(Collectors.joining(", "));
-            LOGGER.warnWithFormat(
-                "Found %d platform specific fragments for the bundled Conda environment in plugin '%s' "
-                    + "(operating system: %s, system architecture: %s). "
-                    + "The fragment '%s' will be used. The fragments [%s] will be ignored.",
-                fragments.length, bundleName, Platform.getOS(), Platform.getOSArch(), usedFragmentName,
-                unusedFragmentNames);
-        }
-
+    private static Optional<CondaEnvironment> extractEnvironment(final CondaEnvironmentExtension extension) {
         Path path = null;
 
-        String bundleLocationString = FileLocator.getBundleFileLocation(fragments[0]).orElseThrow().getAbsolutePath();
+        var bundleName = extension.bundle().getSymbolicName();
+        String bundleLocationString =
+            FileLocator.getBundleFileLocation(extension.binaryFragment()).orElseThrow().getAbsolutePath();
         Path bundleLocationPath = Paths.get(bundleLocationString);
         Path installationDirectoryPath = bundleLocationPath.getParent().getParent();
 
         // try to find environment_path.txt, if that is present, use that.
         try {
             var environmentPathFile =
-                CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], ENVIRONMENT_PATH_FILE);
+                CondaEnvironmentBundlingUtils.getAbsolutePath(extension.binaryFragment(), ENVIRONMENT_PATH_FILE);
             var environmentPath = FileUtils.readFileToString(environmentPathFile.toFile(), StandardCharsets.UTF_8);
             environmentPath = environmentPath.trim();
             // Note: if environmentPath is absolute, resolve returns environmentPath directly
@@ -243,17 +215,17 @@ public final class CondaEnvironmentRegistry {
 
             String knimePythonBundlingPath = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
             if (knimePythonBundlingPath != null) {
-                path = Paths.get(knimePythonBundlingPath, name);
+                path = Paths.get(knimePythonBundlingPath, extension.environmentName());
                 LOGGER.debug("KNIME_PYTHON_BUNDLING_PATH is set, expecting environment at '" + path + "' for '"
                     + bundleName + "'");
             } else {
-                path = installationDirectoryPath.resolve(BUNDLE_PREFIX).resolve(name);
+                path = installationDirectoryPath.resolve(BUNDLE_PREFIX).resolve(extension.environmentName());
             }
         }
 
         if (!Files.exists(path)) {
             try {
-                path = CondaEnvironmentBundlingUtils.getAbsolutePath(fragments[0], ENV_FOLDER_NAME);
+                path = CondaEnvironmentBundlingUtils.getAbsolutePath(extension.binaryFragment(), ENV_FOLDER_NAME);
                 LOGGER.debug("Found environment for '" + bundleName + "' inside plugin folder: " + path);
             } catch (final IOException ex) {
                 LOGGER.error(String.format("Could not find the path to the Conda environment for the plugin '%s'. "
@@ -262,12 +234,53 @@ public final class CondaEnvironmentRegistry {
             }
         }
 
-        return Optional.of(new CondaEnvironment(bundle, path, name, requiresDownload(extension)));
-
+        return Optional.of(
+            new CondaEnvironment(extension.bundle(), path, extension.environmentName(), extension.requiresDownload()));
     }
 
-    private static boolean requiresDownload(final IExtension extension) {
-        return Arrays.stream(extension.getConfigurationElements())
-            .anyMatch(e -> "requires-download".equals(e.getName()));
+    /** Extracted information from an extension for the CondaEnvironment extension point. */
+    private record CondaEnvironmentExtension(Bundle bundle, String environmentName, Bundle binaryFragment,
+        boolean requiresDownload) {
+
+        /** Extract basic information from the extension. */
+        private static Optional<CondaEnvironmentExtension> of(final IExtension extension) {
+            final String bundleName = extension.getContributor().getName();
+
+            // Get the name of the environment
+            final String name = extension.getLabel();
+            if (name == null || name.isBlank()) {
+                LOGGER.errorWithFormat("The name of the Conda environment defined by the plugin '%s' is missing. "
+                    + "Please specify a unique name.", bundleName);
+                return Optional.empty();
+            }
+
+            // Get the path to the environment
+            final var bundle = Platform.getBundle(bundleName);
+            final Bundle[] fragments = Platform.getFragments(bundle);
+
+            if (fragments.length < 1) {
+                LOGGER.errorWithFormat(
+                    "Could not find a platform-specific fragment for the bundled Conda environment in plugin '%s' "
+                        + "(operating system: %s, system architecture: %s).",
+                    bundle, Platform.getOS(), Platform.getOSArch());
+                return Optional.empty();
+            }
+            if (fragments.length > 1) {
+                final String usedFragmentName = fragments[0].getSymbolicName();
+                final String unusedFragmentNames =
+                    Arrays.stream(fragments).skip(1).map(Bundle::getSymbolicName).collect(Collectors.joining(", "));
+                LOGGER.warnWithFormat(
+                    "Found %d platform specific fragments for the bundled Conda environment in plugin '%s' "
+                        + "(operating system: %s, system architecture: %s). "
+                        + "The fragment '%s' will be used. The fragments [%s] will be ignored.",
+                    fragments.length, bundleName, Platform.getOS(), Platform.getOSArch(), usedFragmentName,
+                    unusedFragmentNames);
+            }
+
+            var requiresDownload = Arrays.stream(extension.getConfigurationElements())
+                .anyMatch(e -> "requires-download".equals(e.getName()));
+
+            return Optional.of(new CondaEnvironmentExtension(bundle, name, fragments[0], requiresDownload));
+        }
     }
 }

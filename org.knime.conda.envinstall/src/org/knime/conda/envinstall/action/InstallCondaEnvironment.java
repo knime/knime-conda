@@ -284,7 +284,7 @@ public final class InstallCondaEnvironment {
      *
      * @param artifactLocation
      * @param environmentName
-     * @param condaEnvironmentsRoot
+     * @param bundlingRoot
      * @return the path to the created environment
      * @throws IOException
      * @throws MalformedURLException TODO this is not listed explicitly but can be thrown
@@ -292,9 +292,9 @@ public final class InstallCondaEnvironment {
      * @throws InterruptedException
      */
     public static Path installCondaEnvironment(final Path artifactLocation, final String environmentName,
-        final Path condaEnvironmentsRoot) throws IOException, PixiBinaryLocationException, InterruptedException {
+        final Path bundlingRoot) throws IOException, PixiBinaryLocationException, InterruptedException {
         var envResourcesFolder = artifactLocation.resolve("env");
-        var envDestinationRoot = condaEnvironmentsRoot.resolve(environmentName);
+        var envDestinationRoot = bundlingRoot.resolve(environmentName);
 
         /* ------------------------------------------------------------- */
         /* 2) Create the environment root directory                      */
@@ -323,7 +323,7 @@ public final class InstallCondaEnvironment {
         /* ------------------------------------------------------------- */
         /* 4) Install the environment                                    */
         /* ------------------------------------------------------------- */
-        var pixiCacheDir = condaEnvironmentsRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath().toString();
+        var pixiCacheDir = bundlingRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath().toString();
         var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDir);
         var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install", "--frozen");
         if (!installResult.isSuccess()) {

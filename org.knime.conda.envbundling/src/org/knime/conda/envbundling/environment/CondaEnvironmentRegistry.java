@@ -81,6 +81,14 @@ import org.osgi.framework.Bundle;
  */
 public final class CondaEnvironmentRegistry {
 
+    /*
+     * NOTE: This class handles environments both, environments that were created on installation time and environments
+     * that were created on startup.
+     * - Environments created on installation time by the InstallCondaEnvironment p2 action or by the ShellExec p2
+     *   action are labeled as "install-created" environments.
+     * - Environments created on startup are labeled as "startup-created" environments.
+     */
+
     private static final String EXT_POINT_ID = "org.knime.conda.envbundling.CondaEnvironment";
 
     /**
@@ -153,7 +161,7 @@ public final class CondaEnvironmentRegistry {
             synchronized (m_environments) {
                 if (m_environments.get() == null) {
                     LOGGER.info("Rebuilding CondaEnvironmentRegistry cache.");
-                    m_environments.set(registerExtensions());
+                    m_environments.set(collectEnvironmentsFromExtensions());
                 }
             }
         }
@@ -161,7 +169,7 @@ public final class CondaEnvironmentRegistry {
     }
 
     /** Loop through extensions and collect them in a Map */
-    private static Map<String, CondaEnvironment> registerExtensions() {
+    private static Map<String, CondaEnvironment> collectEnvironmentsFromExtensions() {
         final Map<String, CondaEnvironment> environments = new HashMap<>();
         final IExtensionRegistry registry = Platform.getExtensionRegistry();
         final IExtensionPoint point = registry.getExtensionPoint(EXT_POINT_ID);
@@ -170,7 +178,7 @@ public final class CondaEnvironmentRegistry {
             try {
                 var envExt = CondaEnvironmentExtension.of(ext);
                 envExt //
-                    .flatMap(CondaEnvironmentRegistry::extractEnvironment) //
+                    .flatMap(CondaEnvironmentRegistry::findInstallCreatedEnvironment) //
                     .ifPresent(env -> {
                         final var name = env.getName();
                         if (environments.containsKey(name)) {
@@ -186,56 +194,6 @@ public final class CondaEnvironmentRegistry {
             }
         }
         return Collections.unmodifiableMap(environments);
-    }
-
-    /** Extract the {@link CondaEnvironment} from the given extension */
-    private static Optional<CondaEnvironment> extractEnvironment(final CondaEnvironmentExtension extension) {
-        Path path = null;
-
-        var bundleName = extension.bundle().getSymbolicName();
-        String bundleLocationString =
-            FileLocator.getBundleFileLocation(extension.binaryFragment()).orElseThrow().getAbsolutePath();
-        Path bundleLocationPath = Paths.get(bundleLocationString);
-        Path installationDirectoryPath = bundleLocationPath.getParent().getParent();
-
-        // try to find environment_path.txt, if that is present, use that.
-        try {
-            var environmentPathFile =
-                CondaEnvironmentBundlingUtils.getAbsolutePath(extension.binaryFragment(), ENVIRONMENT_PATH_FILE);
-            var environmentPath = FileUtils.readFileToString(environmentPathFile.toFile(), StandardCharsets.UTF_8);
-            environmentPath = environmentPath.trim();
-            // Note: if environmentPath is absolute, resolve returns environmentPath directly
-            path = installationDirectoryPath.resolve(environmentPath);
-            LOGGER.debug("Found environment path '" + path + "' (before expansion: '" + environmentPath + "') for '"
-                + bundleName + "' in '" + environmentPathFile + "'");
-
-        } catch (IOException e) {
-            // No problem, we only introduced the environment_path.txt file in 5.4. Trying other env locations...
-            LOGGER.debug("No " + ENVIRONMENT_PATH_FILE + " file found for '" + bundleName + "'");
-
-            String knimePythonBundlingPath = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
-            if (knimePythonBundlingPath != null) {
-                path = Paths.get(knimePythonBundlingPath, extension.environmentName());
-                LOGGER.debug("KNIME_PYTHON_BUNDLING_PATH is set, expecting environment at '" + path + "' for '"
-                    + bundleName + "'");
-            } else {
-                path = installationDirectoryPath.resolve(BUNDLE_PREFIX).resolve(extension.environmentName());
-            }
-        }
-
-        if (!Files.exists(path)) {
-            try {
-                path = CondaEnvironmentBundlingUtils.getAbsolutePath(extension.binaryFragment(), ENV_FOLDER_NAME);
-                LOGGER.debug("Found environment for '" + bundleName + "' inside plugin folder: " + path);
-            } catch (final IOException ex) {
-                LOGGER.error(String.format("Could not find the path to the Conda environment for the plugin '%s'. "
-                    + "Did the installation of the plugin fail?", bundleName), ex);
-                return Optional.empty();
-            }
-        }
-
-        return Optional.of(
-            new CondaEnvironment(extension.bundle(), path, extension.environmentName(), extension.requiresDownload()));
     }
 
     /** Extracted information from an extension for the CondaEnvironment extension point. */
@@ -282,5 +240,66 @@ public final class CondaEnvironmentRegistry {
 
             return Optional.of(new CondaEnvironmentExtension(bundle, name, fragments[0], requiresDownload));
         }
+    }
+
+    // ================================================================================================================
+    // Utilities for install-created environments
+    // ================================================================================================================
+
+    /**
+     * Finds path to the Conda environment that was installed during installation time for the given extension.
+     *
+     * @return a {@link CondaEnvironment} object with the information about the environment or
+     *         <code>Optional.empty()</code> if the environment could not be found because KNIME is configured to
+     *         install environments on startup or the environment installation failed.
+     *
+     */
+    private static Optional<CondaEnvironment> findInstallCreatedEnvironment(final CondaEnvironmentExtension extension) {
+        Path path = null;
+
+        var bundleName = extension.bundle().getSymbolicName();
+        String bundleLocationString =
+            FileLocator.getBundleFileLocation(extension.binaryFragment()).orElseThrow().getAbsolutePath();
+        Path bundleLocationPath = Paths.get(bundleLocationString);
+        Path installationDirectoryPath = bundleLocationPath.getParent().getParent();
+
+        // try to find environment_path.txt, if that is present, use that.
+        try {
+            var environmentPathFile =
+                CondaEnvironmentBundlingUtils.getAbsolutePath(extension.binaryFragment(), ENVIRONMENT_PATH_FILE);
+            var environmentPath = FileUtils.readFileToString(environmentPathFile.toFile(), StandardCharsets.UTF_8);
+            environmentPath = environmentPath.trim();
+            // Note: if environmentPath is absolute, resolve returns environmentPath directly
+            path = installationDirectoryPath.resolve(environmentPath);
+            LOGGER.debug("Found environment path '" + path + "' (before expansion: '" + environmentPath + "') for '"
+                + bundleName + "' in '" + environmentPathFile + "'");
+
+        } catch (IOException e) {
+            // No problem, we only introduced the environment_path.txt file in 5.4. Trying other env locations...
+            LOGGER.debug("No " + ENVIRONMENT_PATH_FILE + " file found for '" + bundleName + "'");
+
+            String knimePythonBundlingPath = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
+            if (knimePythonBundlingPath != null) {
+                path = Paths.get(knimePythonBundlingPath, extension.environmentName());
+                LOGGER.debug("KNIME_PYTHON_BUNDLING_PATH is set, expecting environment at '" + path + "' for '"
+                    + bundleName + "'");
+            } else {
+                path = installationDirectoryPath.resolve(BUNDLE_PREFIX).resolve(extension.environmentName());
+            }
+        }
+
+        if (!Files.exists(path)) {
+            try {
+                path = CondaEnvironmentBundlingUtils.getAbsolutePath(extension.binaryFragment(), ENV_FOLDER_NAME);
+                LOGGER.debug("Found environment for '" + bundleName + "' inside plugin folder: " + path);
+            } catch (final IOException ex) {
+                LOGGER.error(String.format("Could not find the path to the Conda environment for the plugin '%s'. "
+                    + "Did the installation of the plugin fail?", bundleName), ex);
+                return Optional.empty();
+            }
+        }
+
+        return Optional.of(
+            new CondaEnvironment(extension.bundle(), path, extension.environmentName(), extension.requiresDownload()));
     }
 }

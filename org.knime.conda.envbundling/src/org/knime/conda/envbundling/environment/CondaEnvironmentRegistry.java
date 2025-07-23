@@ -58,7 +58,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -177,23 +179,48 @@ public final class CondaEnvironmentRegistry {
         for (final IExtension ext : point.getExtensions()) {
             try {
                 var envExt = CondaEnvironmentExtension.of(ext);
-                envExt //
-                    .flatMap(CondaEnvironmentRegistry::findInstallCreatedEnvironment) //
-                    .ifPresent(env -> {
-                        final var name = env.getName();
-                        if (environments.containsKey(name)) {
-                            LOGGER.errorWithFormat("An environment with the name '%s' is already registered. "
-                                + "Please use a unique environment name.", name);
-                        } else {
-                            environments.put(env.getName(), env);
-                        }
-                    });
+                if (envExt.isEmpty()) {
+                    continue; // SKIP - The extension is not valid
+                }
+
+                // Find the environment if it was created during installation
+                var installCreatedEnv = findInstallCreatedEnvironment(envExt.get());
+                if (installCreatedEnv.isPresent()) {
+                    addIfNotExists(environments, installCreatedEnv.get());
+
+                    continue; // SKIP the rest. The environment was found and added
+                }
+
+                // Find the environment if it was created during startup
+                var startupCreatedEnv = findStartupCreatedEnvironment(envExt.get());
+                if (startupCreatedEnv instanceof StartupCreatedEnvPath.Exists exists) {
+                    // The environment exists and can be used
+                    LOGGER.debugWithFormat("Conda environment '%s' exists at path: %s", exists.environment().getName(),
+                        exists.environment().getPath());
+                    addIfNotExists(environments, exists.environment());
+                } else if (startupCreatedEnv instanceof StartupCreatedEnvPath.MustBeCreated mustBeCreated) {
+
+                    // TODO The environment must be created
+                    throw new UnsupportedOperationException("NYI");
+
+                }
             } catch (final Exception e) {
                 LOGGER.error("An exception occurred while registering an extension at extension point '" + EXT_POINT_ID
                     + "'. Using Python nodes that require the environment will fail.", e);
             }
         }
         return Collections.unmodifiableMap(environments);
+    }
+
+    /** Little utility to add an environment to the map if it is not part of the map already. */
+    private static void addIfNotExists(final Map<String, CondaEnvironment> environments, final CondaEnvironment env) {
+        if (environments.containsKey(env.getName())) {
+            LOGGER.errorWithFormat(
+                "An environment with the name '%s' is already registered. Use a unique environment name.",
+                env.getName());
+        } else {
+            environments.put(env.getName(), env);
+        }
     }
 
     /** Extracted information from an extension for the CondaEnvironment extension point. */
@@ -239,6 +266,105 @@ public final class CondaEnvironmentRegistry {
                 .anyMatch(e -> "requires-download".equals(e.getName()));
 
             return Optional.of(new CondaEnvironmentExtension(bundle, name, fragments[0], requiresDownload));
+        }
+    }
+
+    // ================================================================================================================
+    // Utilities for startup-created environments
+    // ================================================================================================================
+
+    /**
+     * Tries to find the path to a Conda environment that was created during startup for the given extension.
+     *
+     * @return the path to the environment if it exists and is up-to-date with the extension or a message indicating
+     *         that and why the environment must be created.
+     * @throws IOException if the bundling root cannot be accessed
+     */
+    private static StartupCreatedEnvPath findStartupCreatedEnvironment(final CondaEnvironmentExtension ext)
+        throws IOException {
+        var bundlingRoot = BundlingRoot.getInstance();
+        var bundleVersion = ext.bundle().getVersion();
+        var extensionName = ext.bundle().getSymbolicName();
+
+        var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
+        var envMeta = StartupCreatedEnvironmentMetadata.read(environmentRoot);
+        if (envMeta.isPresent()) {
+            var meta = envMeta.get();
+            if ("qualifier".equals(bundleVersion.getQualifier())) {
+                // In development - recreate the environment every time
+                return new StartupCreatedEnvPath.MustBeCreated(ext, "Recreating Python environment for " + extensionName
+                    + " because it is in development mode (qualifier version).");
+            } else if (!Objects.equals(meta.version, bundleVersion.toString())) {
+                // Environment is not up-to-date - recreate it
+                return new StartupCreatedEnvPath.MustBeCreated(ext,
+                    "Recreating Python environment for " + extensionName + " because the bundle was updated from "
+                        + meta.version + " to " + ext.bundle().getVersion() + ".");
+            } else if (!Objects.equals(meta.creationPath, environmentRoot.toAbsolutePath().toString())) {
+                // Environment was moved - recreate it
+                return new StartupCreatedEnvPath.MustBeCreated(ext,
+                    "Recreating Python environment for " + extensionName
+                        + " because the conda environments root was moved from " + meta.creationPath + " to "
+                        + environmentRoot.toAbsolutePath() + ".");
+            } else {
+                // Environment is up-to-date
+                var path = environmentRoot.resolve(".pixi").resolve("envs").resolve("default");
+                return new StartupCreatedEnvPath.Exists(
+                    new CondaEnvironment(ext.bundle(), path, ext.environmentName(), ext.requiresDownload()));
+            }
+        }
+        LOGGER.info("No existing environment found for " + ext.environmentName() + " at " + environmentRoot);
+        return new StartupCreatedEnvPath.MustBeCreated(ext,
+            "Creating Python environment for " + ext.environmentName() + ".");
+    }
+
+    /** Return value of {@link #findStartupCreatedEnvironment(CondaEnvironmentExtension)}. */
+    private sealed interface StartupCreatedEnvPath
+        permits StartupCreatedEnvPath.Exists, StartupCreatedEnvPath.MustBeCreated {
+
+        /** Indicates that the environment exists and can be used as is. */
+        @SuppressWarnings("javadoc") // it's private
+        record Exists(CondaEnvironment environment) implements StartupCreatedEnvPath {
+        }
+
+        /** Indicates that the environment must be created. The message is shown to the user. */
+        @SuppressWarnings("javadoc") // it's private
+        record MustBeCreated(CondaEnvironmentExtension ext, String message) implements StartupCreatedEnvPath {
+        }
+    }
+
+    /**
+     * Information about a Conda environment that was created during startup. This information is stored in a
+     * "metadata.properties" file next to the environment.
+     *
+     * @param version the version of the bundle that created this environment
+     * @param creationPath the root path of the environment, where the metadata file is located. This is used to detect
+     *            if an environment was moved by the user.
+     */
+    private record StartupCreatedEnvironmentMetadata(String version, String creationPath) {
+
+        private static final String METADATA_FILE_NAME = "metadata.properties";
+
+        /**
+         * Parses an env-metadata file and returns an EnvironmentInformation instance.
+         */
+        static Optional<StartupCreatedEnvironmentMetadata> read(final Path environmentRoot) {
+            if (Files.exists(environmentRoot) && Files.isDirectory(environmentRoot)) {
+                try (var reader = Files.newBufferedReader(environmentRoot.resolve(METADATA_FILE_NAME))) {
+                    var props = new Properties();
+                    props.load(reader);
+                    var version = props.getProperty("version");
+                    var creationPath = props.getProperty("creationPath");
+                    return Optional.of(new StartupCreatedEnvironmentMetadata(version, creationPath));
+                } catch (IOException e) {
+                    LOGGER.warn("Could not read environment metadata from " + environmentRoot, e);
+                    return Optional.empty();
+                } catch (IllegalArgumentException e) {
+                    LOGGER.warn("Invalid environment metadata in " + environmentRoot, e);
+                    return Optional.empty();
+                }
+            } else {
+                return Optional.empty();
+            }
         }
     }
 

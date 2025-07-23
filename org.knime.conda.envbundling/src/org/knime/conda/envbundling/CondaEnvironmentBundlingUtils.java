@@ -49,6 +49,7 @@
 package org.knime.conda.envbundling;
 
 import java.io.IOException;
+import java.nio.file.Files;
 
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.Path;
@@ -64,6 +65,16 @@ import org.osgi.framework.Bundle;
 public final class CondaEnvironmentBundlingUtils {
 
     private CondaEnvironmentBundlingUtils() {
+    }
+
+    /**
+     * Checks if the given path is a Conda environment by looking for the "conda-meta" directory.
+     *
+     * @param prefix the path to check
+     * @return {@code true} if {@code prefix} looks like a conda environment.
+     */
+    public static boolean isCondaEnvironment(final java.nio.file.Path prefix) {
+        return Files.isDirectory(prefix.resolve("conda-meta"));
     }
 
     /**

@@ -416,9 +416,23 @@ public final class CondaEnvironmentRegistry {
 
         if (!Files.exists(path)) {
             try {
-                path = CondaEnvironmentBundlingUtils.getAbsolutePath(extension.binaryFragment(), ENV_FOLDER_NAME);
-                LOGGER.debug("Found environment for '" + bundleName + "' inside plugin folder: " + path);
+                var envFolderPath =
+                    CondaEnvironmentBundlingUtils.getAbsolutePath(extension.binaryFragment(), ENV_FOLDER_NAME);
+                if (CondaEnvironmentBundlingUtils.isCondaEnvironment(envFolderPath)) {
+                    path = envFolderPath;
+                    LOGGER.debug("Found environment for '" + bundleName + "' inside plugin folder: " + path);
+                } else {
+                    // NOTE: Fragments using pixi-pack (starting with 5.5) also have an env folder, but it is not
+                    // a conda environment. For these fragments, we only come here if we are supposed to create the
+                    // environment on startup.
+                    LOGGER.debug("'env' folder for '" + bundleName
+                        + "' is not a conda environment. The environment will be created on startup.");
+                    return Optional.empty();
+                }
             } catch (final IOException ex) {
+                // NOTE: We will attempt to create the environment on startup. This will fail, because it requires the
+                // 'env' folder to be present. The failure will be shown to the user then. However, we still keep this
+                // as an error in the log, so that we can identify the problem if it occurs.
                 LOGGER.error(String.format("Could not find the path to the Conda environment for the plugin '%s'. "
                     + "Did the installation of the plugin fail?", bundleName), ex);
                 return Optional.empty();

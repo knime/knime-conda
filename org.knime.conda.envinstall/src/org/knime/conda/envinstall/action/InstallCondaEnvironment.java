@@ -309,6 +309,7 @@ public final class InstallCondaEnvironment {
             // Files from previous versions might be left in the folder bundlingRoot/envs try to remove everything that
             // has a similar name to the environment. Note that this code will not affect new environments because they
             // do not use the "envs" folder anymore
+            // This will only work on windows where this is a problem (see AP-24526)
 
             var legacyEnvsPath = bundlingRoot.resolve("envs");
             logInfo("Checking for legacy environment directories to clean up in: " + legacyEnvsPath);
@@ -316,10 +317,12 @@ public final class InstallCondaEnvironment {
             //                                                                      -> org_knime_python_web_
             var legacyEnvironmentName = environmentName.replaceAll("_channel.*", "") + "_";
             if (Files.isDirectory(legacyEnvsPath)) {
+                // The regex should match the legacy environment name followed by a version number like 1.2.3
+                var legacyPattern = Pattern.compile(Pattern.quote(legacyEnvironmentName) + "\\d+\\.\\d+\\.\\d+");
                 try (var stream = Files.list(legacyEnvsPath)) {
                     var legacyDirs = stream
                         .filter(
-                            p -> Files.isDirectory(p) && p.getFileName().toString().startsWith(legacyEnvironmentName))
+                            p -> Files.isDirectory(p) && legacyPattern.matcher(p.getFileName().toString()).matches())
                         .toList();
 
                     for (var dir : legacyDirs) {

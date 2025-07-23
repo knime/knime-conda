@@ -2,4 +2,11 @@
 <?eclipse version="3.4"?>
 <plugin>
    <extension-point id="CondaEnvironment" name="CondaEnvironment" schema="schema/CondaEnvironment.exsd"/>
+   <extension
+         point="org.knime.core.EarlyStartup">
+      <provider
+            class="org.knime.conda.envbundling.environment.EarlyStartupCondaEnvironmentInstallation"
+            startupStage="AFTER_PROFILES_SET">
+      </provider>
+   </extension>
 </plugin>

@@ -171,15 +171,23 @@ public final class CondaEnvironmentRegistry {
     /** @return a map of all environments that are installed. */
     public static Map<String, CondaEnvironment> getEnvironments() {
         if (m_environments.get() == null) {
-            synchronized (m_environments) {
-                if (m_environments.get() == null) {
-                    LOGGER.info("Rebuilding CondaEnvironmentRegistry cache.");
-                    // TODO is it correct to not create the environments here?
-                    m_environments.set(collectEnvironmentsFromExtensions(false));
-                }
-            }
+            initializeEnvironments(false);
         }
         return m_environments.get();
+    }
+
+    /**
+     * Initialize the environment registry. This method is called with <code>createEnvironments</code> set to true once
+     * at the startup of the application to create all environments that were created during installation.
+     *
+     * @param createEnvironments if true, the method will create all environments that are not yet created.
+     */
+    static void initializeEnvironments(final boolean createEnvironments) {
+        synchronized (m_environments) {
+            if (m_environments.get() == null) {
+                m_environments.set(collectEnvironmentsFromExtensions(createEnvironments));
+            }
+        }
     }
 
     /** Loop through extensions and collect them in a Map */

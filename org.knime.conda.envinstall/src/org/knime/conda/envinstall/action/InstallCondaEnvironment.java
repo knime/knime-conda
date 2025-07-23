@@ -46,6 +46,7 @@
 package org.knime.conda.envinstall.action;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -237,7 +238,7 @@ public final class InstallCondaEnvironment {
     /* Installing environments                                               */
     /* --------------------------------------------------------------------- */
 
-    private static void installEnvironment(final Path artifactLocation, final String environmentName)
+    private static void installEnvironmentFromAction(final Path artifactLocation, final String environmentName)
         throws IOException, PixiBinaryLocationException, InterruptedException {
         notifyEnvironmentListeners(InstallPhase.START, environmentName);
         try {
@@ -245,7 +246,6 @@ public final class InstallCondaEnvironment {
 
             var installationRoot = artifactLocation.getParent().getParent();
             var bundlingRoot = getBundlingRoot(installationRoot);
-            var envResourcesFolder = artifactLocation.resolve("env");
             var envDestinationRoot = bundlingRoot.resolve(environmentName);
 
             // Check if the destination directory does not exist or is empty and writable before doing anything else
@@ -269,45 +269,13 @@ public final class InstallCondaEnvironment {
             Files.writeString(envPathFile, envPathToWrite.toString(), StandardCharsets.UTF_8);
 
             /* ------------------------------------------------------------- */
-            /* 2) Create the environment root directory                      */
+            /* 2) Install the environment                                    */
             /* ------------------------------------------------------------- */
-            Files.createDirectories(envDestinationRoot);
-
-            /* ------------------------------------------------------------- */
-            /* 3) Create the pixi.lock/toml files with local URLs/Paths      */
-            /* ------------------------------------------------------------- */
-            var pixiLockSrc = artifactLocation.resolve("pixi.lock");
-            var pixiLockDst = envDestinationRoot.resolve("pixi.lock");
-            var pixiTomlDst = envDestinationRoot.resolve("pixi.toml");
-
-            // Read the lockfile and make the URLs local and write it to the destination
-            var pixiLockfile = PixiLockfileUtil.readLockfile(pixiLockSrc);
-            PixiLockfileUtil.makeURLsLocal(pixiLockfile, "default", envResourcesFolder);
-            PixiLockfileUtil.writeLockfile(pixiLockfile, pixiLockDst);
-
-            // Create a minimal pixi.toml file in the destination
-            Files.writeString(pixiTomlDst, """
-                    [workspace]
-                    channels = []
-                    platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
-                    """);
-
-            /* ------------------------------------------------------------- */
-            /* 4) Install the environment                                    */
-            /* ------------------------------------------------------------- */
-            var pixiCacheDir = bundlingRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath().toString();
-            var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDir);
-            var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install", "--frozen");
-            if (!installResult.isSuccess()) {
-                var failureDetails = formatPixiFailure("pixi install", installResult);
-                logError(failureDetails);
-                throw new IOException("Installing the Pixi environment failed: " + failureDetails);
-            }
-
+            installCondaEnvironment(artifactLocation, envDestinationRoot, bundlingRoot);
             logInfo("Environment installed successfully: " + envPath);
 
             /* ------------------------------------------------------------- */
-            /* 5) Try cleaning up old environment folder if it exists        */
+            /* 3) Try cleaning up old environment folder if it exists        */
             /* ------------------------------------------------------------- */
 
             // Files from previous versions might be left in the folder bundlingRoot/envs try to remove everything that
@@ -355,6 +323,66 @@ public final class InstallCondaEnvironment {
         } finally {
             notifyEnvironmentListeners(InstallPhase.END, environmentName);
         }
+    }
+
+    /**
+     * Install the Conda environment from the given artifact location into the specified destination root.
+     * <p>
+     * The fragment directory must be structured as described in the class documentation of
+     * {@link InstallCondaEnvironment}.
+     *
+     * @param artifactLocation the location of the fragment that contains the environment to install
+     * @param envDestinationRoot the root directory where the environment will be installed (e.g. where the pixi.toml
+     *            will go, the environment will be in {@code <envDestinationRoot>/.pixi/envs/default})
+     * @param bundlingRoot the bundling root directory, where the pixi cache will be stored
+     * @return the path to the created environment (e.g. {@code <envDestinationRoot>/.pixi/envs/default})
+     * @throws IOException if the installation fails because of an I/O error, e.g. if there are permission issues on the
+     *             target directory or the pixi installation fails
+     * @throws MalformedURLException if a URL cannot be constructed from the local path to the conda channel or PyPI
+     *             index
+     * @throws PixiBinaryLocationException if the pixi binary could not be located
+     * @throws InterruptedException if waiting for {@code pixi install} to finish was interrupted
+     */
+    public static Path installCondaEnvironment(final Path artifactLocation, final Path envDestinationRoot,
+        final Path bundlingRoot) throws IOException, PixiBinaryLocationException, InterruptedException {
+        var envResourcesFolder = artifactLocation.resolve("env");
+        /* ------------------------------------------------------------- */
+        /* 1) Create the environment root directory                      */
+        /* ------------------------------------------------------------- */
+        Files.createDirectories(envDestinationRoot);
+
+        /* ------------------------------------------------------------- */
+        /* 2) Create the pixi.lock/toml files with local URLs/Paths      */
+        /* ------------------------------------------------------------- */
+        var pixiLockSrc = artifactLocation.resolve("pixi.lock");
+        var pixiLockDst = envDestinationRoot.resolve("pixi.lock");
+        var pixiTomlDst = envDestinationRoot.resolve("pixi.toml");
+
+        // Read the lockfile and make the URLs local and write it to the destination
+        var pixiLockfile = PixiLockfileUtil.readLockfile(pixiLockSrc);
+        PixiLockfileUtil.makeURLsLocal(pixiLockfile, "default", envResourcesFolder);
+        PixiLockfileUtil.writeLockfile(pixiLockfile, pixiLockDst);
+
+        // Create a minimal pixi.toml file in the destination
+        Files.writeString(pixiTomlDst, """
+                [workspace]
+                channels = []
+                platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+                """);
+
+        /* ------------------------------------------------------------- */
+        /* 3) Run `pixi install`                                         */
+        /* ------------------------------------------------------------- */
+        var pixiCacheDir = bundlingRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath().toString();
+        var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDir);
+        var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install", "--frozen");
+        if (!installResult.isSuccess()) {
+            var failureDetails = formatPixiFailure("pixi install", installResult);
+            logError(failureDetails);
+            throw new IOException("Installing the Pixi environment failed: " + failureDetails);
+        }
+
+        return envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
     }
 
     /* --------------------------------------------------------------------- */
@@ -474,7 +502,7 @@ public final class InstallCondaEnvironment {
 
             try {
                 var p = Parameters.from(parameterMap);
-                installEnvironment(p.directory, p.name);
+                installEnvironmentFromAction(p.directory, p.name);
             } catch (Exception e) {
                 logError("Exception while installing environment: " + e.getMessage(), e);
                 return Status.error("Running InstallCondaEnvironment action failed", e);
@@ -535,7 +563,7 @@ public final class InstallCondaEnvironment {
             // Undo the uninstall action by installing the environment again
             try {
                 var p = Parameters.from(parameterMap);
-                installEnvironment(p.directory, p.name);
+                installEnvironmentFromAction(p.directory, p.name);
             } catch (Exception e) {
                 logError("Exception while undoing UninstallCondaEnvironment: " + e.getMessage(), e);
                 return Status.error("Undoing UninstallCondaEnvironment action failed", e);

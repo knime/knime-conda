@@ -50,13 +50,16 @@ package org.knime.conda.envbundling.environment;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -73,7 +76,9 @@ import org.eclipse.core.runtime.Platform;
 import org.knime.conda.envbundling.CondaEnvironmentBundlingUtils;
 import org.knime.conda.envinstall.action.InstallCondaEnvironment;
 import org.knime.conda.envinstall.action.InstallCondaEnvironment.EnvironmentInstallListener;
+import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 import org.knime.core.node.NodeLogger;
+import org.knime.ui.java.util.DesktopAPUtil;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.Version;
 
@@ -164,7 +169,8 @@ public final class CondaEnvironmentRegistry {
             synchronized (m_environments) {
                 if (m_environments.get() == null) {
                     LOGGER.info("Rebuilding CondaEnvironmentRegistry cache.");
-                    m_environments.set(collectEnvironmentsFromExtensions());
+                    // TODO is it correct to not create the environments here?
+                    m_environments.set(collectEnvironmentsFromExtensions(false));
                 }
             }
         }
@@ -172,10 +178,12 @@ public final class CondaEnvironmentRegistry {
     }
 
     /** Loop through extensions and collect them in a Map */
-    private static Map<String, CondaEnvironment> collectEnvironmentsFromExtensions() {
+    private static Map<String, CondaEnvironment> collectEnvironmentsFromExtensions(final boolean createEnvironments) {
         final Map<String, CondaEnvironment> environments = new HashMap<>();
         final IExtensionRegistry registry = Platform.getExtensionRegistry();
         final IExtensionPoint point = registry.getExtensionPoint(EXT_POINT_ID);
+
+        var environmentsToInstall = new ArrayList<StartupCreatedEnvPath.MustBeCreated>();
 
         for (final IExtension ext : point.getExtensions()) {
             try {
@@ -200,16 +208,32 @@ public final class CondaEnvironmentRegistry {
                         exists.environment().getPath());
                     addIfNotExists(environments, exists.environment());
                 } else if (starupCreatedEnv instanceof StartupCreatedEnvPath.MustBeCreated mustBeCreated) {
-
-                    // TODO The environment must be created
-                    throw new UnsupportedOperationException("NYI");
-
+                    // The environment must be created - this will happen later
+                    LOGGER.debugWithFormat("Conda environment '%s' must be created: %s",
+                        mustBeCreated.ext().environmentName(), mustBeCreated.message());
+                    environmentsToInstall.add(mustBeCreated);
                 }
             } catch (final Exception e) {
                 LOGGER.error("An exception occurred while registering an extension at extension point '" + EXT_POINT_ID
                     + "'. Using Python nodes that require the environment will fail.", e);
             }
         }
+
+        if (!environmentsToInstall.isEmpty()) {
+            LOGGER.debugWithFormat("Found %d Conda environments that need to be installed.",
+                environmentsToInstall.size());
+            if (createEnvironments) {
+                // NOTE: We ignore the flag here. If the flag was set during extension installation but is not set now,
+                // we still need to create the environments to make the extensions work.
+                var installedEnvs = installStartupCreatedEnvironments(environmentsToInstall);
+                installedEnvs.forEach(env -> addIfNotExists(environments, env));
+            } else {
+                LOGGER.warnWithFormat(
+                    "Found %d Conda environments that are not yet created. The will be created on a restart.",
+                    environmentsToInstall.size());
+            }
+        }
+
         return Collections.unmodifiableMap(environments);
     }
 
@@ -333,6 +357,64 @@ public final class CondaEnvironmentRegistry {
         }
     }
 
+    /** Create conda environments. Blocks and shows a progress monitor to the user. */
+    private static List<CondaEnvironment>
+        installStartupCreatedEnvironments(final List<StartupCreatedEnvPath.MustBeCreated> environmentsToInstall) {
+        var environments = new ArrayList<CondaEnvironment>(environmentsToInstall.size());
+        // TODO(AP-24742) This probably does not work during warm start of the docker image (when the UI is not available).
+        DesktopAPUtil.runWithProgress("Python environment creation", LOGGER, progressMonitor -> {
+            progressMonitor.beginTask("First start after extension update/installation.", environmentsToInstall.size());
+
+            for (int i = 0; i < environmentsToInstall.size(); i++) {
+                var mustBeCreated = environmentsToInstall.get(i);
+
+                progressMonitor
+                    .subTask(mustBeCreated.message + " (" + (i + 1) + "/" + environmentsToInstall.size() + ").");
+
+                // Install the environment and get the path
+                var ext = mustBeCreated.ext();
+                try {
+                    var envPath = installEnvironment(ext);
+                    environments.add(
+                        new CondaEnvironment(ext.bundle(), envPath, ext.environmentName(), ext.requiresDownload()));
+                } catch (final Exception ex) { // NOSONAR: we want to catch all exceptions here to add context
+                    // runWithProgress expects an InvocationTargetException, but then extracts the cause to get the
+                    // message. To add context to the error message, we wrap the exception twice. The message will
+                    // be shown in the UI and supports line breaks.
+                    var message = "Failed to create the Python environment for " + ext.bundle().getSymbolicName()
+                        + ". Nodes using this environment will not work or show up in the node repository.\n\n"
+                        + "Cause: " + ex.getMessage();
+                    throw new InvocationTargetException(new Exception(message, ex));
+
+                }
+                progressMonitor.worked(1);
+            }
+            return Void.TYPE;
+        });
+        return environments;
+    }
+
+    private static Path installEnvironment(final CondaEnvironmentExtension ext)
+        throws IOException, PixiBinaryLocationException, InterruptedException {
+        var bundlingRoot = BundlingRoot.getInstance();
+
+        // Install the environment
+        var artifactLocation = FileLocator.getBundleFileLocation(ext.binaryFragment()) //
+            .orElseThrow(() -> new IllegalStateException("The binary fragment could not be located.")) //
+            .toPath() //
+            .toAbsolutePath();
+        var envPath = InstallCondaEnvironment.installCondaEnvironment( //
+            artifactLocation, //
+            bundlingRoot.getEnvironmentRoot(ext.environmentName()), //
+            bundlingRoot.getRoot() //
+        );
+
+        // Create the metadata file next to the environment
+        StartupCreatedEnvironmentMetadata.write(ext.bundle().getVersion(), envPath);
+
+        return envPath;
+    }
+
     /**
      * Information about a Conda environment that was created during startup. This information is stored in a
      * "metadata.properties" file next to the environment.
@@ -365,6 +447,20 @@ public final class CondaEnvironmentRegistry {
                 }
             } else {
                 return Optional.empty();
+            }
+        }
+
+        /**
+         * Writes this EnvironmentInformation to an env-metadata file.
+         *
+         * @throws IOException if writing the metadata file fails
+         */
+        static void write(final Version version, final Path environmentRoot) throws IOException {
+            var props = new Properties();
+            props.setProperty("version", version.toString());
+            props.setProperty("creationPath", environmentRoot.toAbsolutePath().toString());
+            try (var writer = Files.newBufferedWriter(environmentRoot.resolve(METADATA_FILE_NAME))) {
+                props.store(writer, null);
             }
         }
     }

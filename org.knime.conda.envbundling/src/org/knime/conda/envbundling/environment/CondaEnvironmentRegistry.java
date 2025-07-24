@@ -68,6 +68,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.file.PathUtils;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IExtension;
 import org.eclipse.core.runtime.IExtensionPoint;
@@ -236,6 +237,11 @@ public final class CondaEnvironmentRegistry {
                     "Found %d Conda environments that are not yet created. They will be created on a restart.",
                     environmentsToInstall.size());
             }
+        }
+
+        if (createEnvironments) {
+            // Note: We do this even if we did not create any environments but only if we are in the startup phase mode
+            cleanupStartupCreatedEnvironments(environments);
         }
 
         return Collections.unmodifiableMap(environments);
@@ -448,6 +454,52 @@ public final class CondaEnvironmentRegistry {
         }
 
         return environmentInstallRunnable.installedEnvironments;
+    }
+
+    /**
+     * Deletes all Conda environments that were created during startup but are not part of the current installation.
+     *
+     * @param environments the map of all currently registered Conda environments
+     */
+    private static void cleanupStartupCreatedEnvironments(final Map<String, CondaEnvironment> environments) {
+        final BundlingRoot bundlingRoot;
+        try {
+            bundlingRoot = BundlingRoot.getInstance();
+        } catch (IOException ex) {
+            LOGGER.error("Failed to get conda environments root: " + ex.getMessage(), ex);
+            return; // Cannot clean up if we cannot access the bundling root
+        }
+        var root = bundlingRoot.getRoot();
+
+        if (Files.notExists(root)) {
+            LOGGER.info("Bundling root does not exist: " + root + ". No cleanup needed.");
+            return;
+        }
+
+        // Collect all directories that contain the registered Conda environments
+        var registeredEnvPaths = environments.values().stream() //
+            .map(CondaEnvironment::getPath) //
+            .filter(path -> path.startsWith(root)) //
+            .collect(Collectors.toSet());
+
+        // List all directories in the bundling root and delete those that are not registered
+        try (var dirs = Files.list(root)) {
+            dirs.filter(path -> Files.isDirectory(path)) //
+                .filter(path -> !path.getFileName().toString().startsWith(".")) // ignore the .pixi-cache
+                .filter(path -> registeredEnvPaths.stream() //
+                    .noneMatch(registeredEnvPath -> registeredEnvPath.startsWith(path)) //
+                ) // Filter out directories that contain registered environments
+                .forEach(envDir -> {
+                    try {
+                        PathUtils.deleteDirectory(envDir);
+                        LOGGER.info("Deleted unused Conda environment directory: " + envDir);
+                    } catch (IOException e) {
+                        LOGGER.error("Failed to delete unused Conda environment directory: " + envDir, e);
+                    }
+                });
+        } catch (IOException e) {
+            LOGGER.error("Failed to list Conda environment directories for cleanup: " + e.getMessage(), e);
+        }
     }
 
     /**

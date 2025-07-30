@@ -1,6 +1,6 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
-Bundle-Version: 5.5.0.qualifier
+Bundle-Version: 5.5.1.qualifier
 Bundle-Vendor: KNIME AG, Zurich, Switzerland
 Bundle-ActivationPolicy: lazy
 Fragment-Host: org.knime.conda.envinstall;bundle-version="5.5.1"

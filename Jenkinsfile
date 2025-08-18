@@ -11,7 +11,7 @@ properties([
 
 try {
     knimetools.defaultTychoBuild('org.knime.update.conda')
-    testInstallCondaEnvAction(BN)
+    testInstallCondaEnvAction(BRANCH_NAME.startsWith('releases/') ? BRANCH_NAME : 'master')
 
     stage('Sonarqube analysis') {
         env.lastStage = env.STAGE_NAME

@@ -66,6 +66,7 @@ import java.util.stream.Collectors;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.core.runtime.Platform;
+import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
 
 /**
@@ -74,6 +75,8 @@ import org.osgi.framework.FrameworkUtil;
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
  */
 public final class PixiBinary {
+
+    private static final String PIXI_FRAGMENT_NAME_PREFIX = "org.knime.conda.pixi.bin";
 
     /** Thread‑safe cache for the resolved pixi path. */
     private static final AtomicReference<String> CACHED_PATH = new AtomicReference<>();
@@ -118,7 +121,10 @@ public final class PixiBinary {
                 throw new PixiBinaryLocationException("Cannot determine bundle for PixiBinary class.");
             }
 
-            var fragments = Platform.getFragments(bundle);
+            var fragments = Arrays.stream(Platform.getFragments(bundle)) //
+                // filter out the test fragment (during development)
+                .filter(f -> f.getSymbolicName().startsWith(PIXI_FRAGMENT_NAME_PREFIX)) //
+                .toArray(Bundle[]::new);
 
             if (fragments == null || fragments.length == 0) {
                 throw new PixiBinaryLocationException(

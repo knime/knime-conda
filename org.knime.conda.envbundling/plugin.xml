@@ -3,19 +3,10 @@
 <plugin>
    <extension-point id="CondaEnvironment" name="CondaEnvironment" schema="schema/CondaEnvironment.exsd"/>
    <extension
-         point="org.eclipse.equinox.p2.engine.actions">
-      <action
-            class="org.knime.conda.envbundling.action.InstallCondaEnvironment$InstallAction"
-            name="installcondaenvironment"
-            version="1.0.0">
-      </action>
-   </extension>
-   <extension
-         point="org.eclipse.equinox.p2.engine.actions">
-      <action
-            class="org.knime.conda.envbundling.action.InstallCondaEnvironment$UninstallAction"
-            name="uninstallcondaenvironment"
-            version="1.0.0">
-      </action>
+         point="org.knime.core.EarlyStartup">
+      <provider
+            class="org.knime.conda.envbundling.environment.EarlyStartupCondaEnvironmentInstallation"
+            startupStage="AFTER_PROFILES_SET">
+      </provider>
    </extension>
 </plugin>

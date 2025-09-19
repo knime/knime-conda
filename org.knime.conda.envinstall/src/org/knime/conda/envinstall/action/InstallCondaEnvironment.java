@@ -360,7 +360,8 @@ public final class InstallCondaEnvironment {
 
         // Read the lockfile and make the URLs local and write it to the destination
         var pixiLockfile = PixiLockfileUtil.readLockfile(pixiLockSrc);
-        PixiLockfileUtil.makeURLsLocal(pixiLockfile, "default", envResourcesFolder);
+        // PixiLockfileUtil.makeURLsLocal(pixiLockfile, "default", envResourcesFolder);
+        logInfo("Using a lockfile that will not work offline!");
         PixiLockfileUtil.writeLockfile(pixiLockfile, pixiLockDst);
 
         // Create a minimal pixi.toml file in the destination

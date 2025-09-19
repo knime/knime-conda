@@ -193,8 +193,9 @@ final class PixiLockfileUtil {
      * @return the local file path to the PyPI package, e.g. /path/to/pypi/index/package-1.0.0.tar.gz
      */
     private static String swapToLocalPathPypi(final Path pypiPath, final String packageFileUrl) {
-        var fileName = packageFileUrl.substring(packageFileUrl.lastIndexOf('/') + 1);
-        return pypiPath.resolve(fileName).toString();
+        //        var fileName = packageFileUrl.substring(packageFileUrl.lastIndexOf('/') + 1);
+        //        return pypiPath.resolve(fileName).toString();
+        return packageFileUrl;
     }
 
     /**

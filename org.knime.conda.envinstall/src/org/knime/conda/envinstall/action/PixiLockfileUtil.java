@@ -254,6 +254,10 @@ final class PixiLockfileUtil {
         return null;
     }
 
+
+
+
+
     /**
      * Extracts the package name from a conda package URL or file path.
      * 
@@ -267,8 +271,11 @@ final class PixiLockfileUtil {
             return null;
         }
         
-        // Get the filename from the URL/path
-        var lastSlashIndex = condaUrl.lastIndexOf('/');
+        // Get the filename from the URL/path (handle both forward and backward slashes)
+        var lastForwardSlashIndex = condaUrl.lastIndexOf('/');
+        var lastBackwardSlashIndex = condaUrl.lastIndexOf('\\');
+        var lastSlashIndex = Math.max(lastForwardSlashIndex, lastBackwardSlashIndex);
+        
         if (lastSlashIndex == -1) {
             return null;
         }

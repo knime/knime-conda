@@ -254,6 +254,10 @@ final class PixiLockfileUtil {
         return null;
     }
 
+
+
+
+
     /**
      * Extracts the package name from a conda package URL or file path.
      * 

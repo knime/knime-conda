@@ -224,6 +224,67 @@ final class PixiLockfileUtil {
         return packageFileUrl.substring(packageFileUrl.lastIndexOf('/', lastSlashIndex - 1) + 1, lastSlashIndex);
     }
 
+    /**
+     * Finds the exact name of a conda package that starts with the given prefix.
+     * 
+     * This method searches through all packages in the lockfile to find a conda package
+     * whose name starts with the specified prefix. This is useful for finding packages
+     * with version-specific names like "knime-python-versions-5.4.0-py310_202407150939".
+     *
+     * @param lockfile the Pixi lockfile to search in
+     * @param packageNamePrefix the prefix to search for (e.g., "knime-python-versions")
+     * @return the exact package name if found, or null if no matching package is found
+     */
+    static String findCondaPackageByPrefix(final Map<String, Object> lockfile, final String packageNamePrefix) {
+        @SuppressWarnings("unchecked")
+        var fullPackagesList = (List<Map<String, String>>)lockfile.get("packages");
+        
+        if (fullPackagesList != null) {
+            for (var packageEntry : fullPackagesList) {
+                if (packageEntry.containsKey("conda")) {
+                    var condaUrl = packageEntry.get("conda");
+                    var packageName = extractPackageNameFromUrl(condaUrl);
+                    if (packageName != null && packageName.startsWith(packageNamePrefix)) {
+                        return packageName;
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Extracts the package name from a conda package URL or file path.
+     * 
+     * @param condaUrl the conda package URL or file path, e.g.,
+     *                 "https://conda.anaconda.org/conda-forge/linux-64/knime-python-versions-5.4.0-py310_202407150939.conda"
+     *                 or "/path/to/conda/channel/linux-64/knime-python-versions-5.4.0-py310_202407150939.conda"
+     * @return the package name without extension, e.g., "knime-python-versions-5.4.0-py310_202407150939"
+     */
+    private static String extractPackageNameFromUrl(final String condaUrl) {
+        if (condaUrl == null) {
+            return null;
+        }
+        
+        // Get the filename from the URL/path
+        var lastSlashIndex = condaUrl.lastIndexOf('/');
+        if (lastSlashIndex == -1) {
+            return null;
+        }
+        
+        var fileName = condaUrl.substring(lastSlashIndex + 1);
+        
+        // Remove the .conda or .tar.bz2 extension
+        if (fileName.endsWith(".conda")) {
+            return fileName.substring(0, fileName.length() - 6);
+        } else if (fileName.endsWith(".tar.bz2")) {
+            return fileName.substring(0, fileName.length() - 8);
+        }
+        
+        return fileName;
+    }
+
     // Utilites for accessing fields in the lockfile
 
     private static Map<String, Object> getEnvironment(final Map<String, Object> lockfile,

@@ -371,10 +371,30 @@ public final class InstallCondaEnvironment {
                 """);
 
         /* ------------------------------------------------------------- */
-        /* 3) Run `pixi install`                                         */
+        /* 3) Clean pixi cache if a new version of knime-python-versions is found */
         /* ------------------------------------------------------------- */
-        var pixiCacheDir = bundlingRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath().toString();
-        var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDir);
+        var pixiCacheDir = bundlingRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath();
+        // check if knime-python-versions is present in the lockfile
+        var knimePythonVersions = PixiLockfileUtil.findCondaPackageByPrefix(pixiLockfile, "knime-python-versions");
+        if (knimePythonVersions != null) {
+            // find if pixiCacheDir/pkgs/knime-python-versions-<version> exists
+            var pkgsDir = pixiCacheDir.resolve("pkgs").resolve(knimePythonVersions);
+            if (Files.isDirectory(pkgsDir)) {
+                logInfo("Detected a matching knime-python-versions package in the pixi cache - not cleaning the cache.");
+            } else {
+                // no matching version found - clean the cache
+                if (Files.isDirectory(pixiCacheDir)) {
+                    logInfo("Cleaning pixi cache directory: " + pixiCacheDir);
+                    PathUtils.deleteDirectory(pixiCacheDir);
+                }
+            }
+        }
+
+        /* ------------------------------------------------------------- */
+        /* 4) Run `pixi install`                                         */
+        /* ------------------------------------------------------------- */
+        var pixiCacheDirStr = pixiCacheDir.toString();
+        var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDirStr);
         var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install", "--frozen");
         if (!installResult.isSuccess()) {
             var failureDetails = formatPixiFailure("pixi install", installResult);

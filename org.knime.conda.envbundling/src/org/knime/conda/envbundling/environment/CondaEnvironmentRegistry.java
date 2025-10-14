@@ -424,14 +424,15 @@ public final class CondaEnvironmentRegistry {
                     .orElseThrow(() -> new IllegalStateException("The binary fragment could not be located.")) //
                     .toPath() //
                     .toAbsolutePath();
+                var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
                 var envPath = InstallCondaEnvironment.installCondaEnvironment( //
                     artifactLocation, //
-                    bundlingRoot.getEnvironmentRoot(ext.environmentName()), //
+                    environmentRoot, //
                     bundlingRoot.getRoot() //
                 );
 
                 // Create the metadata file next to the environment
-                StartupCreatedEnvironmentMetadata.write(ext.bundle().getVersion(), envPath);
+                StartupCreatedEnvironmentMetadata.write(ext.bundle().getVersion(), environmentRoot);
 
                 return envPath;
             }

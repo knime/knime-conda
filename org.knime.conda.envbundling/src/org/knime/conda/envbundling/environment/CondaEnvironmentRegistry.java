@@ -205,20 +205,27 @@ public final class CondaEnvironmentRegistry {
                     continue; // SKIP - The extension is not valid
                 }
 
-                // Find the environment if it was created during installation
+                // Phase 1: Check if environment was created during installation (environment_path.txt)
+                LOGGER.debugWithFormat("Checking for install-created environment for '%s'",
+                    envExt.get().environmentName());
                 var installCreatedEnv = findInstallCreatedEnvironment(envExt.get());
                 if (installCreatedEnv.isPresent()) {
+                    LOGGER.debugWithFormat("Found install-created environment for '%s' at: %s",
+                        envExt.get().environmentName(), installCreatedEnv.get().getPath());
                     addIfNotExists(environments, installCreatedEnv.get());
 
                     continue; // SKIP the rest. The environment was found and added
                 }
 
-                // Find the environment if it was created during startup
+                // Phase 2: Check if environment was created during startup (metadata.properties)
+                LOGGER.debugWithFormat(
+                    "No install-created environment found. Checking for startup-created environment for '%s'",
+                    envExt.get().environmentName());
                 var startupCreatedEnv = findStartupCreatedEnvironment(envExt.get());
                 if (startupCreatedEnv instanceof StartupCreatedEnvPath.Exists exists) {
                     // The environment exists and can be used
-                    LOGGER.debugWithFormat("Conda environment '%s' exists at path: %s", exists.environment().getName(),
-                        exists.environment().getPath());
+                    LOGGER.debugWithFormat("Found startup-created environment '%s' at path: %s",
+                        exists.environment().getName(), exists.environment().getPath());
                     addIfNotExists(environments, exists.environment());
                 } else if (startupCreatedEnv instanceof StartupCreatedEnvPath.MustBeCreated mustBeCreated) {
                     // The environment must be created - this will happen later
@@ -332,6 +339,8 @@ public final class CondaEnvironmentRegistry {
         var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
         var envMeta = StartupCreatedEnvironmentMetadata.read(environmentRoot);
         if (envMeta.isPresent()) {
+            LOGGER.debugWithFormat("Found metadata.properties for '%s' - checking if environment is up-to-date",
+                ext.environmentName());
             var meta = envMeta.get();
             if ("qualifier".equals(bundleVersion.getQualifier())) {
                 // In development - recreate the environment every time
@@ -355,7 +364,8 @@ public final class CondaEnvironmentRegistry {
                     new CondaEnvironment(ext.bundle(), path, ext.environmentName(), ext.requiresDownload()));
             }
         }
-        LOGGER.info("No existing environment found for " + ext.environmentName() + " at " + environmentRoot);
+        LOGGER.info("No metadata.properties found for '" + ext.environmentName() + "' at " + environmentRoot
+            + " - environment needs to be created");
         return new StartupCreatedEnvPath.MustBeCreated(ext,
             "Creating Python environment for " + ext.environmentName() + ".");
     }
@@ -595,7 +605,8 @@ public final class CondaEnvironmentRegistry {
 
         } catch (IOException e) {
             // No problem, we only introduced the environment_path.txt file in 5.4. Trying other env locations...
-            LOGGER.debug("No " + ENVIRONMENT_PATH_FILE + " file found for '" + bundleName + "'");
+            LOGGER.debug(
+                "No " + ENVIRONMENT_PATH_FILE + " file found for '" + bundleName + "' - checking legacy locations");
 
             String knimePythonBundlingPath = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
             if (knimePythonBundlingPath != null) {
@@ -619,7 +630,7 @@ public final class CondaEnvironmentRegistry {
                     // a conda environment. For these fragments, we only come here if we are supposed to create the
                     // environment on startup.
                     LOGGER.debug("'env' folder for '" + bundleName
-                        + "' is not a conda environment. The environment will be created on startup.");
+                        + "' is not a conda environment - will check for startup-created environment");
                     return Optional.empty();
                 }
             } catch (final IOException ex) {

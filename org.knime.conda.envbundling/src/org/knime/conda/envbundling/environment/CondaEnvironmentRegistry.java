@@ -79,6 +79,7 @@ import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.dialogs.ProgressMonitorDialog;
 import org.eclipse.jface.operation.IRunnableWithProgress;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Shell;
 import org.knime.conda.envbundling.CondaEnvironmentBundlingUtils;
 import org.knime.conda.envinstall.action.InstallCondaEnvironment;
 import org.knime.conda.envinstall.action.InstallCondaEnvironment.EnvironmentInstallListener;
@@ -128,6 +129,9 @@ public final class CondaEnvironmentRegistry {
 
     // Use AtomicReference to allow thread-safe invalidation and lazy initialization
     private static final AtomicReference<Map<String, CondaEnvironment>> m_environments = new AtomicReference<>(null);
+
+    /** Whether to skip the installation of the conda environments on startup instead of installation time. */
+    public static final boolean SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP = Boolean.getBoolean("knime.conda.skip_install_envs_on_startup");
 
     static {
         InstallCondaEnvironment.registerEnvironmentInstallListener(new EnvironmentInstallListener() {
@@ -232,6 +236,45 @@ public final class CondaEnvironmentRegistry {
                     LOGGER.debugWithFormat("Conda environment '%s' must be created: %s",
                         mustBeCreated.ext().environmentName(), mustBeCreated.message());
                     environmentsToInstall.add(mustBeCreated);
+                } else if (startupCreatedEnv instanceof StartupCreatedEnvPath.Failed failed) {
+                    // Environment previously failed - ask user what to do
+                    var userChoice = askUserForFailedEnvironment(failed);
+                    switch (userChoice) {
+                        case RETRY -> {
+                            // Remove failed metadata and retry installation
+                            try {
+                                var bundlingRoot = BundlingRoot.getInstance();
+                                var environmentRoot = bundlingRoot.getEnvironmentRoot(failed.ext().environmentName());
+                                Files.deleteIfExists(environmentRoot.resolve(StartupCreatedEnvironmentMetadata.METADATA_FILE_NAME));
+                                LOGGER.infoWithFormat("User chose to retry installation for environment '%s'", failed.ext().environmentName());
+                                environmentsToInstall.add(new StartupCreatedEnvPath.MustBeCreated(failed.ext(), 
+                                    "Retrying installation for " + failed.extensionName() + " (user requested retry)"));
+                            } catch (IOException e) {
+                                LOGGER.error("Failed to delete metadata for retry: " + e.getMessage(), e);
+                                // Fall back to skipping for this session
+                                LOGGER.infoWithFormat("Skipping environment '%s' for this session due to retry error", failed.ext().environmentName());
+                            }
+                        }
+                        case SKIP -> {
+                            // Skip for this session only - environment remains marked as failed
+                            LOGGER.infoWithFormat("User chose to skip environment '%s' for this session", failed.ext().environmentName());
+                        }
+                        case SKIP_PERMANENTLY -> {
+                            // Mark as permanently skipped
+                            try {
+                                var bundlingRoot = BundlingRoot.getInstance();
+                                var environmentRoot = bundlingRoot.getEnvironmentRoot(failed.ext().environmentName());
+                                StartupCreatedEnvironmentMetadata.writeSkipped(failed.ext().bundle().getVersion(), environmentRoot);
+                                LOGGER.infoWithFormat("User chose to permanently skip environment '%s'", failed.ext().environmentName());
+                            } catch (IOException e) {
+                                LOGGER.error("Failed to write skipped metadata: " + e.getMessage(), e);
+                                // Environment remains marked as failed for next time
+                            }
+                        }
+                    }
+                } else if (startupCreatedEnv instanceof StartupCreatedEnvPath.Skipped skipped) {
+                    // Environment was permanently skipped by user
+                    LOGGER.debugWithFormat("Environment '%s' is permanently skipped by user", skipped.ext().environmentName());
                 }
             } catch (final Exception e) {
                 LOGGER.error("An exception occurred while registering an extension at extension point '" + EXT_POINT_ID
@@ -242,11 +285,16 @@ public final class CondaEnvironmentRegistry {
         if (!environmentsToInstall.isEmpty()) {
             LOGGER.debugWithFormat("Found %d Conda environments that need to be installed.",
                 environmentsToInstall.size());
-            if (createEnvironments) {
+            if (createEnvironments && !SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
                 // NOTE: We ignore the flag here. If the flag was set during extension installation but is not set now,
                 // we still need to create the environments to make the extensions work.
                 var installedEnvs = installStartupCreatedEnvironments(environmentsToInstall);
                 installedEnvs.forEach(env -> addIfNotExists(environments, env));
+            } else if (SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
+                LOGGER.infoWithFormat(
+                    "Skipping installation of %d Conda environments because skip_install_envs_on_startup is enabled. "
+                    + "Python nodes requiring these environments may not work until environments are manually installed.",
+                    environmentsToInstall.size());
             } else {
                 LOGGER.warnWithFormat(
                     "Found %d Conda environments that are not yet created. They will be created on a restart.",
@@ -342,7 +390,15 @@ public final class CondaEnvironmentRegistry {
             LOGGER.debugWithFormat("Found metadata.properties for '%s' - checking if environment is up-to-date",
                 ext.environmentName());
             var meta = envMeta.get();
-            if ("qualifier".equals(bundleVersion.getQualifier())) {
+            if (meta.failed) {
+                // Check if user has chosen to skip this environment permanently
+                if (meta.skipped) {
+                    LOGGER.infoWithFormat("Skipping environment '%s' because it was marked as permanently skipped by user. This can be undone by deleting the metadata.properties file.", ext.environmentName());
+                    return new StartupCreatedEnvPath.Skipped(ext);
+                }
+                // Environment previously failed - let user decide what to do
+                return new StartupCreatedEnvPath.Failed(ext, extensionName);
+            } else if ("qualifier".equals(bundleVersion.getQualifier())) {
                 // In development - recreate the environment every time
                 return new StartupCreatedEnvPath.MustBeCreated(ext, "Recreating Python environment for " + extensionName
                     + " because it is in development mode (qualifier version).");
@@ -364,15 +420,69 @@ public final class CondaEnvironmentRegistry {
                     new CondaEnvironment(ext.bundle(), path, ext.environmentName(), ext.requiresDownload()));
             }
         }
-        LOGGER.info("No metadata.properties found for '" + ext.environmentName() + "' at " + environmentRoot
-            + " - environment needs to be created");
+        LOGGER.infoWithFormat("No metadata.properties found for '%s' at %s - environment needs to be created", ext.environmentName(), environmentRoot);
         return new StartupCreatedEnvPath.MustBeCreated(ext,
             "Creating Python environment for " + ext.environmentName() + ".");
     }
 
+    /**
+     * User choices for handling failed environment installations.
+     */
+    private enum UserChoice {
+        RETRY, SKIP, SKIP_PERMANENTLY
+    }
+
+    /**
+     * Asks the user what to do with a failed environment installation.
+     *
+     * @param failedEnv the failed environment information
+     * @return the user's choice
+     */
+    private static UserChoice askUserForFailedEnvironment(StartupCreatedEnvPath.Failed failedEnv) {
+        // If there is no display (headless / warm-start without UI) we cannot ask the user -> skip once
+        var display = Display.getCurrent(); // prefer current; falls back to default below
+        if (display == null) { // headless scenario
+            LOGGER.infoWithFormat("Headless startup: skipping failed environment '%s' for this session.", failedEnv.ext().environmentName());
+            return UserChoice.SKIP; // do not block startup
+        }
+
+        final var result = new AtomicReference<>(UserChoice.SKIP);
+        display.syncExec(() -> {
+            Shell shell = display.getActiveShell();
+            boolean disposeShell = false;
+            if (shell == null || shell.isDisposed()) {
+                // Create a temporary shell if none is active
+                shell = new Shell(display);
+                disposeShell = true;
+            }
+            try {
+                var dialog = new MessageDialog(shell,
+                    "Failed Environment Installation",
+                    null,
+                    String.format("The conda environment for %s failed to install previously. What would you like to do?", failedEnv.extensionName()),
+                    MessageDialog.QUESTION,
+                    new String[] { "Retry Installation", "Skip This Time", "Skip Permanently" },
+                    0);
+
+                var choice = dialog.open();
+                switch (choice) {
+                    case 0 -> result.set(UserChoice.RETRY);
+                    case 1 -> result.set(UserChoice.SKIP);
+                    case 2 -> result.set(UserChoice.SKIP_PERMANENTLY);
+                    default -> result.set(UserChoice.SKIP);
+                }
+            } finally {
+                if (disposeShell && shell != null && !shell.isDisposed()) {
+                    shell.dispose();
+                }
+            }
+        });
+        return result.get();
+    }
+
     /** Return value of {@link #findStartupCreatedEnvironment(CondaEnvironmentExtension)}. */
     private sealed interface StartupCreatedEnvPath
-        permits StartupCreatedEnvPath.Exists, StartupCreatedEnvPath.MustBeCreated {
+        permits StartupCreatedEnvPath.Exists, StartupCreatedEnvPath.MustBeCreated, StartupCreatedEnvPath.Failed, StartupCreatedEnvPath.Skipped {
 
         /** Indicates that the environment exists and can be used as is. */
         @SuppressWarnings("javadoc") // it's private
@@ -382,6 +492,16 @@ public final class CondaEnvironmentRegistry {
         /** Indicates that the environment must be created. The message is shown to the user. */
         @SuppressWarnings("javadoc") // it's private
         record MustBeCreated(CondaEnvironmentExtension ext, String message) implements StartupCreatedEnvPath {
+        }
+
+        /** Indicates that the environment failed and user needs to decide what to do. */
+        @SuppressWarnings("javadoc") // it's private
+        record Failed(CondaEnvironmentExtension ext, String extensionName) implements StartupCreatedEnvPath {
+        }
+
+        /** Indicates that the environment was permanently skipped by user. */
+        @SuppressWarnings("javadoc") // it's private
+        record Skipped(CondaEnvironmentExtension ext) implements StartupCreatedEnvPath {
         }
     }
 
@@ -400,6 +520,13 @@ public final class CondaEnvironmentRegistry {
                 progressMonitor.beginTask("First start after extension update/installation.", envsToInstall.size());
 
                 for (var i = 0; i < envsToInstall.size(); i++) {
+                    // Check if user clicked cancel
+                    if (progressMonitor.isCanceled()) {
+                        // Write metadata files with failed flag for remaining environments
+                        writeFailedMetadataForRemainingEnvironments(i);
+                        throw new InterruptedException("Environment installation was cancelled by user");
+                    }
+
                     var mustBeCreated = envsToInstall.get(i);
 
                     progressMonitor.subTask(mustBeCreated.message + " (" + (i + 1) + "/" + envsToInstall.size() + ").");
@@ -407,10 +534,23 @@ public final class CondaEnvironmentRegistry {
                     // Install the environment and get the path
                     var ext = mustBeCreated.ext();
                     try {
-                        var envPath = installEnvironment(ext);
+                        var envPath = installEnvironment(ext, progressMonitor);
                         installedEnvironments.add(
                             new CondaEnvironment(ext.bundle(), envPath, ext.environmentName(), ext.requiresDownload()));
                     } catch (final Exception ex) { // NOSONAR: we want to catch all exceptions here to add context
+                        // Write failed metadata for this environment
+                        try {
+                            var bundlingRoot = BundlingRoot.getInstance();
+                            var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
+                            if (!Files.exists(environmentRoot)) {
+                                Files.createDirectories(environmentRoot);
+                            }
+                            StartupCreatedEnvironmentMetadata.writeFailed(ext.bundle().getVersion(), environmentRoot);
+                            LOGGER.infoWithFormat("Written failed metadata for environment: %s", ext.environmentName());
+                        } catch (final IOException ex2) {
+                            LOGGER.error("Failed to write failed metadata for environment " + ext.environmentName(), ex2);
+                        }
+                        
                         var message = "Failed to create the Python environment for " + ext.bundle().getSymbolicName()
                             + ". Nodes using this environment will not work or show up in the node repository.\n\n";
                         if (ex instanceof InterruptedException) {
@@ -425,7 +565,35 @@ public final class CondaEnvironmentRegistry {
                 }
             }
 
-            private static Path installEnvironment(final CondaEnvironmentExtension ext)
+            /**
+             * Writes metadata files with failed flag for environments that were not processed when cancellation or failure occurred.
+             * 
+             * @param startIndex the index from which to start writing failed metadata files
+             */
+            private void writeFailedMetadataForRemainingEnvironments(final int startIndex) {
+                for (var i = startIndex; i < envsToInstall.size(); i++) {
+                    var mustBeCreated = envsToInstall.get(i);
+                    var ext = mustBeCreated.ext();
+                    try {
+                        var bundlingRoot = BundlingRoot.getInstance();
+                        var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
+                        
+                        // Create the environment root directory if it doesn't exist
+                        if (!Files.exists(environmentRoot)) {
+                            Files.createDirectories(environmentRoot);
+                        }
+                        
+                        // Write metadata with failed flag
+                        StartupCreatedEnvironmentMetadata.writeFailed(ext.bundle().getVersion(), environmentRoot);
+                        LOGGER.infoWithFormat("Written failed metadata for environment: %s", ext.environmentName());
+                        
+                    } catch (final IOException ex2) {
+                        LOGGER.error("Failed to write failed metadata for environment " + ext.environmentName(), ex2);
+                    }
+                }
+            }
+
+            private static Path installEnvironment(final CondaEnvironmentExtension ext, final IProgressMonitor progressMonitor)
                 throws IOException, PixiBinaryLocationException, InterruptedException {
                 var bundlingRoot = BundlingRoot.getInstance();
 
@@ -435,16 +603,67 @@ public final class CondaEnvironmentRegistry {
                     .toPath() //
                     .toAbsolutePath();
                 var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
-                var envPath = InstallCondaEnvironment.installCondaEnvironment( //
-                    artifactLocation, //
-                    environmentRoot, //
-                    bundlingRoot.getRoot() //
-                );
+                
+                // Check for cancellation before starting the long-running pixi operation
+                if (progressMonitor.isCanceled()) {
+                    throw new InterruptedException("Environment installation was cancelled before pixi install");
+                }
+                
+                // Create a thread that will do the actual installation
+                var currentThread = Thread.currentThread();
+                var installationThread = new Thread(() -> {
+                    try {
+                        InstallCondaEnvironment.installCondaEnvironment( //
+                            artifactLocation, //
+                            environmentRoot, //
+                            bundlingRoot.getRoot() //
+                        );
+                    } catch (Exception ex) {
+                        // Interrupt the main thread to signal the exception
+                        currentThread.interrupt();
+                    }
+                });
+                
+                installationThread.setDaemon(true);
+                installationThread.start();
+                
+                // Wait for installation to complete, checking for cancellation
+                while (installationThread.isAlive()) {
+                    if (progressMonitor.isCanceled()) {
+                        // Kill the installation thread immediately
+                        installationThread.interrupt();
+                        
+                        // Force kill all pixi processes
+                        try {
+                            if (System.getProperty("os.name").toLowerCase().contains("win")) {
+                                Runtime.getRuntime().exec("taskkill /F /IM pixi.exe");
+                            } else {
+                                Runtime.getRuntime().exec("pkill -f pixi");
+                            }
+                        } catch (IOException ex) {
+                            // Ignore errors when killing processes
+                        }
+                        
+                        throw new InterruptedException("Environment installation was cancelled by user");
+                    }
+                    
+                    try {
+                        Thread.sleep(100); // Check every 100ms
+                    } catch (InterruptedException ex) {
+                        installationThread.interrupt();
+                        throw ex;
+                    }
+                }
+                
+                // Check if the installation thread was interrupted (indicating an error)
+                if (Thread.interrupted()) {
+                    throw new IOException("Environment installation failed");
+                }
 
                 // Create the metadata file next to the environment
                 StartupCreatedEnvironmentMetadata.write(ext.bundle().getVersion(), environmentRoot);
 
-                return envPath;
+                return environmentRoot.resolve(".pixi").resolve("envs").resolve("default");
             }
         }
 
@@ -458,7 +677,7 @@ public final class CondaEnvironmentRegistry {
             // Note, that this blocks the KNIME AP startup
             progressDialog.run( //
                 true, // run the runnable in a separate thread (so that the UI is not blocked)
-                false, // TODO(AP-24860) make cancelable (check isCanceled() in the runnable)
+                true, // make cancelable - check isCanceled() in the runnable
                 environmentInstallRunnable //
             );
         } catch (InterruptedException | InvocationTargetException ex) {
@@ -508,6 +727,18 @@ public final class CondaEnvironmentRegistry {
                 .filter(path -> registeredEnvPaths.stream() //
                     .noneMatch(registeredEnvPath -> registeredEnvPath.startsWith(path)) //
                 ) // Filter out directories that contain registered environments
+                .filter(path -> { // Don't delete directories that contain failed environment metadata - preserve for user choice
+                    try {
+                        var metadata = StartupCreatedEnvironmentMetadata.read(path);
+                        if (metadata.isPresent() && metadata.get().failed()) {
+                            LOGGER.debugWithFormat("Preserving failed environment directory for user choice: %s", path);
+                            return false; // Don't delete
+                        }
+                        return true; // Safe to delete
+                    } catch (Exception e) {
+                        return true; // If we can't read metadata, err on the side of caution and delete
+                    }
+                })
                 .forEach(envDir -> {
                     try {
                         PathUtils.deleteDirectory(envDir);
@@ -528,8 +759,10 @@ public final class CondaEnvironmentRegistry {
      * @param version the version of the bundle that created this environment
      * @param creationPath the root path of the environment, where the metadata file is located. This is used to detect
      *            if an environment was moved by the user.
+     * @param failed whether the environment creation failed (includes cancellation and other errors)
+     * @param skipped whether the user has permanently skipped this environment
      */
-    private record StartupCreatedEnvironmentMetadata(String version, String creationPath) {
+    private record StartupCreatedEnvironmentMetadata(String version, String creationPath, boolean failed, boolean skipped) {
 
         private static final String METADATA_FILE_NAME = "metadata.properties";
 
@@ -543,7 +776,11 @@ public final class CondaEnvironmentRegistry {
                     props.load(reader);
                     var version = props.getProperty("version");
                     var creationPath = props.getProperty("creationPath");
-                    return Optional.of(new StartupCreatedEnvironmentMetadata(version, creationPath));
+                    // Check for both "failed" and legacy "canceled" properties for backward compatibility
+                    var failed = Boolean.parseBoolean(props.getProperty("failed", "false")) || 
+                                 Boolean.parseBoolean(props.getProperty("canceled", "false"));
+                    var skipped = Boolean.parseBoolean(props.getProperty("skipped", "false"));
+                    return Optional.of(new StartupCreatedEnvironmentMetadata(version, creationPath, failed, skipped));
                 } catch (IOException e) {
                     LOGGER.warn("Could not read environment metadata from " + environmentRoot, e);
                     return Optional.empty();
@@ -565,6 +802,41 @@ public final class CondaEnvironmentRegistry {
             var props = new Properties();
             props.setProperty("version", version.toString());
             props.setProperty("creationPath", environmentRoot.toAbsolutePath().toString());
+            try (var writer = Files.newBufferedWriter(environmentRoot.resolve(METADATA_FILE_NAME))) {
+                props.store(writer, null);
+            }
+        }
+
+        /**
+         * Writes a metadata file with a failed flag indicating the environment installation failed.
+         *
+         * @param version the bundle version
+         * @param environmentRoot the root directory for the environment
+         * @throws IOException if writing the metadata file fails
+         */
+        static void writeFailed(final Version version, final Path environmentRoot) throws IOException {
+            var props = new Properties();
+            props.setProperty("version", version.toString());
+            props.setProperty("creationPath", environmentRoot.toAbsolutePath().toString());
+            props.setProperty("failed", "true");
+            try (var writer = Files.newBufferedWriter(environmentRoot.resolve(METADATA_FILE_NAME))) {
+                props.store(writer, null);
+            }
+        }
+
+        /**
+         * Writes a metadata file marking the environment as permanently skipped by the user.
+         *
+         * @param version the bundle version
+         * @param environmentRoot the root directory for the environment
+         * @throws IOException if writing the metadata file fails
+         */
+        static void writeSkipped(final Version version, final Path environmentRoot) throws IOException {
+            var props = new Properties();
+            props.setProperty("version", version.toString());
+            props.setProperty("creationPath", environmentRoot.toAbsolutePath().toString());
+            props.setProperty("failed", "true");
+            props.setProperty("skipped", "true");
             try (var writer = Files.newBufferedWriter(environmentRoot.resolve(METADATA_FILE_NAME))) {
                 props.store(writer, null);
             }

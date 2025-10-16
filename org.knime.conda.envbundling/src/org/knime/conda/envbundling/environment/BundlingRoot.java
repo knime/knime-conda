@@ -55,18 +55,20 @@ import java.nio.file.Path;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.osgi.service.datalocation.Location;
+import org.knime.conda.envinstall.action.InstallCondaEnvironment;
 
 /**
  * Provides the root directory where bundled Conda environments are stored.
  * <p>
  * Singleton with lazy initialization. Initialization errors are cached and re-thrown on subsequent calls to avoid
  * repeated work and noisy logs.
+ * <p>
+ * Uses the same bundling root logic as {@code InstallCondaEnvironment.getBundlingRoot()}, which respects the
+ * {@code KNIME_PYTHON_BUNDLING_PATH} environment variable.
  *
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
  */
 final class BundlingRoot {
-
-    private static final String CONDA_ENVIRONMENTS_ROOT_NAME = "conda-environments";
 
     /** The successfully initialized instance (if any). */
     private static volatile BundlingRoot INSTANCE;
@@ -83,7 +85,7 @@ final class BundlingRoot {
     /**
      * Returns the singleton instance. Lazily initializes it on first call.
      *
-     * @throws IOException if the configuration location is missing or cannot be converted to a file system path.
+     * @throws IOException if the bundling root cannot be determined or created.
      */
     static BundlingRoot getInstance() throws IOException {
         // Fast path: no synchronization if already initialized or previously failed
@@ -106,16 +108,7 @@ final class BundlingRoot {
             }
 
             try {
-                var configLocation = Platform.getConfigurationLocation();
-                if (configLocation == null) {
-                    throw new IOException(
-                        "A configuration location is required to store Conda environments but is not available. "
-                            + "Start KNIME with a configuration location.");
-                }
-
-                Path root = configurationToPath(configLocation) // may throw IOException
-                    .resolve(CONDA_ENVIRONMENTS_ROOT_NAME);
-
+                Path root = getBundlingRootPath();
                 inst = new BundlingRoot(root);
                 INSTANCE = inst;
                 return inst;
@@ -127,12 +120,32 @@ final class BundlingRoot {
         }
     }
 
-    /** Converts the Eclipse configuration location to a file-system path. */
-    private static Path configurationToPath(final Location configLocation)
-        throws IOException {
-        // FileLocator ensures proper resolution of Eclipse platform URLs
-        var url = FileLocator.toFileURL(configLocation.getURL());
-        return new File(url.getPath()).toPath();
+    /**
+     * Determines the bundling root path by delegating to InstallCondaEnvironment.getBundlingRoot().
+     * This ensures startup-created environments use the exact same location as install-time environments.
+     */
+    private static Path getBundlingRootPath() throws IOException {
+        Path installationRoot = getInstallationRoot();
+        return InstallCondaEnvironment.getBundlingRoot(installationRoot);
+    }
+
+    /**
+     * Determines the KNIME installation root directory.
+     */
+    private static Path getInstallationRoot() throws IOException {
+        try {
+            var configLocation = Platform.getConfigurationLocation();
+            if (configLocation == null) {
+                throw new IOException(
+                    "Configuration location is required to determine installation root but is not available.");
+            }
+            var url = FileLocator.toFileURL(configLocation.getURL());
+            Path configPath = new File(url.getPath()).toPath();
+            return configPath.getParent();
+
+        } catch (Exception e) {
+            throw new IOException("Failed to determine installation root: " + e.getMessage(), e);
+        }
     }
 
     Path getRoot() {

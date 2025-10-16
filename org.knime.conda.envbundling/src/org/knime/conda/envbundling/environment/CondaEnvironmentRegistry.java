@@ -662,6 +662,22 @@ public final class CondaEnvironmentRegistry {
 
                 // Create the metadata file next to the environment
                 StartupCreatedEnvironmentMetadata.write(ext.bundle().getVersion(), environmentRoot);
+                
+                // Also write environment_path.txt so this environment can be found via install-created logic
+                // This makes the environment discoverable even if KNIME_PYTHON_BUNDLING_PATH changes
+                try {
+                    var fragmentLocation = artifactLocation; // artifactLocation is already the fragment path
+                    var environmentPathFile = fragmentLocation.resolve(InstallCondaEnvironment.ENVIRONMENT_PATH_FILE);
+                    var installationRoot = fragmentLocation.getParent().getParent();
+                    var relativePath = installationRoot.relativize(environmentRoot);
+                    Files.writeString(environmentPathFile, relativePath.toString(), StandardCharsets.UTF_8);
+                    LOGGER.infoWithFormat("Written environment path file for startup-created environment: %s -> %s", 
+                        ext.environmentName(), relativePath);
+                } catch (IOException ex) {
+                    // Log but don't fail the installation - metadata.properties is sufficient for startup-created envs
+                    LOGGER.warn("Failed to write environment_path.txt for " + ext.environmentName() + 
+                        ", environment will only be discoverable via metadata.properties: " + ex.getMessage());
+                }
 
                 return environmentRoot.resolve(".pixi").resolve("envs").resolve("default");
             }

@@ -273,8 +273,10 @@ public final class CondaEnvironmentRegistry {
                         }
                     }
                 } else if (startupCreatedEnv instanceof StartupCreatedEnvPath.Skipped skipped) {
-                    // Environment was permanently skipped by user
-                    LOGGER.debugWithFormat("Environment '%s' is permanently skipped by user", skipped.ext().environmentName());
+                    // Environment was permanently skipped by user - create a disabled placeholder
+                    LOGGER.debugWithFormat("Environment '%s' is permanently skipped by user, creating disabled placeholder", skipped.ext().environmentName());
+                    var disabledEnv = CondaEnvironment.createDisabledPlaceholder(skipped.ext().bundle(), skipped.ext().environmentName());
+                    addIfNotExists(environments, disabledEnv);
                 }
             } catch (final Exception e) {
                 LOGGER.error("An exception occurred while registering an extension at extension point '" + EXT_POINT_ID

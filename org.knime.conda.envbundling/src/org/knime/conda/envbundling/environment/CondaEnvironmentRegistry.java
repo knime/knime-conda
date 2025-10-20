@@ -669,7 +669,7 @@ public final class CondaEnvironmentRegistry {
                 // This makes the environment discoverable even if KNIME_PYTHON_BUNDLING_PATH changes
                 try {
                     var fragmentLocation = artifactLocation; // artifactLocation is already the fragment path
-                    var environmentPathFile = fragmentLocation.resolve(InstallCondaEnvironment.ENVIRONMENT_PATH_FILE);
+                    Path environmentPathFile = fragmentLocation.resolve(InstallCondaEnvironment.ENVIRONMENT_PATH_FILE);
                     var installationRoot = fragmentLocation.getParent().getParent();
                     var relativePath = installationRoot.relativize(environmentRoot);
                     Files.writeString(environmentPathFile, relativePath.toString(), StandardCharsets.UTF_8);
@@ -884,12 +884,12 @@ public final class CondaEnvironmentRegistry {
 
         // try to find environment_path.txt, if that is present, use that.
         try {
-            var environmentPathFile =
+            Path environmentPathFile =
                 CondaEnvironmentBundlingUtils.getAbsolutePath(extension.binaryFragment(), ENVIRONMENT_PATH_FILE);
-            var environmentPath = FileUtils.readFileToString(environmentPathFile.toFile(), StandardCharsets.UTF_8);
-            environmentPath = environmentPath.trim();
+            String environmentPath = (String) FileUtils.readFileToString(environmentPathFile.toFile(), StandardCharsets.UTF_8);
+            environmentPath = ((String) environmentPath).trim();
             // Note: if environmentPath is absolute, resolve returns environmentPath directly
-            path = installationDirectoryPath.resolve(environmentPath);
+            path = installationDirectoryPath.resolve((String) environmentPath);
             LOGGER.debug("Found environment path '" + path + "' (before expansion: '" + environmentPath + "') for '"
                 + bundleName + "' in '" + environmentPathFile + "'");
 
@@ -910,7 +910,7 @@ public final class CondaEnvironmentRegistry {
 
         if (!Files.exists(path)) {
             try {
-                var envFolderPath =
+                Path envFolderPath =
                     CondaEnvironmentBundlingUtils.getAbsolutePath(extension.binaryFragment(), ENV_FOLDER_NAME);
                 if (CondaEnvironmentBundlingUtils.isCondaEnvironment(envFolderPath)) {
                     path = envFolderPath;

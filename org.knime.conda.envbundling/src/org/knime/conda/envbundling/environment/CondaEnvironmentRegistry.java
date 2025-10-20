@@ -134,6 +134,9 @@ public final class CondaEnvironmentRegistry {
     public static final boolean SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP =
         Boolean.getBoolean("knime.conda.skip_install_envs_on_startup");
 
+    /** Flag to track if conda environment installation is currently in progress */
+    private static volatile boolean s_environmentInstallationInProgress = false;
+
     static {
         InstallCondaEnvironment.registerEnvironmentInstallListener(new EnvironmentInstallListener() {
             @Override
@@ -171,6 +174,16 @@ public final class CondaEnvironmentRegistry {
      */
     public static CondaEnvironment getEnvironment(final String name) {
         return getEnvironments().get(name);
+    }
+
+    /**
+     * Checks if conda environment installation is currently in progress.
+     *
+     * @return true if environment installation is currently running
+     * @since 5.9
+     */
+    public static boolean isEnvironmentInstallationInProgress() {
+        return s_environmentInstallationInProgress;
     }
 
     /** @return a map of all environments that are installed. */
@@ -537,6 +550,9 @@ public final class CondaEnvironmentRegistry {
     private static List<CondaEnvironment>
         installStartupCreatedEnvironments(final List<StartupCreatedEnvPath.MustBeCreated> environmentsToInstall) {
 
+        // Set flag to indicate installation is in progress
+        s_environmentInstallationInProgress = true;
+
         record InstallEnvironmentsRunnable( //
                 List<StartupCreatedEnvPath.MustBeCreated> envsToInstall, //
                 List<CondaEnvironment> installedEnvironments //
@@ -692,6 +708,8 @@ public final class CondaEnvironmentRegistry {
             if (ex instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
+        } finally {
+            s_environmentInstallationInProgress = false; // Always reset the flag when installation completes or fails
         }
 
         return environmentInstallRunnable.installedEnvironments;

@@ -247,7 +247,7 @@ public final class CondaEnvironmentRegistry {
                                 var environmentRoot = bundlingRoot.getEnvironmentRoot(failed.ext().environmentName());
                                 Files.deleteIfExists(environmentRoot.resolve(StartupCreatedEnvironmentMetadata.METADATA_FILE_NAME));
                                 LOGGER.infoWithFormat("User chose to retry installation for environment '%s'", failed.ext().environmentName());
-                                environmentsToInstall.add(new StartupCreatedEnvPath.MustBeCreated(failed.ext(), 
+                                environmentsToInstall.add(new StartupCreatedEnvPath.MustBeCreated(failed.ext(),
                                     "Retrying installation for " + failed.extensionName() + " (user requested retry)"));
                             } catch (IOException e) {
                                 LOGGER.error("Failed to delete metadata for retry: " + e.getMessage(), e);
@@ -440,7 +440,7 @@ public final class CondaEnvironmentRegistry {
      * @param failedEnv the failed environment information
      * @return the user's choice
      */
-    private static UserChoice askUserForFailedEnvironment(StartupCreatedEnvPath.Failed failedEnv) {
+    private static UserChoice askUserForFailedEnvironment(final StartupCreatedEnvPath.Failed failedEnv) {
         // If there is no display (headless / warm-start without UI) we cannot ask the user -> skip once
         var display = Display.getCurrent(); // prefer current; falls back to default below
         if (display == null) { // headless scenario
@@ -552,7 +552,7 @@ public final class CondaEnvironmentRegistry {
                         } catch (final IOException ex2) {
                             LOGGER.error("Failed to write failed metadata for environment " + ext.environmentName(), ex2);
                         }
-                        
+
                         var message = "Failed to create the Python environment for " + ext.bundle().getSymbolicName()
                             + ". Nodes using this environment will not work or show up in the node repository.\n\n";
                         if (ex instanceof InterruptedException) {
@@ -569,7 +569,7 @@ public final class CondaEnvironmentRegistry {
 
             /**
              * Writes metadata files with failed flag for environments that were not processed when cancellation or failure occurred.
-             * 
+             *
              * @param startIndex the index from which to start writing failed metadata files
              */
             private void writeFailedMetadataForRemainingEnvironments(final int startIndex) {
@@ -579,16 +579,16 @@ public final class CondaEnvironmentRegistry {
                     try {
                         var bundlingRoot = BundlingRoot.getInstance();
                         var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
-                        
+
                         // Create the environment root directory if it doesn't exist
                         if (!Files.exists(environmentRoot)) {
                             Files.createDirectories(environmentRoot);
                         }
-                        
+
                         // Write metadata with failed flag
                         StartupCreatedEnvironmentMetadata.writeFailed(ext.bundle().getVersion(), environmentRoot);
                         LOGGER.infoWithFormat("Written failed metadata for environment: %s", ext.environmentName());
-                        
+
                     } catch (final IOException ex2) {
                         LOGGER.error("Failed to write failed metadata for environment " + ext.environmentName(), ex2);
                     }
@@ -605,80 +605,21 @@ public final class CondaEnvironmentRegistry {
                     .toPath() //
                     .toAbsolutePath();
                 var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
-                
+
                 // Check for cancellation before starting the long-running pixi operation
                 if (progressMonitor.isCanceled()) {
                     throw new InterruptedException("Environment installation was cancelled before pixi install");
                 }
-                
-                // Create a shared container for exceptions from the installation thread
-                final var installationException = new AtomicReference<Exception>();
-                
-                // Create a thread that will do the actual installation
-                var installationThread = new Thread(() -> {
-                    try {
-                        InstallCondaEnvironment.installCondaEnvironment( //
-                            artifactLocation, //
-                            environmentRoot, //
-                            bundlingRoot.getRoot() //
-                        );
-                    } catch (Exception ex) {
-                        // Store the exception for later retrieval
-                        installationException.set(ex);
-                    }
-                });
-                
-                installationThread.setDaemon(true);
-                installationThread.start();
-                
-                // Wait for installation to complete, checking for cancellation
-                // Use 500ms interval to reduce CPU usage while maintaining reasonable responsiveness
-                while (installationThread.isAlive()) {
-                    if (progressMonitor.isCanceled()) {
-                        LOGGER.info("Environment installation cancelled by user, attempting to stop pixi process...");
-                        
-                        // Interrupt the installation thread
-                        installationThread.interrupt();
-                        
-                        // Force kill pixi processes with better error handling
-                        killPixiProcesses();
-                        
-                        // Give the thread a moment to respond to interruption
-                        try {
-                            installationThread.join(2000); // Wait up to 2 seconds
-                        } catch (InterruptedException ex) {
-                            Thread.currentThread().interrupt();
-                            throw ex;
-                        }
-                        
-                        throw new InterruptedException("Environment installation was cancelled by user");
-                    }
-                    
-                    try {
-                        Thread.sleep(500);
-                    } catch (InterruptedException ex) {
-                        installationThread.interrupt();
-                        throw ex;
-                    }
-                }
-                
-                // Check if the installation thread encountered an exception
-                var exception = installationException.get();
-                if (exception != null) {
-                    if (exception instanceof IOException ioEx) {
-                        throw ioEx;
-                    } else if (exception instanceof PixiBinaryLocationException pixiEx) {
-                        throw pixiEx;
-                    } else if (exception instanceof InterruptedException interruptEx) {
-                        throw interruptEx;
-                    } else {
-                        throw new IOException("Environment installation failed: " + exception.getMessage(), exception);
-                    }
-                }
+                InstallCondaEnvironment.installCondaEnvironment( //
+                    artifactLocation, //
+                    environmentRoot, //
+                    bundlingRoot.getRoot(), //
+                    progressMonitor::isCanceled
+                );
 
                 // Create the metadata file next to the environment
                 StartupCreatedEnvironmentMetadata.write(ext.bundle().getVersion(), environmentRoot);
-                
+
                 // Also write environment_path.txt so this environment can be found via install-created logic
                 // This makes the environment discoverable even if KNIME_PYTHON_BUNDLING_PATH changes
                 try {
@@ -687,49 +628,15 @@ public final class CondaEnvironmentRegistry {
                     var installationRoot = fragmentLocation.getParent().getParent();
                     var relativePath = installationRoot.relativize(environmentRoot);
                     Files.writeString(environmentPathFile, relativePath.toString(), StandardCharsets.UTF_8);
-                    LOGGER.infoWithFormat("Written environment path file for startup-created environment: %s -> %s", 
+                    LOGGER.infoWithFormat("Written environment path file for startup-created environment: %s -> %s",
                         ext.environmentName(), relativePath);
                 } catch (IOException ex) {
                     // Log but don't fail the installation - metadata.properties is sufficient for startup-created envs
-                    LOGGER.warn("Failed to write environment_path.txt for " + ext.environmentName() + 
+                    LOGGER.warn("Failed to write environment_path.txt for " + ext.environmentName() +
                         ", environment will only be discoverable via metadata.properties: " + ex.getMessage());
                 }
 
                 return environmentRoot.resolve(".pixi").resolve("envs").resolve("default");
-            }
-
-            /**
-             * Attempts to forcefully kill any running pixi processes.
-             * This is a best-effort operation and failures are logged but not propagated.
-             */
-            private static void killPixiProcesses() {
-                try {
-                    Process killProcess;
-                    if (System.getProperty("os.name").toLowerCase().contains("win")) {
-                        killProcess = Runtime.getRuntime().exec("taskkill /F /IM pixi.exe");
-                    } else {
-                        killProcess = Runtime.getRuntime().exec(new String[]{"pkill", "-f", "pixi"});
-                    }
-                    
-                    // Wait for the kill command to complete with a timeout
-                    boolean finished = killProcess.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-                    if (finished) {
-                        int exitCode = killProcess.exitValue();
-                        if (exitCode == 0) {
-                            LOGGER.info("Successfully killed pixi processes");
-                        } else {
-                            LOGGER.warn("Kill command completed with exit code: " + exitCode);
-                        }
-                    } else {
-                        LOGGER.warn("Kill command timed out after 5 seconds");
-                        killProcess.destroyForcibly();
-                    }
-                } catch (IOException ex) {
-                    LOGGER.warn("Failed to execute kill command for pixi processes: " + ex.getMessage());
-                } catch (InterruptedException ex) {
-                    LOGGER.warn("Kill command was interrupted: " + ex.getMessage());
-                    Thread.currentThread().interrupt();
-                }
             }
         }
 
@@ -843,7 +750,7 @@ public final class CondaEnvironmentRegistry {
                     var version = props.getProperty("version");
                     var creationPath = props.getProperty("creationPath");
                     // Check for both "failed" and legacy "canceled" properties for backward compatibility
-                    var failed = Boolean.parseBoolean(props.getProperty("failed", "false")) || 
+                    var failed = Boolean.parseBoolean(props.getProperty("failed", "false")) ||
                                  Boolean.parseBoolean(props.getProperty("canceled", "false"));
                     var skipped = Boolean.parseBoolean(props.getProperty("skipped", "false"));
                     return Optional.of(new StartupCreatedEnvironmentMetadata(version, creationPath, failed, skipped));

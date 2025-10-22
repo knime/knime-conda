@@ -345,6 +345,24 @@ public final class InstallCondaEnvironment {
      */
     public static Path installCondaEnvironment(final Path artifactLocation, final Path envDestinationRoot,
         final Path bundlingRoot) throws IOException, PixiBinaryLocationException, InterruptedException {
+        return installCondaEnvironment(artifactLocation, envDestinationRoot, bundlingRoot, null);
+    }
+
+    /**
+     * Install the Conda environment with cancellation support.
+     *
+     * @param artifactLocation the location of the fragment that contains the environment to install
+     * @param envDestinationRoot the root directory where the environment will be installed
+     * @param bundlingRoot the bundling root directory, where the pixi cache will be stored
+     * @param cancellationCallback callback to check for cancellation (may be null)
+     * @return the path to the created environment
+     * @throws IOException if the installation fails because of an I/O error
+     * @throws PixiBinaryLocationException if the pixi binary could not be located
+     * @throws InterruptedException if waiting for {@code pixi install} to finish was interrupted or cancelled
+     */
+    public static Path installCondaEnvironment(final Path artifactLocation, final Path envDestinationRoot,
+        final Path bundlingRoot, final java.util.function.BooleanSupplier cancellationCallback) 
+        throws IOException, PixiBinaryLocationException, InterruptedException {
         var envResourcesFolder = artifactLocation.resolve("env");
         /* ------------------------------------------------------------- */
         /* 1) Create the environment root directory                      */
@@ -416,7 +434,7 @@ public final class InstallCondaEnvironment {
         /* ------------------------------------------------------------- */
         var pixiCacheDirStr = pixiCacheDir.toString();
         var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDirStr);
-        var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install", "--frozen");
+        var installResult = PixiBinary.callPixiWithCancellation(envDestinationRoot, envVars, cancellationCallback, "install", "--frozen");
         if (!installResult.isSuccess()) {
             var failureDetails = formatPixiFailure("pixi install", installResult);
             logError(failureDetails);

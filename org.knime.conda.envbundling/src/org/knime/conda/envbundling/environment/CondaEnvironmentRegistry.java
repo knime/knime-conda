@@ -611,8 +611,10 @@ public final class CondaEnvironmentRegistry {
                     throw new InterruptedException("Environment installation was cancelled before pixi install");
                 }
                 
+                // Create a shared container for exceptions from the installation thread
+                final var installationException = new AtomicReference<Exception>();
+                
                 // Create a thread that will do the actual installation
-                var currentThread = Thread.currentThread();
                 var installationThread = new Thread(() -> {
                     try {
                         InstallCondaEnvironment.installCondaEnvironment( //
@@ -621,8 +623,8 @@ public final class CondaEnvironmentRegistry {
                             bundlingRoot.getRoot() //
                         );
                     } catch (Exception ex) {
-                        // Interrupt the main thread to signal the exception
-                        currentThread.interrupt();
+                        // Store the exception for later retrieval
+                        installationException.set(ex);
                     }
                 });
                 
@@ -630,36 +632,48 @@ public final class CondaEnvironmentRegistry {
                 installationThread.start();
                 
                 // Wait for installation to complete, checking for cancellation
+                // Use 500ms interval to reduce CPU usage while maintaining reasonable responsiveness
                 while (installationThread.isAlive()) {
                     if (progressMonitor.isCanceled()) {
-                        // Kill the installation thread immediately
+                        LOGGER.info("Environment installation cancelled by user, attempting to stop pixi process...");
+                        
+                        // Interrupt the installation thread
                         installationThread.interrupt();
                         
-                        // Force kill all pixi processes
+                        // Force kill pixi processes with better error handling
+                        killPixiProcesses();
+                        
+                        // Give the thread a moment to respond to interruption
                         try {
-                            if (System.getProperty("os.name").toLowerCase().contains("win")) {
-                                Runtime.getRuntime().exec("taskkill /F /IM pixi.exe");
-                            } else {
-                                Runtime.getRuntime().exec("pkill -f pixi");
-                            }
-                        } catch (IOException ex) {
-                            // Ignore errors when killing processes
+                            installationThread.join(2000); // Wait up to 2 seconds
+                        } catch (InterruptedException ex) {
+                            Thread.currentThread().interrupt();
+                            throw ex;
                         }
                         
                         throw new InterruptedException("Environment installation was cancelled by user");
                     }
                     
                     try {
-                        Thread.sleep(100); // Check every 100ms
+                        Thread.sleep(500);
                     } catch (InterruptedException ex) {
                         installationThread.interrupt();
                         throw ex;
                     }
                 }
                 
-                // Check if the installation thread was interrupted (indicating an error)
-                if (Thread.interrupted()) {
-                    throw new IOException("Environment installation failed");
+                // Check if the installation thread encountered an exception
+                var exception = installationException.get();
+                if (exception != null) {
+                    if (exception instanceof IOException ioEx) {
+                        throw ioEx;
+                    } else if (exception instanceof PixiBinaryLocationException pixiEx) {
+                        throw pixiEx;
+                    } else if (exception instanceof InterruptedException interruptEx) {
+                        throw interruptEx;
+                    } else {
+                        throw new IOException("Environment installation failed: " + exception.getMessage(), exception);
+                    }
                 }
 
                 // Create the metadata file next to the environment
@@ -682,6 +696,40 @@ public final class CondaEnvironmentRegistry {
                 }
 
                 return environmentRoot.resolve(".pixi").resolve("envs").resolve("default");
+            }
+
+            /**
+             * Attempts to forcefully kill any running pixi processes.
+             * This is a best-effort operation and failures are logged but not propagated.
+             */
+            private static void killPixiProcesses() {
+                try {
+                    Process killProcess;
+                    if (System.getProperty("os.name").toLowerCase().contains("win")) {
+                        killProcess = Runtime.getRuntime().exec("taskkill /F /IM pixi.exe");
+                    } else {
+                        killProcess = Runtime.getRuntime().exec(new String[]{"pkill", "-f", "pixi"});
+                    }
+                    
+                    // Wait for the kill command to complete with a timeout
+                    boolean finished = killProcess.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                    if (finished) {
+                        int exitCode = killProcess.exitValue();
+                        if (exitCode == 0) {
+                            LOGGER.info("Successfully killed pixi processes");
+                        } else {
+                            LOGGER.warn("Kill command completed with exit code: " + exitCode);
+                        }
+                    } else {
+                        LOGGER.warn("Kill command timed out after 5 seconds");
+                        killProcess.destroyForcibly();
+                    }
+                } catch (IOException ex) {
+                    LOGGER.warn("Failed to execute kill command for pixi processes: " + ex.getMessage());
+                } catch (InterruptedException ex) {
+                    LOGGER.warn("Kill command was interrupted: " + ex.getMessage());
+                    Thread.currentThread().interrupt();
+                }
             }
         }
 
@@ -886,10 +934,10 @@ public final class CondaEnvironmentRegistry {
         try {
             Path environmentPathFile =
                 CondaEnvironmentBundlingUtils.getAbsolutePath(extension.binaryFragment(), ENVIRONMENT_PATH_FILE);
-            String environmentPath = (String) FileUtils.readFileToString(environmentPathFile.toFile(), StandardCharsets.UTF_8);
-            environmentPath = ((String) environmentPath).trim();
+            String environmentPath = FileUtils.readFileToString(environmentPathFile.toFile(), StandardCharsets.UTF_8);
+            environmentPath = environmentPath.trim();
             // Note: if environmentPath is absolute, resolve returns environmentPath directly
-            path = installationDirectoryPath.resolve((String) environmentPath);
+            path = installationDirectoryPath.resolve(environmentPath);
             LOGGER.debug("Found environment path '" + path + "' (before expansion: '" + environmentPath + "') for '"
                 + bundleName + "' in '" + environmentPathFile + "'");
 

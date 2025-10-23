@@ -417,7 +417,7 @@ public final class CondaEnvironmentRegistry {
                         + environmentRoot.toAbsolutePath() + ".");
             } else {
                 // Environment is up-to-date
-                var path = environmentRoot.resolve(".pixi").resolve("envs").resolve("default");
+                var path = InstallCondaEnvironment.resolvePixiEnvironmentPath(environmentRoot);
                 return new StartupCreatedEnvPath.Exists(
                     new CondaEnvironment(ext.bundle(), path, ext.environmentName(), ext.requiresDownload()));
             }
@@ -626,9 +626,10 @@ public final class CondaEnvironmentRegistry {
                     var fragmentLocation = artifactLocation; // artifactLocation is already the fragment path
                     Path environmentPathFile = fragmentLocation.resolve(InstallCondaEnvironment.ENVIRONMENT_PATH_FILE);
                     var installationRoot = fragmentLocation.getParent().getParent();
-                    var relativePath = installationRoot.relativize(environmentRoot);
+                    var actualEnvironmentPath = InstallCondaEnvironment.resolvePixiEnvironmentPath(environmentRoot);
+                    var relativePath = installationRoot.relativize(actualEnvironmentPath);
                     Files.writeString(environmentPathFile, relativePath.toString(), StandardCharsets.UTF_8);
-                    LOGGER.infoWithFormat("Written environment path file for startup-created environment: %s -> %s",
+                    LOGGER.infoWithFormat("Written environment path file for startup-created environment: %s -> %s (actual environment path)",
                         ext.environmentName(), relativePath);
                 } catch (IOException ex) {
                     // Log but don't fail the installation - metadata.properties is sufficient for startup-created envs
@@ -636,7 +637,7 @@ public final class CondaEnvironmentRegistry {
                         ", environment will only be discoverable via metadata.properties: " + ex.getMessage());
                 }
 
-                return environmentRoot.resolve(".pixi").resolve("envs").resolve("default");
+                return InstallCondaEnvironment.resolvePixiEnvironmentPath(environmentRoot);
             }
         }
 
@@ -845,8 +846,8 @@ public final class CondaEnvironmentRegistry {
             environmentPath = environmentPath.trim();
             // Note: if environmentPath is absolute, resolve returns environmentPath directly
             path = installationDirectoryPath.resolve(environmentPath);
-            LOGGER.debug("Found environment path '" + path + "' (before expansion: '" + environmentPath + "') for '"
-                + bundleName + "' in '" + environmentPathFile + "'");
+            LOGGER.debugWithFormat("Found environment path '%s' (before expansion: '%s') for '%s' in '%s'",
+                path, environmentPath, bundleName, environmentPathFile);
 
         } catch (IOException e) {
             // No problem, we only introduced the environment_path.txt file in 5.4. Trying other env locations...
@@ -886,6 +887,14 @@ public final class CondaEnvironmentRegistry {
                     + "Did the installation of the plugin fail?", bundleName), ex);
                 return Optional.empty();
             }
+        }
+
+        // If the path points to a pixi environment root (contains pixi.toml), adjust to point to the actual environment
+        if (Files.exists(path.resolve("pixi.toml"))) {
+            path = InstallCondaEnvironment.resolvePixiEnvironmentPath(path);
+            LOGGER.debugWithFormat("Adjusted pixi environment path to: %s for '%s'", path, bundleName);
+        } else {
+            LOGGER.debugWithFormat("No pixi.toml found at %s, using path as-is for '%s'", path, bundleName);
         }
 
         return Optional.of(

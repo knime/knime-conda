@@ -169,6 +169,16 @@ public final class InstallCondaEnvironment {
     private InstallCondaEnvironment() {
     }
 
+    /**
+     * Resolves the path to the actual Python environment from a pixi project root.
+     *
+     * @param pixiProjectRoot the root directory containing pixi.toml
+     * @return the path to the Python environment (pixiProjectRoot/.pixi/envs/default)
+     */
+    public static Path resolvePixiEnvironmentPath(final Path pixiProjectRoot) {
+        return pixiProjectRoot.resolve(".pixi").resolve("envs").resolve("default");
+    }
+
     /* --------------------------------------------------------------------- */
     /* Logging                                                               */
     /* --------------------------------------------------------------------- */
@@ -441,7 +451,7 @@ public final class InstallCondaEnvironment {
             throw new IOException("Installing the Pixi environment failed: " + failureDetails);
         }
 
-        return envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
+        return resolvePixiEnvironmentPath(envDestinationRoot);
     }
 
     /* --------------------------------------------------------------------- */

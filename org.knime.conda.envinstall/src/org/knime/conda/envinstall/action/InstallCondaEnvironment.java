@@ -747,7 +747,7 @@ public final class InstallCondaEnvironment {
      * @return the path to the bundling root directory
      * @throws IOException if the bundling directory cannot be created
      */
-    public static Path getBundlingRoot(final Path installationRoot) throws IOException {
+    private static Path getBundlingRoot(final Path installationRoot) throws IOException {
         var bundlingPathFromVar = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
         Path path;
         if (bundlingPathFromVar != null && !bundlingPathFromVar.isBlank()) {

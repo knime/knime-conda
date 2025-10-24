@@ -65,6 +65,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
@@ -134,8 +135,8 @@ public final class CondaEnvironmentRegistry {
     public static final boolean SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP =
         Boolean.getBoolean("knime.conda.skip_install_envs_on_startup");
 
-    /** Flag to track if conda environment installation is currently in progress */
-    private static volatile boolean s_environmentInstallationInProgress = false;
+    /** Flag to track if conda environment installation is currently in progress. */
+    private static final AtomicBoolean s_environmentInstallationInProgress = new AtomicBoolean(false);
 
     static {
         InstallCondaEnvironment.registerEnvironmentInstallListener(new EnvironmentInstallListener() {
@@ -183,7 +184,7 @@ public final class CondaEnvironmentRegistry {
      * @since 5.9
      */
     public static boolean isEnvironmentInstallationInProgress() {
-        return s_environmentInstallationInProgress;
+        return s_environmentInstallationInProgress.get();
     }
 
     /** @return a map of all environments that are installed. */
@@ -550,8 +551,8 @@ public final class CondaEnvironmentRegistry {
     private static List<CondaEnvironment>
         installStartupCreatedEnvironments(final List<StartupCreatedEnvPath.MustBeCreated> environmentsToInstall) {
 
-        // Set flag to indicate installation is in progress
-        s_environmentInstallationInProgress = true;
+    // Set flag to indicate installation is in progress
+    s_environmentInstallationInProgress.set(true);
 
         record InstallEnvironmentsRunnable( //
                 List<StartupCreatedEnvPath.MustBeCreated> envsToInstall, //
@@ -709,7 +710,7 @@ public final class CondaEnvironmentRegistry {
                 Thread.currentThread().interrupt();
             }
         } finally {
-            s_environmentInstallationInProgress = false; // Always reset the flag when installation completes or fails
+            s_environmentInstallationInProgress.set(false); // Always reset the flag when installation completes or fails
         }
 
         return environmentInstallRunnable.installedEnvironments;

@@ -75,7 +75,8 @@ public final class CondaEnvironment {
         this(bundle, path, name, requiresDownload, false);
     }
 
-    CondaEnvironment(final Bundle bundle, final Path path, final String name, final boolean requiresDownload, final boolean isDisabled) {
+    CondaEnvironment(final Bundle bundle, final Path path, final String name, final boolean requiresDownload,
+        final boolean isDisabled) {
         m_bundle = bundle;
         m_path = path;
         m_name = name;
@@ -121,12 +122,11 @@ public final class CondaEnvironment {
     }
 
     /**
-     * Creates a disabled placeholder environment for environments that are permanently unavailable.
-     * This prevents null pointer exceptions when the environment is accessed but clearly indicates
-     * that the environment cannot be used.
+     * Creates a disabled placeholder environment for environments that are permanently unavailable. This prevents null
+     * pointer exceptions when the environment is accessed but clearly indicates that the environment cannot be used.
      * 
      * @param bundle the bundle that defines the environment
-     * @param name the name of the environment
+     * @param name   the name of the environment
      * @return a disabled CondaEnvironment placeholder
      * @since 5.9
      */

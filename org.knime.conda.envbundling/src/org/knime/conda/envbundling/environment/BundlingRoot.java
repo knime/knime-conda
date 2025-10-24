@@ -48,7 +48,6 @@
  */
 package org.knime.conda.envbundling.environment;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -126,7 +125,7 @@ final class BundlingRoot {
      */
     private static Path getBundlingRootPath() throws IOException {
         Path installationRoot = getInstallationRoot();
-        
+
         // Implement the same logic as InstallCondaEnvironment.getBundlingRoot()
         var bundlingPathFromVar = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
         Path path;
@@ -143,7 +142,7 @@ final class BundlingRoot {
                 throw new IOException("Unable to create bundling directory " + path + ": " + ioe.getMessage(), ioe);
             }
         }
-        
+
         return path;
     }
 

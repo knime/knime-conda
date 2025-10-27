@@ -138,6 +138,9 @@ public final class CondaEnvironmentRegistry {
     /** Flag to track if conda environment installation is currently in progress. */
     private static final AtomicBoolean s_environmentInstallationInProgress = new AtomicBoolean(false);
 
+    /** Flag to track if early startup has been attempted. */
+    private static final AtomicBoolean s_earlyStartupAttempted = new AtomicBoolean(false);
+
     static {
         InstallCondaEnvironment.registerEnvironmentInstallListener(new EnvironmentInstallListener() {
             @Override
@@ -190,7 +193,17 @@ public final class CondaEnvironmentRegistry {
     /** @return a map of all environments that are installed. */
     public static Map<String, CondaEnvironment> getEnvironments() {
         if (m_environments.get() == null) {
-            initializeEnvironments(false);
+            // Check if environments should be created on startup  
+            boolean installOnStartup = Boolean.getBoolean("knime.conda.install_envs_on_startup");
+            if (installOnStartup && s_earlyStartupAttempted.compareAndSet(false, true)) {
+                // Force early startup execution for environment installation
+                LOGGER.info("Forcing early conda environment installation since delayed startup is enabled");
+                initializeEnvironments(true);
+            } else {
+                // Normal initialization without environment creation
+                boolean createEnvironments = !installOnStartup;
+                initializeEnvironments(createEnvironments);
+            }
         }
         return m_environments.get();
     }
@@ -201,9 +214,21 @@ public final class CondaEnvironmentRegistry {
      *
      * @param createEnvironments if true, the method will create all environments that are not yet created.
      */
-    static void initializeEnvironments(final boolean createEnvironments) {
+    public static void initializeEnvironments(final boolean createEnvironments) {
         synchronized (m_environments) {
+            try {
+                Thread.sleep(5000); // 5 second delay to see stack trace
+                LOGGER.info("Stack trace at initializeEnvironments(createEnvironments=" + createEnvironments + "):");
+                Thread.dumpStack();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             if (m_environments.get() == null) {
+                m_environments.set(collectEnvironmentsFromExtensions(createEnvironments));
+            } else if (createEnvironments) {
+                // Force re-collection to ensure environments are actually created
+                // This handles the case where initial discovery was done without creation
+                // but early startup hook now wants to create them (AP-24742)
                 m_environments.set(collectEnvironmentsFromExtensions(createEnvironments));
             }
         }
@@ -309,6 +334,24 @@ public final class CondaEnvironmentRegistry {
         }
 
         if (!environmentsToInstall.isEmpty()) {
+
+            // DEBUG code! TODO: Remove later
+            LOGGER.info("===============================================");
+            LOGGER.info("Debugging info: About to install startup-created environments...");
+            LOGGER.info("Current variables:");
+            LOGGER.info("createEnvironments: " + createEnvironments);
+            LOGGER.info("environmentsToInstall: " + environmentsToInstall);
+            LOGGER.info("SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP: " + SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP);
+            LOGGER.info("===============================================");
+            try {
+                Thread.sleep(5000); // 5 second delay to see stack trace
+                LOGGER.info("Stack trace at initializeEnvironments(createEnvironments=" + createEnvironments + "):");
+                Thread.dumpStack();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            // END DEBUG code
+
             LOGGER.debugWithFormat("Found %d Conda environments that need to be installed.",
                 environmentsToInstall.size());
             if (createEnvironments && !SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
@@ -687,23 +730,36 @@ public final class CondaEnvironmentRegistry {
             }
         }
 
-        // TODO(AP-24742) This probably does not work during warm start of the docker image (when the UI is not available).
-        var activeShell = Display.getDefault().getActiveShell();
-        var progressDialog = new ProgressMonitorDialog(activeShell);
+        // Check if we're in headless mode (e.g., Docker container, executor without UI)
+        var display = Display.getCurrent(); // prefer current; falls back to default below
+        var isHeadless = display == null || Boolean.getBoolean("java.awt.headless");
+        
         var environmentInstallRunnable =
             new InstallEnvironmentsRunnable(environmentsToInstall, new ArrayList<>(environmentsToInstall.size()));
 
         try {
-            // Note, that this blocks the KNIME AP startup
-            progressDialog.run( //
-                true, // run the runnable in a separate thread (so that the UI is not blocked)
-                true, // make cancelable - check isCanceled() in the runnable
-                environmentInstallRunnable //
-            );
+            if (isHeadless) {
+                // Run directly without progress dialog in headless mode
+                LOGGER.infoWithFormat("Installing %d conda environments in headless mode...", environmentsToInstall.size());
+                environmentInstallRunnable.run(new HeadlessProgressMonitor());
+            } else {
+                // Use progress dialog in GUI mode
+                var activeShell = display.getActiveShell();
+                var progressDialog = new ProgressMonitorDialog(activeShell);
+                // Note, that this blocks the KNIME AP startup
+                progressDialog.run( //
+                    true, // run the runnable in a separate thread (so that the UI is not blocked)
+                    true, // make cancelable - check isCanceled() in the runnable
+                    environmentInstallRunnable //
+                );
+            }
         } catch (InterruptedException | InvocationTargetException ex) {
             var message = ex.getMessage();
             LOGGER.error(ex);
-            MessageDialog.openError(activeShell, "Python environment creation failed", message);
+            if (!isHeadless) {
+                var activeShell = display.getActiveShell();
+                MessageDialog.openError(activeShell, "Python environment creation failed", message);
+            }
 
             // Restore the interrupted status
             if (ex instanceof InterruptedException) {
@@ -714,6 +770,62 @@ public final class CondaEnvironmentRegistry {
         }
 
         return environmentInstallRunnable.installedEnvironments;
+    }
+
+    /**
+     * Simple progress monitor implementation for headless environments (e.g., Docker containers).
+     * Logs progress instead of showing UI dialogs.
+     */
+    private static class HeadlessProgressMonitor implements IProgressMonitor {
+        private boolean canceled = false;
+        private String taskName = "";
+        private String subTaskName = "";
+
+        @Override
+        public void beginTask(String name, int totalWork) {
+            this.taskName = name;
+            LOGGER.infoWithFormat("Starting task: %s", name);
+        }
+
+        @Override
+        public void done() {
+            LOGGER.infoWithFormat("Completed task: %s", taskName);
+        }
+
+        @Override
+        public void internalWorked(double work) {
+            // No-op for headless mode
+        }
+
+        @Override
+        public boolean isCanceled() {
+            return canceled;
+        }
+
+        @Override
+        public void setCanceled(boolean value) {
+            this.canceled = value;
+            if (value) {
+                LOGGER.info("Task was canceled");
+            }
+        }
+
+        @Override
+        public void setTaskName(String name) {
+            this.taskName = name;
+            LOGGER.infoWithFormat("Task name changed to: %s", name);
+        }
+
+        @Override
+        public void subTask(String name) {
+            this.subTaskName = name;
+            LOGGER.infoWithFormat("Subtask: %s", name);
+        }
+
+        @Override
+        public void worked(int work) {
+            LOGGER.debugWithFormat("Progress: completed %d units of work for subtask: %s", work, subTaskName);
+        }
     }
 
     /**

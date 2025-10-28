@@ -9,4 +9,14 @@
             startupStage="AFTER_PROFILES_SET">
       </provider>
    </extension>
+   <extension
+         point="org.knime.product.warmstartAction">
+      <warmstartAction
+            id="org.knime.conda.envbundling.warmstartAction"
+            name="Conda Environment Installation"
+            class="org.knime.conda.envbundling.environment.CondaEnvironmentWarmstartAction"
+            priority="800"
+            description="Pre-installs all bundled conda environments to reduce startup time for subsequent runs">
+      </warmstartAction>
+   </extension>
 </plugin>

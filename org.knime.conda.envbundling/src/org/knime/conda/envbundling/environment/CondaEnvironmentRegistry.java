@@ -138,6 +138,9 @@ public final class CondaEnvironmentRegistry {
     /** Flag to track if conda environment installation is currently in progress. */
     private static final AtomicBoolean s_environmentInstallationInProgress = new AtomicBoolean(false);
 
+    /** Flag to track if environment installation has been completed. */
+    private static final AtomicBoolean s_environmentInstallationCompleted = new AtomicBoolean(false);
+
     static {
         InstallCondaEnvironment.registerEnvironmentInstallListener(new EnvironmentInstallListener() {
             @Override
@@ -189,10 +192,94 @@ public final class CondaEnvironmentRegistry {
 
     /** @return a map of all environments that are installed. */
     public static Map<String, CondaEnvironment> getEnvironments() {
-        if (m_environments.get() == null) {
+        // First check if environments are already available
+        Map<String, CondaEnvironment> environments = m_environments.get();
+        if (environments != null) {
+            return environments;
+        }
+
+        // Check if environments should be created on startup
+        boolean installOnStartup = Boolean.getBoolean("knime.conda.install_envs_on_startup");
+        
+        if (installOnStartup) {
+            // Wait for installation to complete or trigger it if not yet started
+            ensureEnvironmentInstallationCompleted();
+        } else {
+            // Normal flow: just discover environments without creating them
             initializeEnvironments(false);
         }
+
         return m_environments.get();
+    }
+
+    /**
+     * Ensures that conda environment installation is completed when delayed startup is enabled.
+     * This method handles the synchronization to ensure all threads wait for installation to complete.
+     */
+    private static void ensureEnvironmentInstallationCompleted() {
+        // Use a loop to handle the states properly
+        while (true) {
+            // Check if installation is already completed
+            if (s_environmentInstallationCompleted.get()) {
+                // Installation is done, environments should be available
+                return;
+            }
+
+            // Check if installation is currently in progress
+            if (s_environmentInstallationInProgress.get()) {
+                // Another thread is installing, wait for it to complete
+                LOGGER.info("Environment installation in progress, waiting for completion...");
+                waitForInstallationToComplete();
+                continue; // Re-check the state after waiting
+            }
+
+            // Try to start installation (atomic check-and-set)
+            if (s_environmentInstallationInProgress.compareAndSet(false, true)) {
+                try {
+                    LOGGER.info("Starting conda environment installation (delayed startup mode)");
+                    // We won the race to start installation
+                    initializeEnvironments(true);
+                    // Note: Don't set flags here - they will be managed by collectEnvironmentsFromExtensions
+                    return;
+                } catch (Exception e) {
+                    LOGGER.error("Failed to install conda environments during delayed startup", e);
+                    // Reset the progress flag so another thread can try
+                    s_environmentInstallationInProgress.set(false);
+                    // Fall back to discovery-only mode for this call
+                    initializeEnvironments(false);
+                    return;
+                }
+            }
+            
+            // If we reach here, another thread started installation between our checks
+            // Loop back to wait for it to complete
+        }
+    }
+
+    /**
+     * Waits for environment installation to complete by polling the progress flag.
+     */
+    private static void waitForInstallationToComplete() {
+        int attempts = 0;
+        final int maxAttempts = 60000;
+        
+        while (s_environmentInstallationInProgress.get() && attempts < maxAttempts) {
+            try {
+                Thread.sleep(500);
+                attempts++;
+                if (attempts % 10 == 0) {
+                    LOGGER.info("Waiting for conda environment installation to complete...");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOGGER.warn("Interrupted while waiting for environment installation to complete");
+                return;
+            }
+        }
+        
+        if (attempts >= maxAttempts) {
+            LOGGER.warn("Timed out waiting for environment installation to complete");
+        }
     }
 
     /**
@@ -201,7 +288,7 @@ public final class CondaEnvironmentRegistry {
      *
      * @param createEnvironments if true, the method will create all environments that are not yet created.
      */
-    static void initializeEnvironments(final boolean createEnvironments) {
+    public static void initializeEnvironments(final boolean createEnvironments) {
         synchronized (m_environments) {
             if (m_environments.get() == null) {
                 m_environments.set(collectEnvironmentsFromExtensions(createEnvironments));
@@ -311,11 +398,20 @@ public final class CondaEnvironmentRegistry {
         if (!environmentsToInstall.isEmpty()) {
             LOGGER.debugWithFormat("Found %d Conda environments that need to be installed.",
                 environmentsToInstall.size());
-            if (createEnvironments && !SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
+            if ((createEnvironments || !s_environmentInstallationCompleted.get()) && !SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
                 // NOTE: We ignore the flag here. If the flag was set during extension installation but is not set now,
                 // we still need to create the environments to make the extensions work.
-                var installedEnvs = installStartupCreatedEnvironments(environmentsToInstall);
-                installedEnvs.forEach(env -> addIfNotExists(environments, env));
+                LOGGER.debug("Starting installation of startup-created Conda environments.");
+                try {
+                    var installedEnvs = installStartupCreatedEnvironments(environmentsToInstall);
+                    installedEnvs.forEach(env -> addIfNotExists(environments, env));
+                    // Only mark as completed after actual installation finishes
+                    s_environmentInstallationCompleted.set(true);
+                    LOGGER.info("All conda environment installations completed successfully");
+                } finally {
+                    // Always reset the progress flag when installation finishes (success or failure)
+                    s_environmentInstallationInProgress.set(false);
+                }
             } else if (SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
                 LOGGER.infoWithFormat(
                     "Skipping installation of %d Conda environments because skip_install_envs_on_startup is enabled. "
@@ -469,10 +565,27 @@ public final class CondaEnvironmentRegistry {
      */
     // Visibility relaxed for test support of headless behavior.
     static UserChoice askUserForFailedEnvironment(final StartupCreatedEnvPath.Failed failedEnv) {
-        // If there is no display (headless / warm-start without UI) we cannot ask the user -> retry by default
-        var display = Display.getCurrent(); // prefer current; falls back to default below
-        if (display == null) { // headless scenario
+        // Check for headless mode before attempting any SWT operations
+        boolean isHeadless = Boolean.getBoolean("java.awt.headless") || System.getProperty("knime.headless") != null;
+        
+        if (isHeadless) {
             LOGGER.infoWithFormat("Headless startup: retrying failed environment '%s' automatically.",
+                failedEnv.ext().environmentName());
+            return UserChoice.RETRY; // attempt automatic recovery
+        }
+        
+        // Try to get Display, but fallback to headless if SWT is not available
+        final Display display;
+        try {
+            display = Display.getCurrent();
+        } catch (UnsatisfiedLinkError | NoClassDefFoundError e) {
+            LOGGER.infoWithFormat("SWT libraries not available, retrying failed environment '%s' automatically: %s",
+                failedEnv.ext().environmentName(), e.getMessage());
+            return UserChoice.RETRY; // attempt automatic recovery
+        }
+        
+        if (display == null) { // headless scenario
+            LOGGER.infoWithFormat("No display available, retrying failed environment '%s' automatically.",
                 failedEnv.ext().environmentName());
             return UserChoice.RETRY; // attempt automatic recovery
         }
@@ -551,8 +664,7 @@ public final class CondaEnvironmentRegistry {
     private static List<CondaEnvironment>
         installStartupCreatedEnvironments(final List<StartupCreatedEnvPath.MustBeCreated> environmentsToInstall) {
 
-    // Set flag to indicate installation is in progress
-    s_environmentInstallationInProgress.set(true);
+    LOGGER.info("Starting installation of startup-created Conda environments.");
 
         record InstallEnvironmentsRunnable( //
                 List<StartupCreatedEnvPath.MustBeCreated> envsToInstall, //
@@ -643,77 +755,127 @@ public final class CondaEnvironmentRegistry {
             private static Path installEnvironment(final CondaEnvironmentExtension ext,
                 final IProgressMonitor progressMonitor)
                 throws IOException, PixiBinaryLocationException, InterruptedException {
-                var bundlingRoot = BundlingRoot.getInstance();
+                // Delegate to the shared method
+                return CondaEnvironmentRegistry.installEnvironment(ext, progressMonitor);
+            }
+        }
 
-                // Install the environment
-                var artifactLocation = FileLocator.getBundleFileLocation(ext.binaryFragment()) //
-                    .orElseThrow(() -> new IllegalStateException("The binary fragment could not be located.")) //
-                    .toPath() //
-                    .toAbsolutePath();
-                var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
+        var installedEnvironments = new ArrayList<CondaEnvironment>();
 
-                // Check for cancellation before starting the long-running pixi operation
-                if (progressMonitor.isCanceled()) {
-                    throw new InterruptedException("Environment installation was cancelled before pixi install");
-                }
-                InstallCondaEnvironment.installCondaEnvironment( //
-                    artifactLocation, //
-                    environmentRoot, //
-                    bundlingRoot.getRoot(), //
-                    progressMonitor::isCanceled);
-
-                // Create the metadata file next to the environment
-                StartupCreatedEnvironmentMetadata.write(ext.bundle().getVersion(), environmentRoot);
-
-                // Also write environment_path.txt so this environment can be found via install-created logic
-                // This makes the environment discoverable even if KNIME_PYTHON_BUNDLING_PATH changes
+        // Check for headless mode before attempting any SWT operations
+        boolean isHeadless = Boolean.getBoolean("java.awt.headless") || System.getProperty("knime.headless") != null;
+        Display display = null;
+        
+        if (!isHeadless) {
+            // Try to use Display, but fallback to headless if SWT is not available
+            try {
+                display = Display.getCurrent();
+            } catch (UnsatisfiedLinkError | NoClassDefFoundError e) {
+                LOGGER.info("SWT libraries not available, falling back to headless mode: " + e.getMessage());
+                isHeadless = true;
+            }
+            
+            if (display == null) {
+                LOGGER.info("No display available, falling back to headless mode");
+                isHeadless = true;
+            }
+        }
+        
+        if (isHeadless) {
+            LOGGER.info("Running in headless mode - installing environments without progress dialog");
+            for (var mustBeCreated : environmentsToInstall) {
+                var ext = mustBeCreated.ext();
                 try {
-                    var fragmentLocation = artifactLocation; // artifactLocation is already the fragment path
-                    Path environmentPathFile = fragmentLocation.resolve(InstallCondaEnvironment.ENVIRONMENT_PATH_FILE);
-                    var installationRoot = fragmentLocation.getParent().getParent();
-                    var actualEnvironmentPath = InstallCondaEnvironment.resolvePixiEnvironmentPath(environmentRoot);
-                    var relativePath = installationRoot.relativize(actualEnvironmentPath);
-                    Files.writeString(environmentPathFile, relativePath.toString(), StandardCharsets.UTF_8);
-                    LOGGER.infoWithFormat(
-                        "Written environment path file for startup-created environment: %s -> %s (actual environment path)",
-                        ext.environmentName(), relativePath);
-                } catch (IOException ex) {
-                    // Log but don't fail the installation - metadata.properties is sufficient for startup-created envs
-                    LOGGER.warn("Failed to write environment_path.txt for " + ext.environmentName()
-                        + ", environment will only be discoverable via metadata.properties: " + ex.getMessage());
+                    LOGGER.info("Installing environment: " + mustBeCreated.message());
+                    var envPath = installEnvironment(ext, null);
+                    installedEnvironments.add(new CondaEnvironment(ext.bundle(), envPath, ext.environmentName(), ext.requiresDownload()));
+                } catch (Exception ex) {
+                    LOGGER.error("Failed to install environment " + ext.environmentName() + ": " + ex.getMessage(), ex);
+                    writeFailedMetadata(ext);
                 }
+            }
+        } else {
+            // Install environments with UI progress dialog
+            var activeShell = display.getActiveShell();
+            var progressDialog = new ProgressMonitorDialog(activeShell);
+            var environmentInstallRunnable = new InstallEnvironmentsRunnable(environmentsToInstall, installedEnvironments);
 
-                return InstallCondaEnvironment.resolvePixiEnvironmentPath(environmentRoot);
+            try {
+                progressDialog.run(true, true, environmentInstallRunnable);
+            } catch (InterruptedException | InvocationTargetException ex) {
+                LOGGER.error(ex);
+                MessageDialog.openError(activeShell, "Python environment creation failed", ex.getMessage());
+                if (ex instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
 
-        // TODO(AP-24742) This probably does not work during warm start of the docker image (when the UI is not available).
-        var activeShell = Display.getDefault().getActiveShell();
-        var progressDialog = new ProgressMonitorDialog(activeShell);
-        var environmentInstallRunnable =
-            new InstallEnvironmentsRunnable(environmentsToInstall, new ArrayList<>(environmentsToInstall.size()));
+        return installedEnvironments;
+    }
 
+    /**
+     * Install a single environment (shared by both UI and headless modes).
+     */
+    private static Path installEnvironment(final CondaEnvironmentExtension ext, final IProgressMonitor progressMonitor) 
+            throws IOException, PixiBinaryLocationException, InterruptedException {
+        var bundlingRoot = BundlingRoot.getInstance();
+
+        // Install the environment
+        var artifactLocation = FileLocator.getBundleFileLocation(ext.binaryFragment()) //
+            .orElseThrow(() -> new IllegalStateException("The binary fragment could not be located.")) //
+            .toPath() //
+            .toAbsolutePath();
+        var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
+
+        // Check for cancellation before starting the long-running pixi operation (if progress monitor available)
+        if (progressMonitor != null && progressMonitor.isCanceled()) {
+            throw new InterruptedException("Environment installation was cancelled before pixi install");
+        }
+        
+        InstallCondaEnvironment.installCondaEnvironment( //
+            artifactLocation, //
+            environmentRoot, //
+            bundlingRoot.getRoot(), //
+            progressMonitor != null ? progressMonitor::isCanceled : null);
+
+        // Create the metadata file next to the environment
+        StartupCreatedEnvironmentMetadata.write(ext.bundle().getVersion(), environmentRoot);
+
+        // Also write environment_path.txt so this environment can be found via install-created logic
         try {
-            // Note, that this blocks the KNIME AP startup
-            progressDialog.run( //
-                true, // run the runnable in a separate thread (so that the UI is not blocked)
-                true, // make cancelable - check isCanceled() in the runnable
-                environmentInstallRunnable //
-            );
-        } catch (InterruptedException | InvocationTargetException ex) {
-            var message = ex.getMessage();
-            LOGGER.error(ex);
-            MessageDialog.openError(activeShell, "Python environment creation failed", message);
-
-            // Restore the interrupted status
-            if (ex instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-        } finally {
-            s_environmentInstallationInProgress.set(false); // Always reset the flag when installation completes or fails
+            var fragmentLocation = artifactLocation; // artifactLocation is already the fragment path
+            Path environmentPathFile = fragmentLocation.resolve(InstallCondaEnvironment.ENVIRONMENT_PATH_FILE);
+            var installationRoot = fragmentLocation.getParent().getParent();
+            var actualEnvironmentPath = InstallCondaEnvironment.resolvePixiEnvironmentPath(environmentRoot);
+            var relativePath = installationRoot.relativize(actualEnvironmentPath);
+            Files.writeString(environmentPathFile, relativePath.toString(), StandardCharsets.UTF_8);
+            LOGGER.infoWithFormat(
+                "Written environment path file for startup-created environment: %s -> %s (actual environment path)",
+                ext.environmentName(), relativePath);
+        } catch (IOException ex) {
+            // Log but don't fail the installation - metadata.properties is sufficient for startup-created envs
+            LOGGER.warn("Failed to write environment_path.txt for " + ext.environmentName()
+                + ", environment will only be discoverable via metadata.properties: " + ex.getMessage());
         }
 
-        return environmentInstallRunnable.installedEnvironments;
+        return InstallCondaEnvironment.resolvePixiEnvironmentPath(environmentRoot);
+    }
+
+    /**
+     * Write failed metadata for an environment that failed to install.
+     */
+    private static void writeFailedMetadata(final CondaEnvironmentExtension ext) {
+        try {
+            var bundlingRoot = BundlingRoot.getInstance();
+            var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
+            if (!Files.exists(environmentRoot)) {
+                Files.createDirectories(environmentRoot);
+            }
+            StartupCreatedEnvironmentMetadata.writeFailed(ext.bundle().getVersion(), environmentRoot);
+        } catch (IOException ex2) {
+            LOGGER.error("Failed to write failed metadata for environment " + ext.environmentName(), ex2);
+        }
     }
 
     /**

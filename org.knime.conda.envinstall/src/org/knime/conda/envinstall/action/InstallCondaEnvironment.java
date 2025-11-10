@@ -160,10 +160,6 @@ public final class InstallCondaEnvironment {
     /** The name of the file that contains the path to the environment location */
     public static final String ENVIRONMENT_PATH_FILE = "environment_path.txt";
 
-    /** Whether to install the conda environments on startup instead of installation time. */
-    public static final boolean INSTALL_CONDA_ENVIRONMENT_ON_STARTUP =
-        Boolean.getBoolean("knime.conda.install_envs_on_startup");
-
     private static final String PIXI_CACHE_DIRECTORY_NAME = ".pixi-cache";
 
     private InstallCondaEnvironment() {
@@ -559,43 +555,24 @@ public final class InstallCondaEnvironment {
     /* Actions                                                               */
     /* --------------------------------------------------------------------- */
 
-    /** Installs the environment contained in the fragment bundle. See {@link InstallCondaEnvironment} for details. */
+    /**
+     * Was used to install the environment contained in the fragment bundle during fragment installation until 5.8.
+     * Environments are installed during startup by default since 5.9.
+     *
+     * However, some plug-ins might still have a call to this action in their p2.inf, and thus we keep the action as
+     * empty placeholder.
+     */
     public static final class InstallAction extends ProvisioningAction {
 
         @Override
         public IStatus execute(final Map<String, Object> parameterMap) {
-            if (INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
-                logInfo("Conda environment installation is configured to run on startup, skipping execution.");
-                return Status.OK_STATUS;
-            }
-
-            try {
-                var p = Parameters.from(parameterMap);
-                installEnvironmentFromAction(p.directory, p.name);
-            } catch (Exception e) {
-                logError("Exception while installing environment: " + e.getMessage(), e);
-                return Status.error("Running InstallCondaEnvironment action failed", e);
-            }
-
+            logInfo("Conda environment installation will run on startup, skipping it during plugin installation.");
             return Status.OK_STATUS;
         }
 
         @Override
         public IStatus undo(final Map<String, Object> parameterMap) {
-            if (INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
-                // We did not do anything on install, so we do not need to undo anything.
-                logInfo("Conda environment installation is configured to run on startup, skipping undo.");
-                return Status.OK_STATUS;
-            }
-
-            try {
-                var p = Parameters.from(parameterMap);
-                uninstallEnvironment(p.directory, p.name);
-            } catch (Exception e) {
-                logError("Exception while undoing InstallCondaEnvironment: " + e.getMessage(), e);
-                return Status.error("Undoing InstallCondaEnvironment action failed", e);
-            }
-
+            logInfo("Conda environment installation will run on startup, nothing to undo.");
             return Status.OK_STATUS;
         }
     }
@@ -605,8 +582,8 @@ public final class InstallCondaEnvironment {
 
         @Override
         public IStatus execute(final Map<String, Object> parameterMap) {
-            // NOTE: We run the uninstall action even if the environment installation is configured to run on startup.
-            // to delete the environment in the installation directory.
+            // NOTE: We run the uninstall action even though environments are installed
+            // during startup, because we want to delete the environment from the installation directory.
             try {
                 // TODO(AP-24745) check if this fails if the environment was not installed before
                 var p = Parameters.from(parameterMap);
@@ -621,15 +598,9 @@ public final class InstallCondaEnvironment {
 
         @Override
         public IStatus undo(final Map<String, Object> parameterMap) {
-            if (INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
-                // The uninstall might have deleted the environment, but this is no problem because we are configured to
-                // install the environment on startup anyway.
-                logInfo(
-                    "Conda environment installation is configured to run on startup, skipping undoing the uninstall.");
-                return Status.OK_STATUS;
-            }
-
-            // Undo the uninstall action by installing the environment again
+            // When undoing the uninstall action, the environment needs to be re-installing immediately
+            // instead of waiting until startup, because a failed uninstallation should look to the user
+            // as if nothing has changed, including that the Python environment still exists.
             try {
                 var p = Parameters.from(parameterMap);
                 installEnvironmentFromAction(p.directory, p.name);

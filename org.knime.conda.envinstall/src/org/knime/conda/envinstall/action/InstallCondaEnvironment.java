@@ -371,7 +371,7 @@ public final class InstallCondaEnvironment {
      * @throws InterruptedException if waiting for {@code pixi install} to finish was interrupted or cancelled
      */
     public static Path installCondaEnvironment(final Path artifactLocation, final Path envDestinationRoot,
-        final Path bundlingRoot, final java.util.function.BooleanSupplier cancellationCallback) 
+        final Path bundlingRoot, final java.util.function.BooleanSupplier cancellationCallback)
         throws IOException, PixiBinaryLocationException, InterruptedException {
         var envResourcesFolder = artifactLocation.resolve("env");
         /* ------------------------------------------------------------- */
@@ -414,7 +414,7 @@ public final class InstallCondaEnvironment {
                 // Check if we need to clean cache based on version comparison
                 var newVersion = extractVersionFromPackageName(knimePythonVersions);
                 var cachedPackages = findCachedPackagesByPrefix(pixiCacheDir, "knime-python-versions");
-                
+
                 boolean shouldCleanCache = false;
                 if (newVersion != null && !cachedPackages.isEmpty()) {
                     // Check if the new version is newer than any cached version
@@ -431,7 +431,7 @@ public final class InstallCondaEnvironment {
                     shouldCleanCache = true;
                     logInfo("Could not determine version for knime-python-versions - cleaning cache to be safe.");
                 }
-                
+
                 if (shouldCleanCache && Files.isDirectory(pixiCacheDir)) {
                     logInfo("Cleaning pixi cache directory: " + pixiCacheDir);
                     PathUtils.deleteDirectory(pixiCacheDir);
@@ -648,7 +648,7 @@ public final class InstallCondaEnvironment {
 
     /**
      * Finds all cached packages with the given prefix in the pixi cache directory.
-     * 
+     *
      * @param pixiCacheDir the pixi cache directory
      * @param packageNamePrefix the prefix to search for (e.g., "knime-python-versions")
      * @return a list of package names found in the cache, or empty list if none found
@@ -658,7 +658,7 @@ public final class InstallCondaEnvironment {
         if (!Files.isDirectory(pkgsDir)) {
             return List.of();
         }
-        
+
         try (var stream = Files.list(pkgsDir)) {
             return stream
                 .filter(Files::isDirectory)
@@ -672,7 +672,7 @@ public final class InstallCondaEnvironment {
 
     /**
      * Extracts the version string from a knime-python-versions package name.
-     * 
+     *
      * @param packageName the package name, e.g., "knime-python-versions-5.4.0-py310_202407150939"
      * @return the version string, e.g., "5.4.0" or null if version cannot be extracted
      */
@@ -680,22 +680,22 @@ public final class InstallCondaEnvironment {
         if (packageName == null || !packageName.startsWith("knime-python-versions-")) {
             return null;
         }
-        
+
         // Remove the prefix "knime-python-versions-"
         var withoutPrefix = packageName.substring("knime-python-versions-".length());
-        
+
         // Find the first occurrence of "-py" to extract the version part
         var pyIndex = withoutPrefix.indexOf("-py");
         if (pyIndex == -1) {
             return null;
         }
-        
+
         return withoutPrefix.substring(0, pyIndex);
     }
 
     /**
      * Compares two version strings (e.g., "5.4.0" vs "5.3.1").
-     * 
+     *
      * @param version1 the first version string
      * @param version2 the second version string
      * @return positive if version1 > version2, negative if version1 < version2, zero if equal
@@ -710,20 +710,20 @@ public final class InstallCondaEnvironment {
         if (version2 == null) {
             return 1;
         }
-        
+
         var parts1 = version1.split("\\.");
         var parts2 = version2.split("\\.");
         var maxLength = Math.max(parts1.length, parts2.length);
-        
+
         for (int i = 0; i < maxLength; i++) {
             var part1 = i < parts1.length ? parseVersionPart(parts1[i]) : 0;
             var part2 = i < parts2.length ? parseVersionPart(parts2[i]) : 0;
-            
+
             if (part1 != part2) {
                 return Integer.compare(part1, part2);
             }
         }
-        
+
         return 0;
     }
 
@@ -742,7 +742,7 @@ public final class InstallCondaEnvironment {
 
     /**
      * Determines the bundling root path, respecting the KNIME_PYTHON_BUNDLING_PATH environment variable.
-     * 
+     *
      * @param installationRoot the KNIME installation root directory
      * @return the path to the bundling root directory
      * @throws IOException if the bundling directory cannot be created

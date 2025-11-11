@@ -63,7 +63,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -82,15 +81,11 @@ import org.eclipse.jface.operation.IRunnableWithProgress;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Shell;
 import org.knime.conda.envbundling.CondaEnvironmentBundlingUtils;
-import org.knime.conda.envbundling.environment.BundlingRoot;
-import org.knime.conda.envbundling.environment.CondaEnvironment;
-import org.knime.conda.envbundling.environment.StartupCreatedEnvironmentMetadata;
 import org.knime.conda.envinstall.action.InstallCondaEnvironment;
 import org.knime.conda.envinstall.action.InstallCondaEnvironment.EnvironmentInstallListener;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 import org.knime.core.node.NodeLogger;
 import org.osgi.framework.Bundle;
-import org.osgi.framework.Version;
 
 /**
  * A registry for bundled conda channels.
@@ -136,16 +131,17 @@ public final class CondaEnvironmentRegistry {
 
     /**
      * Whether to skip the installation of the conda environments on startup instead of installation time.
+     *
      * @since 5.9
      */
     public static final boolean SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP =
         Boolean.getBoolean("knime.conda.skip_install_envs_on_startup");
 
-    /** Flag to track if conda environment installation is currently in progress. */
+    /**
+     * Flag to track if conda environment installation is currently in progress. This is used in knime-product by
+     * reflecting on this fields method.
+     */
     private static final AtomicBoolean s_environmentInstallationInProgress = new AtomicBoolean(false);
-
-    /** Flag to track if environment installation has been completed. */
-    private static final AtomicBoolean s_environmentInstallationCompleted = new AtomicBoolean(false);
 
     static {
         InstallCondaEnvironment.registerEnvironmentInstallListener(new EnvironmentInstallListener() {
@@ -206,96 +202,18 @@ public final class CondaEnvironmentRegistry {
 
         // Check if environments should be created on startup
         boolean installOnStartup = Boolean.getBoolean("knime.conda.install_envs_on_startup");
-
-        if (installOnStartup) {
-            // Wait for installation to complete or trigger it if not yet started
-            ensureEnvironmentInstallationCompleted();
-        } else {
-            // Normal flow: just discover environments without creating them
-            initializeEnvironments(false);
-        }
-
+        initializeEnvironments(installOnStartup);
         return m_environments.get();
     }
 
     /**
-     * Ensures that conda environment installation is completed when delayed startup is enabled.
-     * This method handles the synchronization to ensure all threads wait for installation to complete.
-     */
-    private static void ensureEnvironmentInstallationCompleted() {
-        // Use a loop to handle the states properly
-        while (true) {
-            // Check if installation is already completed
-            if (s_environmentInstallationCompleted.get()) {
-                // Installation is done, environments should be available
-                return;
-            }
-
-            // Check if installation is currently in progress
-            if (s_environmentInstallationInProgress.get()) {
-                // Another thread is installing, wait for it to complete
-                LOGGER.info("Environment installation in progress, waiting for completion...");
-                waitForInstallationToComplete();
-                continue; // Re-check the state after waiting
-            }
-
-            // Try to start installation (atomic check-and-set)
-            if (s_environmentInstallationInProgress.compareAndSet(false, true)) {
-                try {
-                    LOGGER.info("Starting conda environment installation (delayed startup mode)");
-                    // We won the race to start installation
-                    initializeEnvironments(true);
-                    // Note: Don't set flags here - they will be managed by collectEnvironmentsFromExtensions
-                    return;
-                } catch (Exception e) {
-                    LOGGER.error("Failed to install conda environments during delayed startup", e);
-                    // Reset the progress flag so another thread can try
-                    s_environmentInstallationInProgress.set(false);
-                    // Fall back to discovery-only mode for this call
-                    initializeEnvironments(false);
-                    return;
-                }
-            }
-
-            // If we reach here, another thread started installation between our checks
-            // Loop back to wait for it to complete
-        }
-    }
-
-    /**
-     * Waits for environment installation to complete by polling the progress flag.
-     */
-    private static void waitForInstallationToComplete() {
-        int attempts = 0;
-        final int maxAttempts = 60000;
-
-        while (s_environmentInstallationInProgress.get() && attempts < maxAttempts) {
-            try {
-                Thread.sleep(500);
-                attempts++;
-                if (attempts % 10 == 0) {
-                    LOGGER.info("Waiting for conda environment installation to complete...");
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                LOGGER.warn("Interrupted while waiting for environment installation to complete");
-                return;
-            }
-        }
-
-        if (attempts >= maxAttempts) {
-            LOGGER.warn("Timed out waiting for environment installation to complete");
-        }
-    }
-
-    /**
      * Initialize the environment registry. This method is called with <code>createEnvironments</code> set to true once
-     * at the startup of the application to create all environments that were created during installation.
+     * at the startup of the application to create all environments that were not created during installation. By
+     * default, headless mode is false.
      *
      * @param createEnvironments if true, the method will create all environments that are not yet created.
-     * @since 5.9
      */
-    public static void initializeEnvironments(final boolean createEnvironments) {
+    static void initializeEnvironments(final boolean createEnvironments) {
         initializeEnvironments(createEnvironments, false);
     }
 
@@ -304,9 +222,8 @@ public final class CondaEnvironmentRegistry {
      *
      * @param createEnvironments if true, the method will create all environments that are not yet created.
      * @param isHeadless if true, operations will run in headless mode without UI dialogs
-     * @since 5.9
      */
-    public static void initializeEnvironments(final boolean createEnvironments, final boolean isHeadless) {
+    static void initializeEnvironments(final boolean createEnvironments, final boolean isHeadless) {
         synchronized (m_environments) {
             if (m_environments.get() == null) {
                 m_environments.set(collectEnvironmentsFromExtensions(createEnvironments, isHeadless));
@@ -315,7 +232,8 @@ public final class CondaEnvironmentRegistry {
     }
 
     /** Loop through extensions and collect them in a Map */
-    private static Map<String, CondaEnvironment> collectEnvironmentsFromExtensions(final boolean createEnvironments, final boolean isHeadless) {
+    private static Map<String, CondaEnvironment> collectEnvironmentsFromExtensions(final boolean createEnvironments,
+        final boolean isHeadless) {
         final Map<String, CondaEnvironment> environments = new HashMap<>();
         final IExtensionRegistry registry = Platform.getExtensionRegistry();
         final IExtensionPoint point = registry.getExtensionPoint(EXT_POINT_ID);
@@ -416,11 +334,10 @@ public final class CondaEnvironmentRegistry {
         if (!environmentsToInstall.isEmpty()) {
             LOGGER.debugWithFormat("Found %d Conda environments that need to be installed.",
                 environmentsToInstall.size());
-            if ((createEnvironments || !s_environmentInstallationCompleted.get()) && !SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
-                // NOTE: We ignore the flag here. If the flag was set during extension installation but is not set now,
-                // we still need to create the environments to make the extensions work.
+            if (createEnvironments && !SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
                 LOGGER.debug("Starting installation of startup-created Conda environments.");
                 try {
+                    s_environmentInstallationInProgress.set(true);
                     var installedEnvs = Collections.<CondaEnvironment> emptyList();
                     if (isHeadless) {
                         installedEnvs = installEnvironmentsHeadless(environmentsToInstall);
@@ -428,8 +345,6 @@ public final class CondaEnvironmentRegistry {
                         installedEnvs = installEnvironmentsWithUI(environmentsToInstall);
                     }
                     installedEnvs.forEach(env -> addIfNotExists(environments, env));
-                    // Only mark as completed after actual installation finishes
-                    s_environmentInstallationCompleted.set(true);
                     LOGGER.info("All conda environment installations completed successfully");
                 } finally {
                     // Always reset the progress flag when installation finishes (success or failure)
@@ -468,7 +383,7 @@ public final class CondaEnvironmentRegistry {
 
     /** Extracted information from an extension for the CondaEnvironment extension point. */
     private record CondaEnvironmentExtension(Bundle bundle, String environmentName, Bundle binaryFragment,
-            boolean requiresDownload) {
+        boolean requiresDownload) {
 
         /** Extract basic information from the extension. */
         private static Optional<CondaEnvironmentExtension> of(final IExtension extension) {
@@ -576,7 +491,7 @@ public final class CondaEnvironmentRegistry {
     /**
      * User choices for handling failed environment installations.
      */
-    private enum UserChoice {
+    enum UserChoice {
             RETRY, SKIP, SKIP_PERMANENTLY
     }
 
@@ -585,10 +500,11 @@ public final class CondaEnvironmentRegistry {
      *
      * @param failedEnv the failed environment information
      * @param isHeadless if true, automatically retry without showing UI dialogs
-     * @return the user's choice
+     * @return the user's choice or automatic retry if opening the dialog failed
      */
     // Visibility relaxed for test support of headless behavior.
-    static UserChoice askUserForFailedEnvironment(final StartupCreatedEnvPath.Failed failedEnv, final boolean isHeadless) {
+    static UserChoice askUserForFailedEnvironment(final StartupCreatedEnvPath.Failed failedEnv,
+        final boolean isHeadless) {
         if (isHeadless) {
             LOGGER.infoWithFormat("Headless startup: retrying failed environment '%s' automatically.",
                 failedEnv.ext().environmentName());
@@ -657,8 +573,8 @@ public final class CondaEnvironmentRegistry {
     }
 
     /** Return value of {@link #findStartupCreatedEnvironment(CondaEnvironmentExtension)}. */
-    private sealed interface StartupCreatedEnvPath permits StartupCreatedEnvPath.Exists,
-            StartupCreatedEnvPath.MustBeCreated, StartupCreatedEnvPath.Failed, StartupCreatedEnvPath.Skipped {
+    sealed interface StartupCreatedEnvPath permits StartupCreatedEnvPath.Exists, StartupCreatedEnvPath.MustBeCreated,
+        StartupCreatedEnvPath.Failed, StartupCreatedEnvPath.Skipped {
 
         /** Indicates that the environment exists and can be used as is. */
         @SuppressWarnings("javadoc") // it's private
@@ -681,25 +597,11 @@ public final class CondaEnvironmentRegistry {
         }
     }
 
-
-
-    /** Create conda environments. Blocks and shows a progress monitor to the user. */
-    private static List<CondaEnvironment>
-        installStartupCreatedEnvironments(final List<StartupCreatedEnvPath.MustBeCreated> environmentsToInstall, final boolean isHeadless) {
-
-        LOGGER.info("Starting installation of startup-created Conda environments.");
-
-        if (isHeadless) {
-            return installEnvironmentsHeadless(environmentsToInstall);
-        } else {
-            return installEnvironmentsWithUI(environmentsToInstall);
-        }
-    }
-
     /**
      * Install environments in headless mode without UI progress dialog.
      */
-    private static List<CondaEnvironment> installEnvironmentsHeadless(final List<StartupCreatedEnvPath.MustBeCreated> environmentsToInstall) {
+    private static List<CondaEnvironment>
+        installEnvironmentsHeadless(final List<StartupCreatedEnvPath.MustBeCreated> environmentsToInstall) {
         LOGGER.info("Running in headless mode - installing environments without progress dialog");
         var installedEnvironments = new ArrayList<CondaEnvironment>();
 
@@ -708,8 +610,9 @@ public final class CondaEnvironmentRegistry {
             try {
                 LOGGER.info("Installing environment: " + mustBeCreated.message());
                 var envPath = installEnvironment(ext, null);
-                installedEnvironments.add(new CondaEnvironment(ext.bundle(), envPath, ext.environmentName(), ext.requiresDownload()));
-            } catch (Exception ex) {
+                installedEnvironments
+                    .add(new CondaEnvironment(ext.bundle(), envPath, ext.environmentName(), ext.requiresDownload()));
+            } catch (Exception ex) { // NOSONAR: we want to catch all exceptions here to log and write metadata
                 LOGGER.error("Failed to install environment " + ext.environmentName() + ": " + ex.getMessage(), ex);
                 writeFailedMetadata(ext);
             }
@@ -721,7 +624,8 @@ public final class CondaEnvironmentRegistry {
     /**
      * Install environments with UI progress dialog, with fallback to headless mode if UI is not available.
      */
-    private static List<CondaEnvironment> installEnvironmentsWithUI(final List<StartupCreatedEnvPath.MustBeCreated> environmentsToInstall) {
+    private static List<CondaEnvironment>
+        installEnvironmentsWithUI(final List<StartupCreatedEnvPath.MustBeCreated> environmentsToInstall) {
         // Try to get Display, fallback to headless if SWT is not available
         final Display display;
         try {
@@ -771,9 +675,9 @@ public final class CondaEnvironmentRegistry {
                         var message = createFailureMessage(ext, ex);
                         throw new InvocationTargetException(ex, message);
                     }
-                progressMonitor.worked(1);
+                    progressMonitor.worked(1);
+                }
             }
-        }
 
             private void writeFailedMetadataForRemainingEnvironments(final int startIndex) {
                 for (var i = startIndex; i < envsToInstall.size(); i++) {
@@ -782,51 +686,51 @@ public final class CondaEnvironmentRegistry {
                 }
             }
 
-        private static Path installEnvironment(final CondaEnvironmentExtension ext,
-            final IProgressMonitor progressMonitor)
-            throws IOException, PixiBinaryLocationException, InterruptedException {
-            var bundlingRoot = BundlingRoot.getInstance();
+            private static Path installEnvironment(final CondaEnvironmentExtension ext,
+                final IProgressMonitor progressMonitor)
+                throws IOException, PixiBinaryLocationException, InterruptedException {
+                var bundlingRoot = BundlingRoot.getInstance();
 
-            // Install the environment
-            var artifactLocation = FileLocator.getBundleFileLocation(ext.binaryFragment()) //
-                .orElseThrow(() -> new IllegalStateException("The binary fragment could not be located.")) //
-                .toPath() //
-                .toAbsolutePath();
-            var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
+                // Install the environment
+                var artifactLocation = FileLocator.getBundleFileLocation(ext.binaryFragment()) //
+                    .orElseThrow(() -> new IllegalStateException("The binary fragment could not be located.")) //
+                    .toPath() //
+                    .toAbsolutePath();
+                var environmentRoot = bundlingRoot.getEnvironmentRoot(ext.environmentName());
 
-            // Check for cancellation before starting the long-running pixi operation
-            if (progressMonitor.isCanceled()) {
-                throw new InterruptedException("Environment installation was cancelled before pixi install");
+                // Check for cancellation before starting the long-running pixi operation
+                if (progressMonitor.isCanceled()) {
+                    throw new InterruptedException("Environment installation was cancelled before pixi install");
+                }
+                InstallCondaEnvironment.installCondaEnvironment( //
+                    artifactLocation, //
+                    environmentRoot, //
+                    bundlingRoot.getRoot(), //
+                    progressMonitor::isCanceled);
+
+                // Create the metadata file next to the environment
+                StartupCreatedEnvironmentMetadata.write(ext.bundle().getVersion(), environmentRoot);
+
+                // Also write environment_path.txt so this environment can be found via install-created logic
+                // This makes the environment discoverable even if KNIME_PYTHON_BUNDLING_PATH changes
+                try {
+                    var fragmentLocation = artifactLocation; // artifactLocation is already the fragment path
+                    Path environmentPathFile = fragmentLocation.resolve(InstallCondaEnvironment.ENVIRONMENT_PATH_FILE);
+                    var installationRoot = fragmentLocation.getParent().getParent();
+                    var actualEnvironmentPath = InstallCondaEnvironment.resolvePixiEnvironmentPath(environmentRoot);
+                    var relativePath = installationRoot.relativize(actualEnvironmentPath);
+                    Files.writeString(environmentPathFile, relativePath.toString(), StandardCharsets.UTF_8);
+                    LOGGER.infoWithFormat(
+                        "Written environment path file for startup-created environment: %s -> %s (actual environment path)",
+                        ext.environmentName(), relativePath);
+                } catch (IOException ex) {
+                    // Log but don't fail the installation - metadata.properties is sufficient for startup-created envs
+                    LOGGER.warn("Failed to write environment_path.txt for " + ext.environmentName()
+                        + ", environment will only be discoverable via metadata.properties: " + ex.getMessage());
+                }
+
+                return InstallCondaEnvironment.resolvePixiEnvironmentPath(environmentRoot);
             }
-            InstallCondaEnvironment.installCondaEnvironment( //
-                artifactLocation, //
-                environmentRoot, //
-                bundlingRoot.getRoot(), //
-                progressMonitor::isCanceled);
-
-            // Create the metadata file next to the environment
-            StartupCreatedEnvironmentMetadata.write(ext.bundle().getVersion(), environmentRoot);
-
-            // Also write environment_path.txt so this environment can be found via install-created logic
-            // This makes the environment discoverable even if KNIME_PYTHON_BUNDLING_PATH changes
-            try {
-                var fragmentLocation = artifactLocation; // artifactLocation is already the fragment path
-                Path environmentPathFile = fragmentLocation.resolve(InstallCondaEnvironment.ENVIRONMENT_PATH_FILE);
-                var installationRoot = fragmentLocation.getParent().getParent();
-                var actualEnvironmentPath = InstallCondaEnvironment.resolvePixiEnvironmentPath(environmentRoot);
-                var relativePath = installationRoot.relativize(actualEnvironmentPath);
-                Files.writeString(environmentPathFile, relativePath.toString(), StandardCharsets.UTF_8);
-                LOGGER.infoWithFormat(
-                    "Written environment path file for startup-created environment: %s -> %s (actual environment path)",
-                    ext.environmentName(), relativePath);
-            } catch (IOException ex) {
-                // Log but don't fail the installation - metadata.properties is sufficient for startup-created envs
-                LOGGER.warn("Failed to write environment_path.txt for " + ext.environmentName()
-                    + ", environment will only be discoverable via metadata.properties: " + ex.getMessage());
-            }
-
-            return InstallCondaEnvironment.resolvePixiEnvironmentPath(environmentRoot);
-        }
         }
 
         var installedEnvironments = new ArrayList<CondaEnvironment>();
@@ -865,7 +769,7 @@ public final class CondaEnvironmentRegistry {
      * Install a single environment (shared by both UI and headless modes).
      */
     private static Path installEnvironment(final CondaEnvironmentExtension ext, final IProgressMonitor progressMonitor)
-            throws IOException, PixiBinaryLocationException, InterruptedException {
+        throws IOException, PixiBinaryLocationException, InterruptedException {
         var bundlingRoot = BundlingRoot.getInstance();
 
         // Install the environment
@@ -884,7 +788,7 @@ public final class CondaEnvironmentRegistry {
             artifactLocation, //
             environmentRoot, //
             bundlingRoot.getRoot(), //
-            progressMonitor != null ? progressMonitor::isCanceled : null);
+            progressMonitor != null ? progressMonitor::isCanceled : () -> false);
 
         // Create the metadata file next to the environment
         StartupCreatedEnvironmentMetadata.write(ext.bundle().getVersion(), environmentRoot);
@@ -926,7 +830,6 @@ public final class CondaEnvironmentRegistry {
         }
     }
 
-
     /**
      * Deletes all Conda environments that were created during startup but are not part of the current installation.
      *
@@ -963,7 +866,7 @@ public final class CondaEnvironmentRegistry {
                 .filter(path -> { // Don't delete directories that contain failed environment metadata - preserve for user choice
                     try {
                         var metadata = StartupCreatedEnvironmentMetadata.read(path);
-                        if (metadata.isPresent() && metadata.get().failed()) {
+                        if (metadata.isPresent() && metadata.get().failed) {
                             LOGGER.debugWithFormat("Preserving failed environment directory for user choice: %s", path);
                             return false; // Don't delete
                         }
@@ -981,98 +884,6 @@ public final class CondaEnvironmentRegistry {
                 });
         } catch (IOException e) {
             LOGGER.error("Failed to list Conda environment directories for cleanup: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Information about a Conda environment that was created during startup. This information is stored in a
-     * "metadata.properties" file next to the environment.
-     *
-     * @param version      the version of the bundle that created this environment
-     * @param creationPath the root path of the environment, where the metadata file is located. This is used to detect
-     *                         if an environment was moved by the user.
-     * @param failed       whether the environment creation failed (includes cancellation and other errors)
-     * @param skipped      whether the user has permanently skipped this environment
-     */
-    private record StartupCreatedEnvironmentMetadata(String version, String creationPath, boolean failed,
-            boolean skipped) {
-
-        private static final String METADATA_FILE_NAME = "metadata.properties";
-
-        /**
-         * Parses an env-metadata file and returns an EnvironmentInformation instance.
-         */
-        static Optional<StartupCreatedEnvironmentMetadata> read(final Path environmentRoot) {
-            if (Files.exists(environmentRoot) && Files.isDirectory(environmentRoot)) {
-                try (var reader = Files.newBufferedReader(environmentRoot.resolve(METADATA_FILE_NAME))) {
-                    var props = new Properties();
-                    props.load(reader);
-                    var version = props.getProperty("version");
-                    var creationPath = props.getProperty("creationPath");
-                    // Check for both "failed" and legacy "canceled" properties for backward compatibility
-                    var failed = Boolean.parseBoolean(props.getProperty("failed", "false"))
-                        || Boolean.parseBoolean(props.getProperty("canceled", "false"));
-                    var skipped = Boolean.parseBoolean(props.getProperty("skipped", "false"));
-                    return Optional.of(new StartupCreatedEnvironmentMetadata(version, creationPath, failed, skipped));
-                } catch (IOException e) {
-                    LOGGER.warn("Could not read environment metadata from " + environmentRoot, e);
-                    return Optional.empty();
-                } catch (IllegalArgumentException e) {
-                    LOGGER.warn("Invalid environment metadata in " + environmentRoot, e);
-                    return Optional.empty();
-                }
-            } else {
-                return Optional.empty();
-            }
-        }
-
-        /**
-         * Writes this EnvironmentInformation to an env-metadata file.
-         *
-         * @throws IOException if writing the metadata file fails
-         */
-        static void write(final Version version, final Path environmentRoot) throws IOException {
-            var props = new Properties();
-            props.setProperty("version", version.toString());
-            props.setProperty("creationPath", environmentRoot.toAbsolutePath().toString());
-            try (var writer = Files.newBufferedWriter(environmentRoot.resolve(METADATA_FILE_NAME))) {
-                props.store(writer, null);
-            }
-        }
-
-        /**
-         * Writes a metadata file with a failed flag indicating the environment installation failed.
-         *
-         * @param version         the bundle version
-         * @param environmentRoot the root directory for the environment
-         * @throws IOException if writing the metadata file fails
-         */
-        static void writeFailed(final Version version, final Path environmentRoot) throws IOException {
-            var props = new Properties();
-            props.setProperty("version", version.toString());
-            props.setProperty("creationPath", environmentRoot.toAbsolutePath().toString());
-            props.setProperty("failed", "true");
-            try (var writer = Files.newBufferedWriter(environmentRoot.resolve(METADATA_FILE_NAME))) {
-                props.store(writer, null);
-            }
-        }
-
-        /**
-         * Writes a metadata file marking the environment as permanently skipped by the user.
-         *
-         * @param version         the bundle version
-         * @param environmentRoot the root directory for the environment
-         * @throws IOException if writing the metadata file fails
-         */
-        static void writeSkipped(final Version version, final Path environmentRoot) throws IOException {
-            var props = new Properties();
-            props.setProperty("version", version.toString());
-            props.setProperty("creationPath", environmentRoot.toAbsolutePath().toString());
-            props.setProperty("failed", "true");
-            props.setProperty("skipped", "true");
-            try (var writer = Files.newBufferedWriter(environmentRoot.resolve(METADATA_FILE_NAME))) {
-                props.store(writer, null);
-            }
         }
     }
 
@@ -1156,6 +967,7 @@ public final class CondaEnvironmentRegistry {
             LOGGER.debugWithFormat("No pixi.toml found at %s, using path as-is for '%s'", path, bundleName);
         }
 
-        return Optional.of(new CondaEnvironment(extension.bundle(), path, extension.environmentName(), extension.requiresDownload()));
+        return Optional.of(
+            new CondaEnvironment(extension.bundle(), path, extension.environmentName(), extension.requiresDownload()));
     }
 }

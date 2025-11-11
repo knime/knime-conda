@@ -62,7 +62,7 @@ import org.osgi.framework.Version;
  * @author Marc Lehner, KNIME AG, Zurich, Switzerland
  * @since 5.9
  */
-public final class StartupCreatedEnvironmentMetadata {
+final class StartupCreatedEnvironmentMetadata {
 
     /** The name of the metadata file */
     public static final String METADATA_FILE_NAME = "metadata.properties";
@@ -79,7 +79,8 @@ public final class StartupCreatedEnvironmentMetadata {
     /** Whether the environment was skipped by user */
     public final boolean skipped;
 
-    private StartupCreatedEnvironmentMetadata(final String version, final String creationPath, final boolean failed, final boolean skipped) {
+    private StartupCreatedEnvironmentMetadata(final String version, final String creationPath, final boolean failed,
+        final boolean skipped) {
         this.version = version;
         this.creationPath = creationPath;
         this.failed = failed;
@@ -100,7 +101,11 @@ public final class StartupCreatedEnvironmentMetadata {
         }
 
         Properties props = new Properties();
-        props.load(Files.newInputStream(metadataFile));
+        try (var inputStream = Files.newInputStream(metadataFile)) {
+            props.load(inputStream);
+        } catch (IOException e) {
+            throw new IOException("Failed to read metadata file: " + metadataFile, e);
+        }
 
         String version = props.getProperty("version", "");
         String creationPath = props.getProperty("creationPath", "");
@@ -126,7 +131,11 @@ public final class StartupCreatedEnvironmentMetadata {
 
         Path metadataFile = environmentRoot.resolve(METADATA_FILE_NAME);
         Files.createDirectories(environmentRoot);
-        props.store(Files.newOutputStream(metadataFile), "Startup-created environment metadata");
+        try (var outputStream = Files.newOutputStream(metadataFile)) {
+            props.store(outputStream, "Startup-created environment metadata");
+        } catch (IOException e) {
+            throw new IOException("Failed to write metadata file: " + metadataFile, e);
+        }
     }
 
     /**
@@ -145,7 +154,11 @@ public final class StartupCreatedEnvironmentMetadata {
 
         Path metadataFile = environmentRoot.resolve(METADATA_FILE_NAME);
         Files.createDirectories(environmentRoot);
-        props.store(Files.newOutputStream(metadataFile), "Failed startup-created environment metadata");
+        try (var outputStream = Files.newOutputStream(metadataFile)) {
+            props.store(outputStream, "Failed startup-created environment metadata");
+        } catch (IOException e) {
+            throw new IOException("Failed to write metadata file: " + metadataFile, e);
+        }
     }
 
     /**
@@ -164,6 +177,10 @@ public final class StartupCreatedEnvironmentMetadata {
 
         Path metadataFile = environmentRoot.resolve(METADATA_FILE_NAME);
         Files.createDirectories(environmentRoot);
-        props.store(Files.newOutputStream(metadataFile), "Skipped startup-created environment metadata");
+        try (var outputStream = Files.newOutputStream(metadataFile)) {
+            props.store(outputStream, "Skipped startup-created environment metadata");
+        } catch (IOException e) {
+            throw new IOException("Failed to write metadata file: " + metadataFile, e);
+        }
     }
 }

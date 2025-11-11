@@ -31,7 +31,7 @@ def testInstallCondaEnvAction(String baseBranch) {
 
     def testBody = { nodeLabel ->
         node("workflow-tests && ${nodeLabel}") {
-            stage("Install Conda Environment Action Tests on ${nodeLabel}") {
+            stage("Install Conda Environment Tests on ${nodeLabel}") {
                 knimetools.materializeResources(['common.inc'])
 
                 def String compositeRepo = "https://jenkins.devops.knime.com/p2/knime/composites/${baseBranch}"
@@ -110,10 +110,6 @@ def runCondaEnvInstallationTestWithStartup(bundlingPath, envType, condaRepo, com
     def knimeIniPath = (nodeLabel == "macosx") ? 
         "knime startup.app/Contents/Eclipse/knime.ini" : 
         "knime startup.app/knime.ini"
-    
-    sh label: 'Configure knime.ini for startup environment installation', script: """
-        echo "-Dknime.conda.install_envs_on_startup=true" >> "${knimeIniPath}"
-    """
 
     def installTest = {
         sh label: 'Install test extension (will create env on startup)', script: """

@@ -200,40 +200,35 @@ public final class CondaEnvironmentRegistry {
             return environments;
         }
 
-        // Check if environments should be created on startup
-        boolean installOnStartup = Boolean.getBoolean("knime.conda.install_envs_on_startup");
-        initializeEnvironments(installOnStartup);
+        initializeEnvironments();
         return m_environments.get();
     }
 
     /**
-     * Initialize the environment registry. This method is called with <code>createEnvironments</code> set to true once
-     * at the startup of the application to create all environments that were not created during installation. By
-     * default, headless mode is false.
+     * Initialize the environment registry and create all environments that are not present yet. Tries to show progress
+     * and errors in the UI.
      *
-     * @param createEnvironments if true, the method will create all environments that are not yet created.
+     * @since 5.9
      */
-    static void initializeEnvironments(final boolean createEnvironments) {
-        initializeEnvironments(createEnvironments, false);
+    public static void initializeEnvironments() {
+        initializeEnvironments(false);
     }
 
     /**
      * Initialize the environment registry with optional headless mode.
      *
-     * @param createEnvironments if true, the method will create all environments that are not yet created.
      * @param isHeadless if true, operations will run in headless mode without UI dialogs
      */
-    static void initializeEnvironments(final boolean createEnvironments, final boolean isHeadless) {
+    static void initializeEnvironments(final boolean isHeadless) {
         synchronized (m_environments) {
             if (m_environments.get() == null) {
-                m_environments.set(collectEnvironmentsFromExtensions(createEnvironments, isHeadless));
+                m_environments.set(collectEnvironmentsFromExtensions(isHeadless));
             }
         }
     }
 
     /** Loop through extensions and collect them in a Map */
-    private static Map<String, CondaEnvironment> collectEnvironmentsFromExtensions(final boolean createEnvironments,
-        final boolean isHeadless) {
+    private static Map<String, CondaEnvironment> collectEnvironmentsFromExtensions(final boolean isHeadless) {
         final Map<String, CondaEnvironment> environments = new HashMap<>();
         final IExtensionRegistry registry = Platform.getExtensionRegistry();
         final IExtensionPoint point = registry.getExtensionPoint(EXT_POINT_ID);
@@ -334,7 +329,7 @@ public final class CondaEnvironmentRegistry {
         if (!environmentsToInstall.isEmpty()) {
             LOGGER.debugWithFormat("Found %d Conda environments that need to be installed.",
                 environmentsToInstall.size());
-            if (createEnvironments && !SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
+            if (!SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
                 LOGGER.debug("Starting installation of startup-created Conda environments.");
                 try {
                     s_environmentInstallationInProgress.set(true);
@@ -362,10 +357,8 @@ public final class CondaEnvironmentRegistry {
             }
         }
 
-        if (createEnvironments) {
-            // Note: We do this even if we did not create any environments but only if we are in the startup phase mode
-            cleanupStartupCreatedEnvironments(environments);
-        }
+        // Note: We do this even if we did not create any environments
+        cleanupStartupCreatedEnvironments(environments);
 
         return Collections.unmodifiableMap(environments);
     }
@@ -573,8 +566,8 @@ public final class CondaEnvironmentRegistry {
     }
 
     /** Return value of {@link #findStartupCreatedEnvironment(CondaEnvironmentExtension)}. */
-    sealed interface StartupCreatedEnvPath permits StartupCreatedEnvPath.Exists, StartupCreatedEnvPath.MustBeCreated,
-        StartupCreatedEnvPath.Failed, StartupCreatedEnvPath.Skipped {
+    private sealed interface StartupCreatedEnvPath permits StartupCreatedEnvPath.Exists,
+        StartupCreatedEnvPath.MustBeCreated, StartupCreatedEnvPath.Failed, StartupCreatedEnvPath.Skipped {
 
         /** Indicates that the environment exists and can be used as is. */
         @SuppressWarnings("javadoc") // it's private

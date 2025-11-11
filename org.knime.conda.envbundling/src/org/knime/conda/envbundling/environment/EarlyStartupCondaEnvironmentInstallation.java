@@ -72,7 +72,7 @@ public class EarlyStartupCondaEnvironmentInstallation implements IEarlyStartup {
     public void run() {
         try {
             LOGGER.info("Starting conda environment initialization during early startup");
-            CondaEnvironmentRegistry.initializeEnvironments(true, false);
+            CondaEnvironmentRegistry.initializeEnvironments(false);
             LOGGER.info("Conda environment initialization completed successfully");
         } catch (Exception e) { // NOSONAR catch all to prevent breaking startup
             LOGGER.error("Failed to initialize conda environments during early startup", e);

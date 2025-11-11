@@ -87,8 +87,8 @@ public class CondaEnvironmentWarmstartAction implements IWarmstartAction {
 
         try {
             // Force initialization of conda environments in headless mode
-            LOGGER.debug("Calling CondaEnvironmentRegistry.initializeEnvironments(true, true) for headless mode");
-            CondaEnvironmentRegistry.initializeEnvironments(true, true);
+            LOGGER.debug("Calling CondaEnvironmentRegistry.initializeEnvironments(true) for headless mode");
+            CondaEnvironmentRegistry.initializeEnvironments();
 
             // Get installation results and provide detailed status
             Map<String, CondaEnvironment> environments = CondaEnvironmentRegistry.getEnvironments();

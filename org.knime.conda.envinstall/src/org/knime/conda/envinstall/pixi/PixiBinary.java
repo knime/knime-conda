@@ -121,12 +121,18 @@ public final class PixiBinary {
                 throw new PixiBinaryLocationException("Cannot determine bundle for PixiBinary class.");
             }
 
-            var fragments = Arrays.stream(Platform.getFragments(bundle)) //
+            var allFragments = Platform.getFragments(bundle);
+            if (allFragments == null) {
+                throw new PixiBinaryLocationException(
+                    "Could not locate pixi binary because no pixi fragment is installed.");
+            }
+
+            var fragments = Arrays.stream(allFragments) //
                 // filter out the test fragment (during development)
                 .filter(f -> f.getSymbolicName().startsWith(PIXI_FRAGMENT_NAME_PREFIX)) //
                 .toArray(Bundle[]::new);
 
-            if (fragments == null || fragments.length == 0) {
+            if (fragments.length == 0) {
                 throw new PixiBinaryLocationException(
                     "Could not locate pixi binary because no pixi fragment is installed.");
             }

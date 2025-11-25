@@ -55,7 +55,6 @@ import java.nio.file.Path;
 import org.apache.commons.io.file.PathUtils;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IExtension;
-import org.eclipse.core.runtime.Platform;
 import org.knime.conda.envinstall.action.InstallCondaEnvironment;
 import org.knime.core.node.NodeLogger;
 import org.osgi.framework.Bundle;
@@ -95,8 +94,10 @@ final class CondaEnvironmentWarmstartCleanupUtils {
         var point = CondaEnvironmentRegistry.getExtensionPoint();
         for (IExtension extension : point.getExtensions()) {
             try {
-                var bundle = Platform.getBundle(extension.getContributor().getName());
-                cleanupFragmentDirectory(bundle);
+                var ext = CondaEnvironmentRegistry.CondaEnvironmentExtension.of(extension);
+                if (ext.isPresent()) {
+                    cleanupFragmentDirectory(ext.get().binaryFragment());
+                }
             } catch (Exception e) { // NOSONAR - we cache everything to prevent failing
                 LOGGER.warn(
                     "Failed to clean up fragment " + extension.getContributor().getName() + ": " + e.getMessage(), e);

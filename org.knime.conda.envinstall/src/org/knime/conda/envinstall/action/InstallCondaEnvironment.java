@@ -160,7 +160,8 @@ public final class InstallCondaEnvironment {
     /** The name of the file that contains the path to the environment location */
     public static final String ENVIRONMENT_PATH_FILE = "environment_path.txt";
 
-    private static final String PIXI_CACHE_DIRECTORY_NAME = ".pixi-cache";
+    /** The directory name of the pixi cache directory. The directory is located inside the bundling root. */
+    public static final String PIXI_CACHE_DIRECTORY_NAME = ".pixi-cache";
 
     private InstallCondaEnvironment() {
     }

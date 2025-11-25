@@ -72,7 +72,6 @@ import org.apache.commons.io.file.PathUtils;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IExtension;
 import org.eclipse.core.runtime.IExtensionPoint;
-import org.eclipse.core.runtime.IExtensionRegistry;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.jface.dialogs.MessageDialog;
@@ -227,11 +226,20 @@ public final class CondaEnvironmentRegistry {
         }
     }
 
+    /** @return the extension point at which conda environments are registered */
+    static IExtensionPoint getExtensionPoint() {
+        var registry = Platform.getExtensionRegistry();
+        var point = registry.getExtensionPoint(EXT_POINT_ID);
+        if (point == null) {
+            throw new IllegalStateException("Extension point " + EXT_POINT_ID + " not found");
+        }
+        return point;
+    }
+
     /** Loop through extensions and collect them in a Map */
     private static Map<String, CondaEnvironment> collectEnvironmentsFromExtensions(final boolean isHeadless) {
         final Map<String, CondaEnvironment> environments = new HashMap<>();
-        final IExtensionRegistry registry = Platform.getExtensionRegistry();
-        final IExtensionPoint point = registry.getExtensionPoint(EXT_POINT_ID);
+        final var point = getExtensionPoint();
 
         var environmentsToInstall = new ArrayList<StartupCreatedEnvPath.MustBeCreated>();
 

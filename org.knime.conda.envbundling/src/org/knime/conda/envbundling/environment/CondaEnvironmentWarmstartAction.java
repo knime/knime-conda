@@ -93,18 +93,26 @@ public class CondaEnvironmentWarmstartAction implements IWarmstartAction {
             // Get installation results and provide detailed status
             Map<String, CondaEnvironment> environments = CondaEnvironmentRegistry.getEnvironments();
 
+            // Exit immediately if there is no conda environment
             if (environments == null || environments.isEmpty()) {
                 LOGGER.info("No conda environments are found to install");
                 return WarmstartResult.success("No conda environments needed to be configured");
-            } else {
-                for (CondaEnvironment env : environments.values()) {
-                    String envName = env.getName();
-                    var envPath = env.getPath();
-                    LOGGER.info("Warmstart installed conda environment: " + envName + " at " + envPath);
-                }
-                return WarmstartResult
-                    .success("Number of warmstart installed conda environments = " + environments.size());
             }
+
+            // Log which environments were installed
+            for (CondaEnvironment env : environments.values()) {
+                String envName = env.getName();
+                var envPath = env.getPath();
+                LOGGER.info("Warmstart installed conda environment: " + envName + " at " + envPath);
+            }
+
+            // Cleanup conda and pypi packages
+            CondaEnvironmentWarmstartCleanupUtils.cleanupFragmentDirectories();
+
+            // Delete the pixi cache
+            CondaEnvironmentWarmstartCleanupUtils.cleanupPixiCache();
+
+            return WarmstartResult.success("Number of warmstart installed conda environments = " + environments.size());
         } catch (Exception e) {
             LOGGER.error("Failed to install conda environments", e);
             return WarmstartResult.failure("Failed to install conda environments: " + e.getMessage(), e);

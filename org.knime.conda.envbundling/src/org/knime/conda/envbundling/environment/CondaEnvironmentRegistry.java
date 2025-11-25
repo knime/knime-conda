@@ -383,11 +383,24 @@ public final class CondaEnvironmentRegistry {
     }
 
     /** Extracted information from an extension for the CondaEnvironment extension point. */
-    private record CondaEnvironmentExtension(Bundle bundle, String environmentName, Bundle binaryFragment,
+    record CondaEnvironmentExtension(Bundle bundle, String environmentName, Bundle binaryFragment,
         boolean requiresDownload) {
 
-        /** Extract basic information from the extension. */
-        private static Optional<CondaEnvironmentExtension> of(final IExtension extension) {
+        /**
+         * Extract basic information from the extension.
+         * <P>
+         * Returns {@code Optional.empty()} if
+         * <ul>
+         * <li>the name of the environment is not set</li>
+         * <li>or there is not excactly one fragment.</li>
+         * </ul>
+         * In these cases, a descriptive error message will be logged and the extension does not have to be handled by
+         * the caller.
+         *
+         * @param extension the extension of the Conda environment extension point
+         * @return the information from the extension or {@code Optional.empty()} if the extension cannot be used.
+         */
+        public static Optional<CondaEnvironmentExtension> of(final IExtension extension) {
             final String bundleName = extension.getContributor().getName();
 
             // Get the name of the environment
@@ -402,7 +415,7 @@ public final class CondaEnvironmentRegistry {
             final var bundle = Platform.getBundle(bundleName);
             final Bundle[] fragments = Platform.getFragments(bundle);
 
-            if (fragments.length < 1) {
+            if (fragments == null || fragments.length < 1) {
                 LOGGER.errorWithFormat(
                     "Could not find a platform-specific fragment for the bundled Conda environment in plugin '%s' "
                         + "(operating system: %s, system architecture: %s).",

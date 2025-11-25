@@ -18,5 +18,12 @@
             priority="800"
             description="Pre-installs all bundled conda environments to reduce startup time for subsequent runs">
       </warmstartAction>
+      <warmstartAction
+            id="org.knime.conda.envbundling.warmstartCleanupAction"
+            name="Conda Environment Cleanup"
+            class="org.knime.conda.envbundling.environment.CondaEnvironmentWarmstartCleanupAction"
+            priority="1000"
+            description="Removes temporary installation artifacts (channels, PyPI indices, and caches) to free disk space after environment installation">
+      </warmstartAction>
    </extension>
 </plugin>

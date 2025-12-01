@@ -49,6 +49,7 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -400,8 +401,10 @@ public final class InstallCondaEnvironment {
         /* ------------------------------------------------------------- */
         var pixiCacheDir = bundlingRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath();
         // check if knime-python-versions is present in the lockfile
-        var knimePythonVersions = PixiLockfileUtil.findFirstCondaPackageWithPrefix(pixiLockfile, "knime-python-versions");
-        logInfo("Checking pixi cache directory for knime-python-versions (" + knimePythonVersions + ") package: " + pixiCacheDir);
+        var knimePythonVersions =
+            PixiLockfileUtil.findFirstCondaPackageWithPrefix(pixiLockfile, "knime-python-versions");
+        logInfo("Checking pixi cache directory for knime-python-versions (" + knimePythonVersions + ") package: "
+            + pixiCacheDir);
         if (knimePythonVersions != null) {
             // find if the exact package already exists in cache
             var pkgsDir = pixiCacheDir.resolve("pkgs").resolve(knimePythonVersions);
@@ -419,7 +422,8 @@ public final class InstallCondaEnvironment {
                         var cachedVersion = extractVersionFromPackageName(cachedPackage);
                         if (cachedVersion != null && compareVersions(newVersion, cachedVersion) > 0) {
                             shouldCleanCache = true;
-                            logInfo("New knime-python-versions " + newVersion + " is newer than cached " + cachedVersion + " - will clean cache.");
+                            logInfo("New knime-python-versions " + newVersion + " is newer than cached " + cachedVersion
+                                + " - will clean cache.");
                             break;
                         }
                     }
@@ -441,7 +445,8 @@ public final class InstallCondaEnvironment {
         /* ------------------------------------------------------------- */
         var pixiCacheDirStr = pixiCacheDir.toString();
         var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDirStr);
-        var installResult = PixiBinary.callPixiWithCancellation(envDestinationRoot, envVars, cancellationCallback, "install", "--frozen");
+        var installResult = PixiBinary.callPixiWithCancellation(envDestinationRoot, envVars, cancellationCallback,
+            "install", "--frozen");
         if (!installResult.isSuccess()) {
             var failureDetails = formatPixiFailure("pixi install", installResult);
             logError(failureDetails);
@@ -461,18 +466,43 @@ public final class InstallCondaEnvironment {
         try {
             logInfo("Uninstalling conda environment '" + environmentName + "' from fragment: " + artifactLocation);
 
-            var installationRoot = artifactLocation.getParent().getParent();
             var envPathFile = artifactLocation.resolve(ENVIRONMENT_PATH_FILE);
 
-            // Read the environment path from the file
-            var envPathText = Files.readString(envPathFile, StandardCharsets.UTF_8).trim();
-            var envPath = installationRoot.resolve(envPathText);
+            // If the environment_path.txt file doesn't exist, nothing to uninstall
+            if (Files.notExists(envPathFile)) {
+                logInfo("Environment path file does not exist, nothing to uninstall: " + envPathFile);
+                return;
+            }
 
-            /* <bundling_root>/<env_name>/.pixi/envs/default/
-             *                 ^^^^^^^^^^            ^^^^^^^
-             *                 envRoot               envPath
-             */
-            var envRoot = envPath.getParent().getParent().getParent();
+            // Read the environment path from the file
+            String envPathText;
+            try {
+                envPathText = Files.readString(envPathFile, StandardCharsets.UTF_8).trim();
+            } catch (IOException e) {
+                logError("Failed to read environment path file: " + envPathFile
+                    + "\nSkipping environment uninstall due to unreadable environment path file", e);
+                return;
+            }
+
+            // try to resolve the environment path and check if it is valid
+            Path envPath;
+            Path envRoot;
+            try {
+                var installationRoot = artifactLocation.getParent().getParent();
+                envPath = installationRoot.resolve(envPathText);
+                if (!Files.isDirectory(envPath)) {
+                    logInfo("Environment path does not exist or is not a directory, nothing to uninstall: " + envPath);
+                    return;
+                }
+                /* <bundling_root>/<env_name>/.pixi/envs/default/
+                *                 ^^^^^^^^^^            ^^^^^^^
+                *                 envRoot               envPath
+                */
+                envRoot = envPath.getParent().getParent().getParent();
+            } catch (InvalidPathException e) {
+                logError("Failed to resolve environment path, skipping environment uninstall: " + envPathText, e);
+                return;
+            }
 
             // Delete environment root directory
             if (Files.exists(envRoot)) {
@@ -586,7 +616,6 @@ public final class InstallCondaEnvironment {
             // NOTE: We run the uninstall action even though environments are installed
             // during startup, because we want to delete the environment from the installation directory.
             try {
-                // TODO(AP-24745) check if this fails if the environment was not installed before
                 var p = Parameters.from(parameterMap);
                 uninstallEnvironment(p.directory, p.name);
             } catch (Exception e) {
@@ -632,10 +661,10 @@ public final class InstallCondaEnvironment {
         }
 
         try (var stream = Files.list(pkgsDir)) {
-            return stream
-                .filter(Files::isDirectory)
-                .map(path -> path.getFileName().toString())
-                .filter(name -> name.startsWith(packageNamePrefix))
+            return stream //
+                .filter(Files::isDirectory) //
+                .map(path -> path.getFileName().toString()) //
+                .filter(name -> name.startsWith(packageNamePrefix)) //
                 .toList();
         } catch (IOException e) {
             return List.of();

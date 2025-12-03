@@ -1,0 +1,8 @@
+[workspace]
+name = "test-environment"
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+
+[dependencies]
+# Minimal dependency for testing - tzdata is small and available on all platforms
+python = "3.11.9"

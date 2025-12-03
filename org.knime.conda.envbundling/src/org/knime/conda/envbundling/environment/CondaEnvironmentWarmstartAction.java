@@ -106,7 +106,7 @@ public class CondaEnvironmentWarmstartAction implements IWarmstartAction {
                 LOGGER.info("Warmstart installed conda environment: " + envName + " at " + envPath);
             }
 
-            // Cleanup conda and pypi packages
+            // Cleanup conda and pypi packages from fragments
             CondaEnvironmentWarmstartCleanupUtils.cleanupFragmentDirectories();
 
             // Delete the pixi cache

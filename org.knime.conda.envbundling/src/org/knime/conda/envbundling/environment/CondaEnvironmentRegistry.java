@@ -241,9 +241,10 @@ public final class CondaEnvironmentRegistry {
         final Map<String, CondaEnvironment> environments = new HashMap<>();
         final var point = getExtensionPoint();
 
-        var environmentsToInstall = new ArrayList<StartupCreatedEnvPath.MustBeCreated>();
+        IExtension[] extensions = point.getExtensions();        var environmentsToInstall = new ArrayList<StartupCreatedEnvPath.MustBeCreated>();
 
-        for (final IExtension ext : point.getExtensions()) {
+        for (final IExtension ext : extensions) {
+            LOGGER.debug("Processing extension: " + ext.getLabel() + " from " + ext.getContributor().getName());
             try {
                 var envExt = CondaEnvironmentExtension.of(ext);
                 if (envExt.isEmpty()) {
@@ -279,7 +280,11 @@ public final class CondaEnvironmentRegistry {
                     environmentsToInstall.add(mustBeCreated);
                 } else if (startupCreatedEnv instanceof StartupCreatedEnvPath.Failed failed) {
                     // Environment previously failed - ask user what to do
+                    LOGGER.warnWithFormat("Found failed environment metadata for '%s', asking user for action",
+                        failed.ext().environmentName());
                     var userChoice = askUserForFailedEnvironment(failed, isHeadless);
+                    LOGGER.warnWithFormat("User choice for failed environment '%s': %s",
+                        failed.ext().environmentName(), userChoice);
                     switch (userChoice) {
                         case RETRY -> {
                             // Remove failed metadata and retry installation
@@ -617,6 +622,7 @@ public final class CondaEnvironmentRegistry {
     private static List<CondaEnvironment>
         installEnvironmentsHeadless(final List<StartupCreatedEnvPath.MustBeCreated> environmentsToInstall) {
         LOGGER.info("Running in headless mode - installing environments without progress dialog");
+        LOGGER.info("Number of environments to install: " + environmentsToInstall.size());
         var installedEnvironments = new ArrayList<CondaEnvironment>();
 
         for (var mustBeCreated : environmentsToInstall) {

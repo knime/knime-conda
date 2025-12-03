@@ -83,11 +83,8 @@ public class CondaEnvironmentWarmstartAction implements IWarmstartAction {
 
     @Override
     public WarmstartResult execute() throws Exception {
-        LOGGER.info("Starting conda environment installation");
-
         try {
             // Force initialization of conda environments in headless mode
-            LOGGER.debug("Calling CondaEnvironmentRegistry.initializeEnvironments(true) for headless mode");
             CondaEnvironmentRegistry.initializeEnvironments();
 
             // Get installation results and provide detailed status
@@ -95,7 +92,6 @@ public class CondaEnvironmentWarmstartAction implements IWarmstartAction {
 
             // Exit immediately if there is no conda environment
             if (environments == null || environments.isEmpty()) {
-                LOGGER.info("No conda environments are found to install");
                 return WarmstartResult.success("No conda environments needed to be configured");
             }
 
@@ -106,11 +102,8 @@ public class CondaEnvironmentWarmstartAction implements IWarmstartAction {
                 LOGGER.info("Warmstart installed conda environment: " + envName + " at " + envPath);
             }
 
-            // Cleanup conda and pypi packages
+            // Cleanup conda and pypi packages from fragments
             CondaEnvironmentWarmstartCleanupUtils.cleanupFragmentDirectories();
-
-            // Delete the pixi cache
-            CondaEnvironmentWarmstartCleanupUtils.cleanupPixiCache();
 
             return WarmstartResult.success("Number of warmstart installed conda environments = " + environments.size());
         } catch (Exception e) {

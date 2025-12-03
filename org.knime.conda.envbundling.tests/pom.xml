@@ -5,7 +5,7 @@
 		<artifactId>knime-conda</artifactId>
 		<version>${revision}${changelist}</version>
 	</parent>
-	<artifactId>org.knime.conda.envinstall.tests</artifactId>
+	<artifactId>org.knime.conda.envbundling.tests</artifactId>
 	<packaging>eclipse-test-plugin</packaging>
   
     <properties>

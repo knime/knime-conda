@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         point="org.knime.workbench.repository.categories">
+      <category
+            description="Nodes to interface with the Pixi tool."
+            icon="icons/condacategory.png"
+            level-id="pixi"
+            name="Pixi"
+            path="/scripting/">
+      </category>
+   </extension>   
+   <extension
+         point="org.knime.workbench.repository.nodes">
+      <node
+            category-path="/scripting/pixi"
+            factory-class="org.knime.python3.nodes.testing.pixi.PixiEnvironmentCreatorNodeFactory">
+      </node>
+   </extension>
+</plugin>

@@ -58,7 +58,7 @@ final class PixiEnvironmentCreatorUtils {
 
             final String versionExpr = bounds.isEmpty() ? "*" : String.join(",", bounds);
 
-            final var installer = spec.m_installer.getValue();
+            final var installer = spec.m_installer.id();
             if (installer == PixiEnvironmentCreatorNodeParameters.Installer.CONDA) {
                 sb.append(name).append(" = \"").append(versionExpr).append("\"\n");
             } else {

@@ -1,18 +1,12 @@
 package org.knime.python3.nodes.testing.pixi;
 
-import static org.knime.node.testing.DefaultNodeTestUtil.createNodeFactoryFromStage;
-
-import org.knime.core.node.NodeFactory;
-import org.knime.node.DefaultNode;
-import org.knime.node.DefaultNodeFactory;
-import org.knime.node.NodeType;
-import org.knime.node.RequirePorts;
-import org.knime.node.parameters.NodeParameters;
+import org.knime.core.node.port.flowvariable.FlowVariablePortObject;
 import org.knime.node.DefaultModel.ConfigureInput;
 import org.knime.node.DefaultModel.ConfigureOutput;
 import org.knime.node.DefaultModel.ExecuteInput;
 import org.knime.node.DefaultModel.ExecuteOutput;
-import org.knime.core.webui.node.dialog.defaultdialog.NodeParametersUtil;
+import org.knime.node.DefaultNode;
+import org.knime.node.DefaultNodeFactory;
 
 /**
  * Factory for the "Pixi Environment Creator (Labs)" node.
@@ -38,28 +32,29 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
 
     private static DefaultNode buildNodeDefinition() {
         return DefaultNode.create()
-            .name("Pixi Environment Creator (Labs)")
-            .icon("icon.png")
-            .shortDescription("Create or reuse a pixi environment from a KNIME base metapackage plus additional packages.")
-            .fullDescription(
+            .name("Pixi Environment Creator (Labs)") //
+            .icon("icon.png") //
+            .shortDescription(
+                "Create or reuse a pixi environment from a KNIME base metapackage plus additional packages.") //
+            .fullDescription( //
                 """
                 Assembles a pixi.toml manifest from a selected base KNIME Python environment plus optional additional packages (conda or pip).
                 Resolves & installs the environment with caching via a stable manifest hash. Propagates the Python executable and environment metadata as flow variables.
                 """
-            )
-            .nodeType(NodeType.Source)
-            .sinceVersion("5.6") // Adjust to actual introduction version
-            .keywords("pixi", "python", "environment", "conda", "pip")
-            .ports(p -> p /* no data ports */)
-            .model(modelStage -> modelStage
-                .parameters(PixiEnvironmentCreatorNodeParameters.class)
-                .configure(PixiEnvironmentCreatorNodeFactory::configureModel)
-                .execute(PixiEnvironmentCreatorNodeFactory::executeModel));
+            ) //
+            .sinceVersion(5, 10, 0) //
+            .ports(p -> {
+                p.addOutputPort("Output", "Output Flow Variables", FlowVariablePortObject.TYPE);
+            })
+            .model(modelStage -> modelStage //
+                .parametersClass(PixiEnvironmentCreatorNodeParameters.class) //
+                .configure(PixiEnvironmentCreatorNodeFactory::configureModel) //
+                .execute(PixiEnvironmentCreatorNodeFactory::executeModel))
+            .keywords("pixi", "python", "environment", "conda", "pip"); //
     }
 
     private static void configureModel(final ConfigureInput in, final ConfigureOutput out) {
-        final PixiEnvironmentCreatorNodeParameters params =
-            NodeParametersUtil.getParameters(in.getParameters(), PixiEnvironmentCreatorNodeParameters.class);
+        final PixiEnvironmentCreatorNodeParameters params = in.getParameters();
 
         // Autodetect pixi executable if empty.
         if (params.m_pixiExecutable == null || params.m_pixiExecutable.isBlank()) {
@@ -83,8 +78,7 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
     }
 
     private static void executeModel(final ExecuteInput in, final ExecuteOutput out) {
-        final PixiEnvironmentCreatorNodeParameters params =
-            NodeParametersUtil.getParameters(in.getParameters(), PixiEnvironmentCreatorNodeParameters.class);
+        final PixiEnvironmentCreatorNodeParameters params = in.getParameters();
 
         final var execCtx = in.getExecutionContext();
         execCtx.setProgress(0.0, "Preparing environment specification");
@@ -108,15 +102,15 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
         }
 
         // Flow variables mirroring Python implementation.
-        execCtx.setFlowVariableString("pixi_python_executable", pythonExec);
-        execCtx.setFlowVariableString("pixi_env_dir", envDir);
-        execCtx.setFlowVariableString("pixi_manifest_hash", manifestHash);
-        execCtx.setFlowVariableString("pixi_platforms", "win-64,linux-64,osx-64,osx-arm64");
-        execCtx.setFlowVariableString("pixi_base_environment", params.m_baseEnvironment.getValue().name());
+//        execCtx.setFlowVariableString("pixi_python_executable", pythonExec);
+//        execCtx.setFlowVariableString("pixi_env_dir", envDir);
+//        execCtx.setFlowVariableString("pixi_manifest_hash", manifestHash);
+//        execCtx.setFlowVariableString("pixi_platforms", "win-64,linux-64,osx-64,osx-arm64");
+//        execCtx.setFlowVariableString("pixi_base_environment", params.m_baseEnvironment.getValue().name());
 
         // Join added package names (non-empty only).
         final String addedPackages = PixiEnvironmentCreatorUtils.joinAddedPackageNames(params);
-        execCtx.setFlowVariableString("pixi_added_packages", addedPackages);
+//        execCtx.setFlowVariableString("pixi_added_packages", addedPackages);
 
         // Optionally, expose manifest preview again (not a flow variable here).
         params.m_manifestPreview = manifestText;

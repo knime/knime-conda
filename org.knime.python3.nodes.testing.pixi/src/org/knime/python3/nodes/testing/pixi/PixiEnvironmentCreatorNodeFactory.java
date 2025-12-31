@@ -1,13 +1,8 @@
 package org.knime.python3.nodes.testing.pixi;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.security.MessageDigest;
-import java.util.HexFormat;
 import java.util.Map;
 
 import org.knime.conda.envinstall.pixi.PixiBinary;
@@ -22,6 +17,9 @@ import org.knime.node.DefaultModel.ExecuteOutput;
 import org.knime.node.DefaultNode;
 import org.knime.node.DefaultNodeFactory;
 
+// Things that are left:
+// 1 - in PixiUtils finish parsing CallResult, TODO is left there
+// 2 - in this file line 95 set properly output, TODO left there
 
 public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory {
 
@@ -49,7 +47,6 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
                     try {
                         executeModel(input, output);
                     } catch (IOException | PixiBinaryLocationException | InterruptedException ex) {
-                        // TODO Auto-generated catch block
                     }
                 })) //
             .keywords("pixi", "python", "environment", "conda", "pip"); //
@@ -63,21 +60,12 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
     }
 
     private static void executeModel(final ExecuteInput in, final ExecuteOutput out)
-        throws IOException, PixiBinaryLocationException, CanceledExecutionException, InterruptedException {
+        throws IOException, CanceledExecutionException, InterruptedException, PixiBinaryLocationException {
         final PixiEnvironmentCreatorNodeParameters params = in.getParameters();
         final String manifestText = params.m_pixiTomlContent;
 
-        if (manifestText == null || manifestText.isBlank()) {
-            throw new IllegalStateException("pixi.toml manifest text is empty.");
-        }
-
+        final Path projectDir = PixiUtils.saveManifestToDisk(manifestText);
         final String envName = "default";
-        final Path projectDir = resolveProjectDir(manifestText);
-        Files.createDirectories(projectDir);
-
-        final Path manifestPath = projectDir.resolve("pixi.toml");
-        Files.writeString(manifestPath, manifestText, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
-            StandardOpenOption.TRUNCATE_EXISTING);
 
         final var execCtx = in.getExecutionContext();
 
@@ -93,36 +81,18 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
         final CallResult callResult = PixiBinary.callPixi(projectDir, extraEnv, pixiArgs);
 
         if (callResult.returnCode() != 0) {
-            // Build a helpful error message from whatever CallResult exposes.
-            // (Adjust getters if your CallResult uses different names.)
-            final String stdout = callResult.stdout() == null ? "" : callResult.stdout();
-            final String stderr = callResult.stderr() == null ? "" : callResult.stderr();
 
-            final String msg = "pixi install failed (exit code " + callResult.returnCode() + ").\n"
-                + (stderr.isBlank() ? "" : "---- stderr ----\n" + stderr + "\n")
-                + (stdout.isBlank() ? "" : "---- stdout ----\n" + stdout + "\n");
+            String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
 
-            throw new IllegalStateException(msg);
+            execCtx.setMessage("Error: " + errorDetails);
         }
 
         execCtx.setProgress(1.0, "Environment ready");
-        // No data/table outputs; a future dedicated view could render manifestText as HTML (not implemented here).
-    }
 
-    private static Path resolveProjectDir(final String manifestText) {
-        // TODO: this probably should not be hard coded
-        final Path base = Paths.get(System.getProperty("user.home"), ".knime", "pixi-env-cache");
-        final String hash = sha256Hex(manifestText);
-        return base.resolve(hash);
-    }
+        final Path pythonEnvPath = PixiUtils.resolvePython(projectDir, envName);
 
-    private static String sha256Hex(final String s) {
-        try {
-            final MessageDigest md = MessageDigest.getInstance("SHA-256");
-            final byte[] dig = md.digest(s.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(dig);
-        } catch (Exception e) {
-            throw new IllegalStateException("Unable to compute SHA-256 hash.", e);
-        }
+        // TODO: finish this, set pythonEnvPath as output of the node
+        FlowVariablePortObject outputObject = FlowVariablePortObject.INSTANCE;
+        out.setOutData(outputObject);
     }
 }

@@ -9,7 +9,6 @@ import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 import org.knime.core.node.KNIMEException;
-import org.knime.core.node.port.flowvariable.FlowVariablePortObject;
 import org.knime.node.DefaultModel.ConfigureInput;
 import org.knime.node.DefaultModel.ConfigureOutput;
 import org.knime.node.DefaultModel.ExecuteInput;
@@ -40,7 +39,7 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
                         """) //
             .sinceVersion(5, 10, 0) //
             .ports(p -> {
-                p.addOutputPort("Output", "Output Flow Variables", FlowVariablePortObject.TYPE);
+                p.addOutputPort("Pixi Environment", "Pixi Python environment information", PixiEnvironmentPortObject.TYPE);
             }).model(modelStage -> modelStage //
                 .parametersClass(PixiEnvironmentCreatorNodeParameters.class) //
                 .configure(PixiEnvironmentCreatorNodeFactory::configure) //
@@ -49,10 +48,8 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
     }
 
     private static void configure(final ConfigureInput in, final ConfigureOutput out) {
-        final PixiEnvironmentCreatorNodeParameters params = in.getParameters();
-
-        // Source node with no data outputs -> no specs to set.
-        out.setOutSpecs(); // Empty
+        // Set the spec for the output port
+        out.setOutSpecs(PixiEnvironmentPortObjectSpec.INSTANCE);
     }
 
     private static void execute(final ExecuteInput in, final ExecuteOutput out) {
@@ -101,9 +98,8 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
 
         final Path pythonEnvPath = PixiUtils.resolvePython(projectDir, envName);
 
-        // TODO: finish this, set pythonEnvPath as output of the node
-        FlowVariablePortObject outputObject = FlowVariablePortObject.INSTANCE;
-
-        out.setOutData(outputObject);
+        // Create and output the Pixi environment port object containing the Python path
+        final PixiEnvironmentPortObject portObject = new PixiEnvironmentPortObject(pythonEnvPath);
+        out.setOutData(portObject);
     }
 }

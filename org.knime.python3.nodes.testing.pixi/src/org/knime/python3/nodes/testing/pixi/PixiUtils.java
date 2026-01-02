@@ -11,15 +11,18 @@ import java.util.HexFormat;
 
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 
-class PixiUtils {
-    public static Path resolveProjectDir(final String manifestText) {
+@SuppressWarnings("restriction")
+final class PixiUtils {
+    private PixiUtils() {}
+
+    static Path resolveProjectDir(final String manifestText) {
         // TODO: this probably should not be hard coded
         final Path base = Paths.get(System.getProperty("user.home"), ".knime", "pixi-env-cache");
         final String hash = sha256Hex(manifestText);
         return base.resolve(hash);
     }
 
-    public static String sha256Hex(final String s) {
+    static String sha256Hex(final String s) {
         try {
             final MessageDigest md = MessageDigest.getInstance("SHA-256");
             final byte[] dig = md.digest(s.getBytes(StandardCharsets.UTF_8));
@@ -29,7 +32,7 @@ class PixiUtils {
         }
     }
 
-    public static Path saveManifestToDisk(final String manifestText) throws IOException {
+    static Path saveManifestToDisk(final String manifestText) throws IOException {
         if (manifestText == null || manifestText.isBlank()) {
             throw new IllegalArgumentException("pixi.toml manifest text is empty.");
         }
@@ -43,7 +46,7 @@ class PixiUtils {
         return projectDir;
     }
 
-    public static String getMessageFromCallResult(final CallResult callResult) {
+    static String getMessageFromCallResult(final CallResult callResult) {
         // TODO implement this in a better way
         final String stdout = callResult.stdout() == null ? "" : callResult.stdout();
         final String stderr = callResult.stderr() == null ? "" : callResult.stderr();

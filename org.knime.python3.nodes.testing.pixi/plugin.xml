@@ -18,4 +18,16 @@
             factory-class="org.knime.python3.nodes.testing.pixi.PixiEnvironmentCreatorNodeFactory">
       </node>
    </extension>
+      <extension
+            point="org.knime.core.PortType">
+            <portObject
+                  color="#7F7F7F"
+                  hidden="false"
+                  name="Pixi Environment"
+                  objectClass="org.knime.python3.nodes.testing.pixi.PixiEnvironmentPortObject"
+                  objectSerializer="org.knime.python3.nodes.testing.pixi.PixiEnvironmentPortObject$Serializer"
+                  specClass="org.knime.python3.nodes.testing.pixi.PixiEnvironmentPortObjectSpec"
+                  specSerializer="org.knime.python3.nodes.testing.pixi.PixiEnvironmentPortObjectSpec$Serializer">
+            </portObject>
+      </extension>
 </plugin>

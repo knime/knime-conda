@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         point="org.knime.workbench.repository.categories">
+      <category
+            description="Nodes to interface with the Pixi tool."
+            icon="icons/condacategory.png"
+            level-id="pixi"
+            name="Pixi"
+            path="/scripting/">
+      </category>
+   </extension>   
+   <extension
+         point="org.knime.workbench.repository.nodes">
+            <node
+                  category-path="/scripting/pixi"
+                  factory-class="org.knime.pixi.nodes.PixiTomlEnvironmentCreatorNodeFactory">
+            </node>
+            <node
+                  category-path="/scripting/pixi"
+                  factory-class="org.knime.pixi.nodes.PixiEnvironmentCreatorNodeFactory">
+            </node>
+            <node
+                  category-path="/scripting/pixi"
+                  factory-class="org.knime.pixi.nodes.PixiYamlEnvironmentCreatorNodeFactory">
+            </node>
+   </extension>
+      <extension
+            point="org.knime.core.PortType">
+            <portObject
+                  color="#7F7F7F"
+                  hidden="false"
+                  name="Pixi Environment"
+                  objectClass="org.knime.pixi.nodes.PixiEnvironmentPortObject"
+                  objectSerializer="org.knime.pixi.nodes.PixiEnvironmentPortObject$Serializer"
+                  specClass="org.knime.pixi.nodes.PixiEnvironmentPortObjectSpec"
+                  specSerializer="org.knime.pixi.nodes.PixiEnvironmentPortObjectSpec$Serializer">
+            </portObject>
+      </extension>
+</plugin>

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<component id="org.knime.python3.nodes.testing.pixi" version="2">
-    <resource path="src/org/knime/conda/Conda.java" type="org.knime.python3.nodes.testing.pixi.Conda">
+<component id="org.knime.pixi.nodes" version="2">
+    <resource path="src/org/knime/conda/Conda.java" type="org.knime.pixi.nodes.Conda">
         <filter comment="Conda.getRootPrefix() should not be used from the outside" id="421572723">
             <message_arguments>
-                <message_argument value="org.knime.python3.nodes.testing.pixi.Conda"/>
+                <message_argument value="org.knime.pixi.nodes.Conda"/>
                 <message_argument value="getRootPrefix()"/>
             </message_arguments>
         </filter>

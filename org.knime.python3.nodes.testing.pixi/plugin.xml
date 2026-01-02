@@ -20,7 +20,11 @@
             <node
                   category-path="/scripting/pixi"
                   factory-class="org.knime.python3.nodes.testing.pixi.PixiEnvironmentCreatorNodeFactory">
-      </node>
+            </node>
+            <node
+                  category-path="/scripting/pixi"
+                  factory-class="org.knime.python3.nodes.testing.pixi.PixiYamlEnvironmentCreatorNodeFactory">
+            </node>
    </extension>
       <extension
             point="org.knime.core.PortType">

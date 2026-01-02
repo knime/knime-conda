@@ -19,7 +19,7 @@ import org.knime.node.DefaultNodeFactory;
 public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory {
 
     /**
-     *
+     * Constructor
      */
     public PixiEnvironmentCreatorNodeFactory() {
         super(buildNodeDefinition());
@@ -32,10 +32,45 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
                 "Create a pixi environment by specifying packages") //
             .fullDescription( //
                 """
-                        Create a pixi environment by specifying individual packages with their versions.
-                        Select conda or pip as the package source and optionally specify minimum and maximum versions.
-                        The environment is resolved and installed, and the environment passed on as port object to be
-                        used e.g. by the Python Script node.
+                        Creates a Python or R environment using <a href="https://pixi.sh">Pixi</a>, a fast package manager
+                        that provides reproducible environments across platforms.
+
+                        This node offers a user-friendly interface for building pixi environments by adding packages one by
+                        one. Simply specify the package name, choose between conda or pip as the source, and optionally
+                        define version constraints.
+
+                        <h3>Features</h3>
+                        <ul>
+                        <li><b>Simple Package Management:</b> Add packages individually with an intuitive array-based UI,
+                        no need to write TOML manually.</li>
+                        <li><b>Flexible Versioning:</b> Specify minimum and/or maximum version constraints for each package,
+                        or leave empty to get the latest version.</li>
+                        <li><b>Mixed Package Sources:</b> Combine conda and pip packages in a single environment with proper
+                        dependency resolution.</li>
+                        <li><b>Multi-Platform Support:</b> Environments are automatically configured for all major operating
+                        systems (win-64, linux-64, osx-64, osx-arm64) ensuring portability and KNIME Hub deployment.</li>
+                        <li><b>Compatibility Check:</b> Use the "Check compatibility" button to verify that all packages can
+                        be resolved on all configured platforms before execution.</li>
+                        </ul>
+
+                        <h3>Usage</h3>
+                        <ol>
+                        <li>Click "Add package" to add a new package to your environment</li>
+                        <li>Enter the package name (e.g., "numpy", "pandas", "pytorch")</li>
+                        <li>Select the source: Conda (default) or Pip</li>
+                        <li>Optionally specify version constraints:
+                            <ul>
+                            <li>Min version: minimum version (inclusive)</li>
+                            <li>Max version: maximum version (exclusive)</li>
+                            </ul>
+                        </li>
+                        <li>Click "Check compatibility" to validate the environment before execution</li>
+                        </ol>
+
+                        The node comes with sensible defaults: <tt>python</tt> and <tt>knime-python-base</tt> from conda.
+
+                        The created environment is output as a port object that can be connected to Python Script or other
+                        nodes that consume Pixi environments.
                         """) //
             .sinceVersion(5, 10, 0) //
             .ports(p -> {

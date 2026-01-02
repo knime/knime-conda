@@ -10,7 +10,8 @@ import org.knime.core.node.port.AbstractSimplePortObjectSpec;
 /**
  * Port object spec for Pixi environment information.
  *
- * @author KNIME GmbH
+ * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
+ * @since 5.10
  */
 public final class PixiEnvironmentPortObjectSpec extends AbstractSimplePortObjectSpec {
 

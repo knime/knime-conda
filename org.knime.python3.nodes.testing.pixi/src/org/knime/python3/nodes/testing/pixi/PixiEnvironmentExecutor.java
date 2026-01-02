@@ -13,7 +13,11 @@ import org.knime.core.node.KNIMEException;
 
 /**
  * Shared utility class for executing pixi environment creation logic.
+ *
+ * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
+ * @since 5.10
  */
+@SuppressWarnings("restriction")
 final class PixiEnvironmentExecutor {
 
     private PixiEnvironmentExecutor() {
@@ -21,11 +25,11 @@ final class PixiEnvironmentExecutor {
     }
 
     /**
-     * Execute pixi install for the given manifest and return the Python executable path.
+     * Execute pixi install for the given manifest and return the pixi environment path.
      *
      * @param manifestText the pixi.toml content
      * @param execCtx the execution context for progress reporting
-     * @return the path to the Python executable in the created environment
+     * @return the path to the newly created Pixi environment on disk
      */
     static Path executePixiInstall(final String manifestText, final ExecutionContext execCtx) {
         execCtx.setProgress(0.1, "Running pixi install");
@@ -68,6 +72,6 @@ final class PixiEnvironmentExecutor {
 
         execCtx.setProgress(1.0, "Environment ready");
 
-        return PixiUtils.resolvePython(projectDir, envName);
+        return projectDir;
     }
 }

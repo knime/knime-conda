@@ -15,9 +15,10 @@ import org.knime.core.node.port.PortType;
 import org.knime.core.node.port.PortTypeRegistry;
 
 /**
- * Port object containing information about a Pixi Python environment.
+ * Port object containing information about a Pixi environment.
  *
- * @author KNIME GmbH
+ * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
+ * @since 5.10
  */
 public final class PixiEnvironmentPortObject extends AbstractSimplePortObject {
 
@@ -28,9 +29,9 @@ public final class PixiEnvironmentPortObject extends AbstractSimplePortObject {
     public static final PortType TYPE_OPTIONAL =
         PortTypeRegistry.getInstance().getPortType(PixiEnvironmentPortObject.class, true);
 
-    private static final String CFG_PYTHON_EXECUTABLE_PATH = "python_executable_path";
+    private static final String CFG_PIXI_ENV_PATH = "pixi_environment_path";
 
-    private Path m_pythonExecutablePath;
+    private Path m_pixiEnvironmentPath;
 
     /**
      * Serializer for {@link PixiEnvironmentPortObject}.
@@ -50,30 +51,55 @@ public final class PixiEnvironmentPortObject extends AbstractSimplePortObject {
      * @param pythonExecutablePath the path to the Python executable in the Pixi environment
      */
     public PixiEnvironmentPortObject(final Path pythonExecutablePath) {
-        m_pythonExecutablePath = pythonExecutablePath;
+        m_pixiEnvironmentPath = pythonExecutablePath;
     }
 
     /**
-     * @return the path to the Python executable in the Pixi environment
+     * @return the path to the pixi environment on disk
+     */
+    public Path getPixiEnvironmentPath() {
+        return m_pixiEnvironmentPath;
+    }
+
+    /**
+     * @param baseDir The path to the pixi environment (containing .pixi/envs/default)
+     * @param executableName The executable name, usually "python" or "r"
+     * @return The path to the executable inside the environment
+     */
+    private static Path resolveExecutable(final Path baseDir, final String executableName) {
+        Path envDir = baseDir.resolve(".pixi").resolve("envs").resolve("default");
+        boolean isWin = System.getProperty("os.name").toLowerCase().contains("win");
+        return isWin ? envDir.resolve(executableName + ".exe") : envDir.resolve("bin").resolve("executableName");
+    }
+
+    /**
+     * @return the path to the python executable in the Pixi environment, or "null" if no python executable was found
      */
     public Path getPythonExecutablePath() {
-        return m_pythonExecutablePath;
+        return resolveExecutable(m_pixiEnvironmentPath, "python");
+    }
+
+    /**
+     * @return the path to the R executable in the Pixi environment, or "null" if no R executable was found
+     */
+    public Path getRExecutablePath() {
+        return resolveExecutable(m_pixiEnvironmentPath, "r");
     }
 
     @Override
     protected void save(final ModelContentWO model, final ExecutionMonitor exec) throws CanceledExecutionException {
-        model.addString(CFG_PYTHON_EXECUTABLE_PATH, m_pythonExecutablePath.toString());
+        model.addString(CFG_PIXI_ENV_PATH, m_pixiEnvironmentPath.toString());
     }
 
     @Override
     protected void load(final ModelContentRO model, final PortObjectSpec spec, final ExecutionMonitor exec)
         throws InvalidSettingsException, CanceledExecutionException {
-        m_pythonExecutablePath = Path.of(model.getString(CFG_PYTHON_EXECUTABLE_PATH));
+        m_pixiEnvironmentPath = Path.of(model.getString(CFG_PIXI_ENV_PATH));
     }
 
     @Override
     public String getSummary() {
-        return "Pixi Python Environment: " + m_pythonExecutablePath;
+        return "Pixi Environment: " + m_pixiEnvironmentPath;
     }
 
     @Override

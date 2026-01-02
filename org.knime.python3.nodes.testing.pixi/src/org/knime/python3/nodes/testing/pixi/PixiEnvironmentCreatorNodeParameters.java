@@ -32,7 +32,7 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
     @ValueReference(PackageArrayRef.class)
     PackageSpec[] m_packages = new PackageSpec[]{
         new PackageSpec("python", PackageSource.CONDA, "3.14", "3.14"),
-        new PackageSpec("knime-python-base", PackageSource.CONDA, "5.9", "3.14")
+        new PackageSpec("knime-python-base", PackageSource.CONDA, "5.9", "5.9")
     };
 
     /**
@@ -102,7 +102,8 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
     private static String buildTomlFromPackages(final PackageSpec[] packages) {
         Config config = Config.inMemory();
 
-        // [workspace] section. Need to use CommentedConfig so that toml contains a section header which pixi needs
+        // [workspace] section.
+        // Note: Need to use CommentedConfig here so that the toml lib contains a section header which pixi needs
         CommentedConfig workspace = CommentedConfig.inMemory();
         workspace.set("channels", Arrays.asList("knime", "conda-forge"));
         workspace.set("platforms", Arrays.asList("win-64", "linux-64", "osx-64", "osx-arm64"));

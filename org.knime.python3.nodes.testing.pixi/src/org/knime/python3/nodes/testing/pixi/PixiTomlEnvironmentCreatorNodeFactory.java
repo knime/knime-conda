@@ -26,14 +26,43 @@ public final class PixiTomlEnvironmentCreatorNodeFactory extends DefaultNodeFact
         return DefaultNode.create().name("Pixi TOML Environment Creator (Labs)") //
             .icon("icon.png") //
             .shortDescription("Create a pixi environment based on the provided TOML file content") //
-            .fullDescription(
-                """
-                        Assembles a pixi.toml manifest from a selected base KNIME Python environment plus optional additional packages (conda or pip).
-                        Resolves and installs the environment with caching via a stable manifest hash. Propagates the Python executable and environment metadata as flow variables.
-                        """) //
+            .fullDescription("""
+                    Creates a Python or R environment using <a href="https://pixi.sh">Pixi</a>, a fast package manager
+                    that provides reproducible environments across platforms.
+
+                    This node allows you to define your environment by providing a complete pixi.toml manifest file.
+                    The pixi.toml format gives you full control over the environment configuration, including workspace
+                    settings, channels, platforms, and dependencies from both conda and pip ecosystems.
+
+                    <h3>Features</h3>
+                    <ul>
+                    <li><b>Reproducible Environments:</b> The same pixi.toml will create identical environments across
+                    Windows, Linux, and macOS, making workflows portable and deployable.</li>
+                    <li><b>Multi-Platform Support:</b> Configure your environment to work on all major operating systems
+                    (win-64, linux-64, osx-64, osx-arm64) for seamless sharing and deployment to KNIME Hub.</li>
+                    <li><b>Mixed Package Sources:</b> Combine conda and pip packages in a single environment with proper
+                    dependency resolution.</li>
+                    <li><b>Compatibility Check:</b> Use the "Check compatibility" button to verify that the environment
+                    can be created on all configured platforms before execution.</li>
+                    </ul>
+
+                    <h3>Usage</h3>
+                    Paste or edit your pixi.toml content in the text area. The manifest should include:
+                    <ul>
+                    <li><tt>[workspace]</tt> section with channels and platforms</li>
+                    <li><tt>[dependencies]</tt> section for conda packages</li>
+                    <li><tt>[pypi-dependencies]</tt> section for pip packages (optional)</li>
+                    </ul>
+
+                    See the <a href="https://pixi.prefix.dev/latest/reference/pixi_manifest/">pixi manifest
+                    specification</a> for complete documentation on the pixi.toml format.
+
+                    The created environment is output as a port object that can be connected to Python Script or other
+                    nodes that consume Python environments.
+                    """) //
             .sinceVersion(5, 10, 0) //
             .ports(p -> {
-                p.addOutputPort("Pixi Environment", "Pixi Python environment information",
+                p.addOutputPort("Pixi Environment", "Pixi Python environment information to be used by script nodes",
                     PixiEnvironmentPortObject.TYPE);
             }).model(modelStage -> modelStage //
                 .parametersClass(PixiTomlEnvironmentCreatorNodeParameters.class) //

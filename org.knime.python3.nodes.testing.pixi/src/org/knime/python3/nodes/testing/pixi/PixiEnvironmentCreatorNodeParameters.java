@@ -1,235 +1,156 @@
 package org.knime.python3.nodes.testing.pixi;
 
-import java.io.IOException;
-import java.io.StringReader;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
+import java.io.StringWriter;
+import java.util.Arrays;
 
-import org.knime.conda.envinstall.pixi.PixiBinary;
-import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
-import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
-import java.lang.annotation.Annotation;
-
-import org.knime.core.webui.node.dialog.defaultdialog.internal.button.ButtonChange;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.ButtonWidget;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
-import org.knime.core.webui.node.dialog.defaultdialog.widget.handler.WidgetHandlerException;
 import org.knime.node.parameters.NodeParameters;
-import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
-import org.knime.node.parameters.updates.Effect;
-import org.knime.node.parameters.updates.EffectPredicate;
-import org.knime.node.parameters.updates.EffectPredicateProvider;
-import org.knime.node.parameters.updates.EffectPredicateProvider.PredicateInitializer;
+import org.knime.node.parameters.array.ArrayWidget;
 import org.knime.node.parameters.updates.ParameterReference;
-import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.updates.ValueReference;
-import org.knime.node.parameters.widget.message.TextMessage;
-import org.knime.node.parameters.widget.message.TextMessage.MessageType;
-import org.knime.node.parameters.widget.text.TextAreaWidget;
+import org.knime.node.parameters.widget.choices.Label;
+import org.knime.python3.nodes.testing.pixi.PixiUtils.AbstractPixiLockActionHandler;
 
+import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.Config;
-import com.electronwill.nightconfig.toml.TomlParser;
+import com.electronwill.nightconfig.core.io.IndentStyle;
+import com.electronwill.nightconfig.toml.TomlWriter;
 
+/**
+ * Node Parameters describing the dialog for the Pixi Environment Creator node
+ *
+ * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
+ * @since 5.10
+ */
 @SuppressWarnings("restriction")
 final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
-    @Widget(title = "Environment specification (pixi.toml)", description = """
-            Content of the pixi.toml that describes the environment that should be constructed by pixi.
-            See [the pixi manifest specification](https://pixi.prefix.dev/latest/reference/pixi_manifest/) for details.
-            It is recommended to list all platforms in the platforms section for optimal compatibility
-            when sharing and deploying the workflow.
-            """)
-    @TextAreaWidget(rows = 20)
-    @ValueReference(PixiTomlContentRef.class)
-    String m_pixiTomlContent = """
-            [workspace]
-            channels = ["knime", "conda-forge"]
-            platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 
-            [dependencies]
-            python = "3.13.*"
-            knime-python-base = "5.9.*"
-            """;
+    @Widget(title = "Packages", description = "Specify the packages to include in the environment")
+    @ArrayWidget(elementLayout = ArrayWidget.ElementLayout.HORIZONTAL_SINGLE_LINE, addButtonText = "Add package")
+    @ValueReference(PackageArrayRef.class)
+    PackageSpec[] m_packages = new PackageSpec[]{
+        new PackageSpec("python", PackageSource.CONDA, "3.14", "3.14"),
+        new PackageSpec("knime-python-base", PackageSource.CONDA, "5.9", "3.14")
+    };
 
-    @TextMessage(PlatformValidationProvider.class)
-    Void m_platformValidationMessage;
+    /**
+     * Used by the execute() method to run "pixi install"
+     *
+     * @return the pixi toml content as string
+     */
+    String buildPixiToml() {
+        return buildTomlFromPackages(m_packages);
+    }
 
     @Widget(title = "Check compatibility",
         description = "Click to check whether this pixi environment can be constructed on all selected operating systems")
     @ButtonWidget(actionHandler = PixiLockActionHandler.class, updateHandler = PixiLockUpdateHandler.class)
     String m_compatibilityCheckButton;
-    
-    interface PixiTomlContentRef extends ParameterReference<String> {
+
+    interface PackageArrayRef extends ParameterReference<PackageSpec[]> {
     }
 
-    static final class PixiLockActionHandler extends CancelableActionHandler<String, PixiTomlContent> {
+    static final class PackageSpec implements NodeParameters {
 
-        @Override
-        protected String invoke(final PixiTomlContent settings, final NodeParametersInput context)
-            throws WidgetHandlerException {
-            String manifestText = settings.m_pixiTomlContent;
-            try {
-                final Path projectDir = PixiUtils.saveManifestToDisk(manifestText);
-                final Path pixiHome = projectDir.resolve(".pixi-home");
-                Files.createDirectories(pixiHome);
+        @Widget(title = "Name", description = "Package name")
+        String m_name = "";
 
-                final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());
+        @Widget(title = "Source", description = "Package source (conda or pip)")
+        PackageSource m_source = PackageSource.CONDA;
 
-                final String[] pixiArgs = {"--color", "never", "--no-progress", "lock"};
+        @Widget(title = "Min version", description = "Minimum version (inclusive, optional)")
+        String m_minVersion = "";
 
-                final CallResult callResult = PixiBinary.callPixi(projectDir, extraEnv, pixiArgs);
+        @Widget(title = "Max version", description = "Maximum version (exclusive, optional)")
+        String m_maxVersion = "";
 
-                if (callResult.returnCode() != 0) {
-                    String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
-                    throw new WidgetHandlerException(errorDetails);
-                }
-
-                return "Conda environment is compatible with all selected operating systems.";
-
-            } catch (IOException ex) {
-                throw new WidgetHandlerException("Unknown error occurred: " + ex.getMessage());
-            } catch (PixiBinaryLocationException ex) {
-                throw new WidgetHandlerException("Pixi binary is not found: " + ex.getMessage());
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                throw new WidgetHandlerException("Operation was interrupted.");
-            }
+        // Default constructor for serialization
+        PackageSpec() {
         }
 
-        @Override
-        protected String getButtonText(final CancelableActionHandler.States state) {
-            return switch (state) {
-                case READY -> "Check compatibility";
-                case CANCEL -> "Cancel";
-                case DONE -> "✓ Environment is compatible";
-            };
-        }
-
-        @Override
-        protected boolean isMultiUse() {
-            return false;
+        PackageSpec(final String name, final PackageSource source, final String minVersion, final String maxVersion) {
+            m_name = name;
+            m_source = source;
+            m_minVersion = minVersion;
+            m_maxVersion = maxVersion;
         }
     }
 
-    static final class PixiLockUpdateHandler extends CancelableActionHandler.UpdateHandler<String, PixiTomlContent> {
+    enum PackageSource {
+        @Label("Conda")
+        CONDA,
+        @Label("Pip")
+        PIP
     }
 
-    static final class PixiTomlContent {
-        // Setting name must match the parameter name that we want to retrieve
-        String m_pixiTomlContent;
+    static final class PixiLockActionHandler extends AbstractPixiLockActionHandler<PackagesContent> {
+        @Override
+        protected String getTomlContent(final PackagesContent dependency) {
+            return buildTomlFromPackages(dependency.m_packages);
+        }
     }
 
-    static final class PlatformValidationProvider implements StateProvider<Optional<TextMessage.Message>> {
+    static final class PixiLockUpdateHandler extends CancelableActionHandler.UpdateHandler<String, PackagesContent> {
+    }
 
-        private static final Set<String> ALL_PLATFORMS =
-            Set.of("win-64", "linux-64", "osx-64", "osx-arm64");
+    static final class PackagesContent {
+        PackageSpec[] m_packages;
+    }
 
-        private Supplier<String> m_tomlContentSupplier;
+    private static String buildTomlFromPackages(final PackageSpec[] packages) {
+        Config config = Config.inMemory();
 
-        @Override
-        public void init(final StateProviderInitializer initializer) {
-            initializer.computeOnValueChange(PixiTomlContentRef.class);
-            initializer.computeAfterOpenDialog();
-            m_tomlContentSupplier = initializer.getValueSupplier(PixiTomlContentRef.class);
-        }
+        // [workspace] section. Need to use CommentedConfig so that toml contains a section header which pixi needs
+        CommentedConfig workspace = CommentedConfig.inMemory();
+        workspace.set("channels", Arrays.asList("knime", "conda-forge"));
+        workspace.set("platforms", Arrays.asList("win-64", "linux-64", "osx-64", "osx-arm64"));
+        config.set("workspace", workspace);
 
-        @Override
-        public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
-            String tomlContent = m_tomlContentSupplier.get();
-
-            if (tomlContent == null || tomlContent.isBlank()) {
-                return Optional.empty();
+        // [dependencies] section for conda packages
+        CommentedConfig dependencies = CommentedConfig.inMemory();
+        for (PackageSpec pkg : packages) {
+            if (pkg.m_name == null || pkg.m_name.isBlank() || pkg.m_source == PackageSource.PIP) {
+                continue;
             }
+            dependencies.set(pkg.m_name, formatVersionConstraint(pkg));
+        }
+        config.set("dependencies", dependencies);
 
-            try {
-                TomlParser parser = new TomlParser();
-                Config config = parser.parse(new StringReader(tomlContent));
-
-                // Try to get the workspace section
-                Config workspace = config.get("workspace");
-                if (workspace == null) {
-                    return Optional.of(new TextMessage.Message("Platform configuration",
-                        "No '[workspace]' section found. Environment will only be checked for the current platform.",
-                        MessageType.WARNING));
-                }
-
-                // Try to get the platforms list
-                List<?> platformsList = workspace.get("platforms");
-                if (platformsList == null || platformsList.isEmpty()) {
-                    return Optional.of(new TextMessage.Message("Platform configuration",
-                        "No 'platforms' field found in workspace section. Environment will only be checked for the current platform.",
-                        MessageType.WARNING));
-                }
-
-                // Convert to set of strings
-                Set<String> platforms = platformsList.stream()
-                    .map(Object::toString)
-                    .collect(Collectors.toSet());
-
-                // Check if all platforms are present
-                if (platforms.equals(ALL_PLATFORMS)) {
-                    return Optional.of(new TextMessage.Message("Platform configuration",
-                        "Pixi TOML is prepared for all operating systems.",
-                        MessageType.INFO));
-                }
-
-                // Check whether all platforms are known
-                Set<String> unknownPlatforms = new HashSet<>(platforms);
-                unknownPlatforms.removeAll(ALL_PLATFORMS);
-
-                if (!unknownPlatforms.isEmpty()) {
-                    String unknownOSes = unknownPlatforms.stream().collect(Collectors.joining(", "));
-                    String knownOSes = ALL_PLATFORMS.stream().collect(Collectors.joining(", "));
-
-                    return Optional.of(new TextMessage.Message("Platform configuration",
-                        "Unknown platform(s): " + unknownOSes + ". Platforms should be one of: " + knownOSes + ".",
-                        MessageType.WARNING));
-                }
-
-                // Check which platforms are missing
-                Set<String> missingPlatforms = new HashSet<>(ALL_PLATFORMS);
-                missingPlatforms.removeAll(platforms);
-
-                if (!missingPlatforms.isEmpty()) {
-                    String missingOs = missingPlatforms.stream()
-                        .map(PlatformValidationProvider::platformDisplayName)
-                        .collect(Collectors.joining(", "));
-
-                    return Optional.of(new TextMessage.Message("Platform configuration",
-                        "Missing platform(s): " + missingOs + ". Environment may not work on all operating systems.",
-                        MessageType.WARNING));
-                }
-
-                return Optional.empty();
-
-            } catch (Exception ex) {
-                return Optional.of(new TextMessage.Message("TOML Parse Error",
-                    "Could not parse TOML content: " + ex.getMessage(),
-                    MessageType.ERROR));
+        // [pypi-dependencies] section for pip packages
+        CommentedConfig pypiDependencies = CommentedConfig.inMemory();
+        boolean hasPipPackages = false;
+        for (PackageSpec pkg : packages) {
+            if (pkg.m_name != null && !pkg.m_name.isBlank() && pkg.m_source == PackageSource.PIP) {
+                pypiDependencies.set(pkg.m_name, formatVersionConstraint(pkg));
+                hasPipPackages = true;
             }
         }
+        if (hasPipPackages) {
+            config.set("pypi-dependencies", pypiDependencies);
+        }
 
-        private static String platformDisplayName(final String platformIdentifier) {
-            if (platformIdentifier.startsWith("win-")) {
-                return "Windows";
+        // Write to string
+        StringWriter writer = new StringWriter();
+        TomlWriter tomlWriter = new TomlWriter();
+        tomlWriter.setIndent(IndentStyle.SPACES_2);
+        tomlWriter.setWriteTableInlinePredicate(path -> false); // Never write tables inline
+        tomlWriter.write(config, writer);
+        return writer.toString();
+    }
+
+    private static String formatVersionConstraint(final PackageSpec pkg) {
+        if (pkg.m_minVersion != null && !pkg.m_minVersion.isBlank()) {
+            if (pkg.m_maxVersion != null && !pkg.m_maxVersion.isBlank()) {
+                return ">=" + pkg.m_minVersion + ",<" + pkg.m_maxVersion;
+            } else {
+                return ">=" + pkg.m_minVersion;
             }
-            if (platformIdentifier.startsWith("linux-")) {
-                return "Linux (and KNIME Hub)";
-            }
-            if (platformIdentifier.equals("osx-64")) {
-                return "macOS (Intel)";
-            }
-            if (platformIdentifier.equals("osx-arm64")) {
-                return "macOS (Apple Silicon)";
-            }
-            return platformIdentifier;
+        } else if (pkg.m_maxVersion != null && !pkg.m_maxVersion.isBlank()) {
+            return "<" + pkg.m_maxVersion;
+        } else {
+            return "*";
         }
     }
 }

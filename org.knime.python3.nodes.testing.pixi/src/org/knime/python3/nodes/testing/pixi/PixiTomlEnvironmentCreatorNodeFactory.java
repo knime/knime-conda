@@ -10,41 +10,36 @@ import org.knime.node.DefaultNode;
 import org.knime.node.DefaultNodeFactory;
 
 /**
- * NodeFactory for the Pixi Environment Creator node where the user can add packages manually
+ * NodeFactory for the TOML-based Pixi Environment Creator node
  *
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  * @since 5.10
  */
 @SuppressWarnings("restriction")
-public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory {
+public final class PixiTomlEnvironmentCreatorNodeFactory extends DefaultNodeFactory {
 
-    /**
-     *
-     */
-    public PixiEnvironmentCreatorNodeFactory() {
+    public PixiTomlEnvironmentCreatorNodeFactory() {
         super(buildNodeDefinition());
     }
 
     private static DefaultNode buildNodeDefinition() {
-        return DefaultNode.create().name("Pixi Environment Creator (Labs)") //
+        return DefaultNode.create().name("Pixi TOML Environment Creator (Labs)") //
             .icon("icon.png") //
-            .shortDescription(
-                "Create a pixi environment by specifying packages") //
-            .fullDescription( //
+            .shortDescription("Create a pixi environment based on the provided TOML file content") //
+            .fullDescription(
                 """
-                        Create a pixi environment by specifying individual packages with their versions.
-                        Select conda or pip as the package source and optionally specify minimum and maximum versions.
-                        The environment is resolved and installed, and the environment passed on as port object to be
-                        used e.g. by the Python Script node.
+                        Assembles a pixi.toml manifest from a selected base KNIME Python environment plus optional additional packages (conda or pip).
+                        Resolves and installs the environment with caching via a stable manifest hash. Propagates the Python executable and environment metadata as flow variables.
                         """) //
             .sinceVersion(5, 10, 0) //
             .ports(p -> {
-                p.addOutputPort("Pixi Environment", "Pixi Python environment information", PixiEnvironmentPortObject.TYPE);
+                p.addOutputPort("Pixi Environment", "Pixi Python environment information",
+                    PixiEnvironmentPortObject.TYPE);
             }).model(modelStage -> modelStage //
-                .parametersClass(PixiEnvironmentCreatorNodeParameters.class) //
-                .configure(PixiEnvironmentCreatorNodeFactory::configure) //
-                .execute(PixiEnvironmentCreatorNodeFactory::execute)) //
-            .keywords("pixi", "python", "environment", "conda", "pip", "packages"); //
+                .parametersClass(PixiTomlEnvironmentCreatorNodeParameters.class) //
+                .configure(PixiTomlEnvironmentCreatorNodeFactory::configure) //
+                .execute(PixiTomlEnvironmentCreatorNodeFactory::execute)) //
+            .keywords("pixi", "python", "environment", "conda", "pip"); //
     }
 
     private static void configure(final ConfigureInput in, final ConfigureOutput out) {
@@ -53,8 +48,8 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
     }
 
     private static void execute(final ExecuteInput in, final ExecuteOutput out) {
-        final PixiEnvironmentCreatorNodeParameters params = in.getParameters();
-        final String manifestText = params.buildPixiToml();
+        final PixiTomlEnvironmentCreatorNodeParameters params = in.getParameters();
+        final String manifestText = params.m_pixiTomlContent;
 
         final var execCtx = in.getExecutionContext();
 

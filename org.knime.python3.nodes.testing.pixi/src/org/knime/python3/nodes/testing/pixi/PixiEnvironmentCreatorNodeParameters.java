@@ -15,11 +15,19 @@ import java.util.stream.Collectors;
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
-import org.knime.core.webui.node.dialog.defaultdialog.internal.button.SimpleButtonWidget;
+import java.lang.annotation.Annotation;
+
+import org.knime.core.webui.node.dialog.defaultdialog.internal.button.ButtonChange;
+import org.knime.core.webui.node.dialog.defaultdialog.internal.button.ButtonWidget;
+import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
+import org.knime.core.webui.node.dialog.defaultdialog.widget.handler.WidgetHandlerException;
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
-import org.knime.node.parameters.updates.ButtonReference;
+import org.knime.node.parameters.updates.Effect;
+import org.knime.node.parameters.updates.EffectPredicate;
+import org.knime.node.parameters.updates.EffectPredicateProvider;
+import org.knime.node.parameters.updates.EffectPredicateProvider.PredicateInitializer;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.updates.ValueReference;
@@ -47,7 +55,7 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
 
             [dependencies]
             python = "3.13.*"
-            knime-python-base = "5.9"
+            knime-python-base = "5.9.*"
             """;
 
     @TextMessage(PlatformValidationProvider.class)
@@ -55,31 +63,18 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
 
     @Widget(title = "Check compatibility",
         description = "Click to check whether this pixi environment can be constructed on all selected operating systems")
-    @SimpleButtonWidget(ref = GeneratePixiLockButtonRef.class)
-    Void m_compatibilityCheckButton;
-
-    @TextMessage(PixiLockResultProvider.class)
-    Void m_compatibilityCheckResultMessage;
-
+    @ButtonWidget(actionHandler = PixiLockActionHandler.class, updateHandler = PixiLockUpdateHandler.class)
+    String m_compatibilityCheckButton;
+    
     interface PixiTomlContentRef extends ParameterReference<String> {
     }
 
-    static final class GeneratePixiLockButtonRef implements ButtonReference {
-    }
-
-    static final class PixiLockResultProvider implements StateProvider<Optional<TextMessage.Message>> {
-
-        private Supplier<String> m_tomlContentSupplier;
+    static final class PixiLockActionHandler extends CancelableActionHandler<String, PixiTomlContent> {
 
         @Override
-        public void init(final StateProviderInitializer initializer) {
-            initializer.computeOnButtonClick(GeneratePixiLockButtonRef.class);
-            m_tomlContentSupplier = initializer.getValueSupplier(PixiTomlContentRef.class);
-        }
-
-        @Override
-        public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
-            String manifestText = m_tomlContentSupplier.get();
+        protected String invoke(final PixiTomlContent settings, final NodeParametersInput context)
+            throws WidgetHandlerException {
+            String manifestText = settings.m_pixiTomlContent;
             try {
                 final Path projectDir = PixiUtils.saveManifestToDisk(manifestText);
                 final Path pixiHome = projectDir.resolve(".pixi-home");
@@ -93,25 +88,42 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
 
                 if (callResult.returnCode() != 0) {
                     String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
-                    return Optional.of(new TextMessage.Message("Error", errorDetails, MessageType.ERROR));
+                    throw new WidgetHandlerException(errorDetails);
                 }
 
-                return Optional
-                    .of(new TextMessage.Message("Success",
-                        "Conda environment is compatible with all selected operating systems.", MessageType.INFO));
+                return "Conda environment is compatible with all selected operating systems.";
 
             } catch (IOException ex) {
-                return Optional
-                    .of(new TextMessage.Message("Error", "Unknown error occured. " + ex.getMessage(),
-                        MessageType.ERROR));
+                throw new WidgetHandlerException("Unknown error occurred: " + ex.getMessage());
             } catch (PixiBinaryLocationException ex) {
-                return Optional.of(
-                    new TextMessage.Message("Error", "Pixi binary is not found. " + ex.getMessage(),
-                        MessageType.ERROR));
+                throw new WidgetHandlerException("Pixi binary is not found: " + ex.getMessage());
             } catch (InterruptedException ex) {
-                return Optional.of(new TextMessage.Message("Error", "Operation was interrupted.", MessageType.ERROR));
+                Thread.currentThread().interrupt();
+                throw new WidgetHandlerException("Operation was interrupted.");
             }
         }
+
+        @Override
+        protected String getButtonText(final CancelableActionHandler.States state) {
+            return switch (state) {
+                case READY -> "Check compatibility";
+                case CANCEL -> "Cancel";
+                case DONE -> "✓ Environment is compatible";
+            };
+        }
+
+        @Override
+        protected boolean isMultiUse() {
+            return false;
+        }
+    }
+
+    static final class PixiLockUpdateHandler extends CancelableActionHandler.UpdateHandler<String, PixiTomlContent> {
+    }
+
+    static final class PixiTomlContent {
+        // Setting name must match the parameter name that we want to retrieve
+        String m_pixiTomlContent;
     }
 
     static final class PlatformValidationProvider implements StateProvider<Optional<TextMessage.Message>> {

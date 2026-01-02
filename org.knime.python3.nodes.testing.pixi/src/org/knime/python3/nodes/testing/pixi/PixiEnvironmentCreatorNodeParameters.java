@@ -25,7 +25,8 @@ import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
 
-public final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
+@SuppressWarnings("restriction")
+final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
 
     @Section(title = "Environment Setup")
     interface SetupSection {
@@ -41,12 +42,19 @@ public final class PixiEnvironmentCreatorNodeParameters implements NodeParameter
     static final class GeneratePixiLockButtonRef implements ButtonReference {
     }
 
-
     @Widget(title = "pixi.toml", description = "Content of your pixi toml")
     @Layout(SetupSection.class)
     @TextAreaWidget(rows = 20)
     @ValueReference(PixiTomlContentRef.class)
-    String m_pixiTomlContent = "";
+    String m_pixiTomlContent = """
+            [workspace]
+            channels = ["knime", "conda-forge"]
+            platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+
+            [dependencies]
+            python = "3.13.*"
+            knime-python-base = "5.9"
+            """;
 
     @Widget(title = "Generate lock file", description = "Click to generate pixi lock file")
     @SimpleButtonWidget(ref = GeneratePixiLockButtonRef.class)
@@ -91,18 +99,19 @@ public final class PixiEnvironmentCreatorNodeParameters implements NodeParameter
                 }
 
                 return Optional
-                    .of(new TextMessage.Message("Success", "pixi.lock generated." + manifestText, MessageType.INFO));
+                    .of(new TextMessage.Message("Success", "pixi.lock generated. " + manifestText, MessageType.INFO));
 
             } catch (IOException ex) {
-                return Optional.of(
-                    new TextMessage.Message("Error", "Unknown error occured" + ex.getMessage(), MessageType.ERROR));
+                return Optional
+                    .of(new TextMessage.Message("Error", "Unknown error occured. " + ex.getMessage(),
+                        MessageType.ERROR));
             } catch (PixiBinaryLocationException ex) {
                 return Optional.of(
-                    new TextMessage.Message("Error", "Pixi binary is not found" + ex.getMessage(), MessageType.ERROR));
+                    new TextMessage.Message("Error", "Pixi binary is not found. " + ex.getMessage(),
+                        MessageType.ERROR));
             } catch (InterruptedException ex) {
-                return Optional.of(new TextMessage.Message("Error", "Operation was interrupted", MessageType.ERROR));
+                return Optional.of(new TextMessage.Message("Error", "Operation was interrupted.", MessageType.ERROR));
             }
-            return null;
         }
     }
 }

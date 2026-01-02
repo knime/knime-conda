@@ -31,7 +31,7 @@ class PixiUtils {
 
     public static Path saveManifestToDisk(final String manifestText) throws IOException {
         if (manifestText == null || manifestText.isBlank()) {
-            throw new IllegalStateException("pixi.toml manifest text is empty.");
+            throw new IllegalArgumentException("pixi.toml manifest text is empty.");
         }
 
         final Path projectDir = resolveProjectDir(manifestText);

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>org.knime.python3.nodes.testing.pixi</name>
+	<name>org.knime.pixi.nodes</name>
 	<comment></comment>
 	<projects>
 	</projects>

@@ -1,4 +1,4 @@
-package org.knime.python3.nodes.testing.pixi;
+package org.knime.pixi.nodes;
 
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.ButtonWidget;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
@@ -7,7 +7,7 @@ import org.knime.node.parameters.Widget;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.ValueReference;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
-import org.knime.python3.nodes.testing.pixi.PixiUtils.AbstractPixiLockActionHandler;
+import org.knime.pixi.nodes.PixiUtils.AbstractPixiLockActionHandler;
 
 /**
  * Node Parameters describing the dialog for the YAML-based Pixi Environment Creator node

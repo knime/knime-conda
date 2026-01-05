@@ -1,4 +1,4 @@
-package org.knime.python3.nodes.testing.pixi;
+package org.knime.pixi.nodes;
 
 import java.io.StringWriter;
 import java.util.Arrays;
@@ -11,7 +11,7 @@ import org.knime.node.parameters.array.ArrayWidget;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.ValueReference;
 import org.knime.node.parameters.widget.choices.Label;
-import org.knime.python3.nodes.testing.pixi.PixiUtils.AbstractPixiLockActionHandler;
+import org.knime.pixi.nodes.PixiUtils.AbstractPixiLockActionHandler;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.Config;

@@ -1,4 +1,4 @@
-package org.knime.python3.nodes.testing.pixi;
+package org.knime.pixi.nodes;
 
 import java.io.StringReader;
 import java.util.HashSet;
@@ -19,7 +19,7 @@ import org.knime.node.parameters.updates.ValueReference;
 import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
-import org.knime.python3.nodes.testing.pixi.PixiUtils.AbstractPixiLockActionHandler;
+import org.knime.pixi.nodes.PixiUtils.AbstractPixiLockActionHandler;
 
 import com.electronwill.nightconfig.core.Config;
 import com.electronwill.nightconfig.toml.TomlParser;

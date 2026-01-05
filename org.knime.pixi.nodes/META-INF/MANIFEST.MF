@@ -1,7 +1,7 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: KNIME Conda
-Bundle-SymbolicName: org.knime.python3.nodes.testing.pixi;singleton:=true
+Bundle-SymbolicName: org.knime.pixi.nodes;singleton:=true
 Bundle-Version: 5.9.0.qualifier
 Bundle-Vendor: KNIME AG, Zurich, Switzerland
 Require-Bundle: org.apache.commons.lang3;bundle-version="[3.9.0,4.0.0)",
@@ -16,4 +16,4 @@ Bundle-ClassPath: lib/core-3.8.3.jar,
  .
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Bundle-ActivationPolicy: lazy
-Export-Package: org.knime.python3.nodes.testing.pixi
+Export-Package: org.knime.pixi.nodes

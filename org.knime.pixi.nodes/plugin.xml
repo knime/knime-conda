@@ -15,15 +15,15 @@
          point="org.knime.workbench.repository.nodes">
             <node
                   category-path="/scripting/pixi"
-                  factory-class="org.knime.python3.nodes.testing.pixi.PixiTomlEnvironmentCreatorNodeFactory">
+                  factory-class="org.knime.pixi.nodes.PixiTomlEnvironmentCreatorNodeFactory">
             </node>
             <node
                   category-path="/scripting/pixi"
-                  factory-class="org.knime.python3.nodes.testing.pixi.PixiEnvironmentCreatorNodeFactory">
+                  factory-class="org.knime.pixi.nodes.PixiEnvironmentCreatorNodeFactory">
             </node>
             <node
                   category-path="/scripting/pixi"
-                  factory-class="org.knime.python3.nodes.testing.pixi.PixiYamlEnvironmentCreatorNodeFactory">
+                  factory-class="org.knime.pixi.nodes.PixiYamlEnvironmentCreatorNodeFactory">
             </node>
    </extension>
       <extension
@@ -32,10 +32,10 @@
                   color="#7F7F7F"
                   hidden="false"
                   name="Pixi Environment"
-                  objectClass="org.knime.python3.nodes.testing.pixi.PixiEnvironmentPortObject"
-                  objectSerializer="org.knime.python3.nodes.testing.pixi.PixiEnvironmentPortObject$Serializer"
-                  specClass="org.knime.python3.nodes.testing.pixi.PixiEnvironmentPortObjectSpec"
-                  specSerializer="org.knime.python3.nodes.testing.pixi.PixiEnvironmentPortObjectSpec$Serializer">
+                  objectClass="org.knime.pixi.nodes.PixiEnvironmentPortObject"
+                  objectSerializer="org.knime.pixi.nodes.PixiEnvironmentPortObject$Serializer"
+                  specClass="org.knime.pixi.nodes.PixiEnvironmentPortObjectSpec"
+                  specSerializer="org.knime.pixi.nodes.PixiEnvironmentPortObjectSpec$Serializer">
             </portObject>
       </extension>
 </plugin>

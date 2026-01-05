@@ -1,4 +1,4 @@
-package org.knime.python3.nodes.testing.pixi;
+package org.knime.pixi.nodes;
 
 import java.io.IOException;
 import java.nio.file.Files;

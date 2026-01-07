@@ -1,4 +1,4 @@
-package org.knime.pixi.nodes;
+package org.knime.pixi.port;
 
 
 import java.nio.file.Path;

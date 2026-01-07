@@ -3,6 +3,8 @@ package org.knime.pixi.nodes;
 import java.nio.file.Path;
 
 import org.knime.node.DefaultModel.ConfigureInput;
+import org.knime.pixi.port.PixiEnvironmentPortObject;
+import org.knime.pixi.port.PixiEnvironmentPortObjectSpec;
 import org.knime.node.DefaultModel.ConfigureOutput;
 import org.knime.node.DefaultModel.ExecuteInput;
 import org.knime.node.DefaultModel.ExecuteOutput;

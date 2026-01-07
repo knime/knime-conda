@@ -52,6 +52,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import org.eclipse.jface.preference.BooleanFieldEditor;
 import org.eclipse.jface.preference.DirectoryFieldEditor;
 import org.eclipse.jface.preference.FieldEditorPreferencePage;
 import org.eclipse.jface.util.PropertyChangeEvent;
@@ -60,7 +61,9 @@ import org.eclipse.swt.SWTException;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
+import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Widget;
 import org.eclipse.ui.IWorkbench;
@@ -81,6 +84,12 @@ public final class CondaPreferencePage extends FieldEditorPreferencePage impleme
 
     private Color m_colorDefault;
 
+    private BooleanFieldEditor m_useTempPixiEnv;
+
+    private DirectoryFieldEditor m_pixiEnvDir;
+
+    private Composite m_pixiBody;
+
     /** Construct the Conda preference page. */
     public CondaPreferencePage() {
         super(GRID);
@@ -93,27 +102,57 @@ public final class CondaPreferencePage extends FieldEditorPreferencePage impleme
 
     @Override
     protected void createFieldEditors() {
-        final Composite parent = getFieldEditorParent();
+        final Composite page = getFieldEditorParent(); // this is the field-editor grid (2 cols)
 
-        // Conda directory path
+        // ---------- Conda Settings ----------
+        Group condaGroup = new Group(page, SWT.NONE);
+        condaGroup.setText("Conda Settings");
+        condaGroup.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 2, 1));
+        condaGroup.setLayout(new GridLayout(1, false)); // group contains ONE child: a 2-col body
+
+        Composite condaBody = new Composite(condaGroup, SWT.NONE);
+        condaBody.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+        condaBody.setLayout(new GridLayout(2, false)); // body has 2 columns
+
         m_condaInstallationDirectory = new DirectoryFieldEditor(CondaPreferences.CONDA_DIR_PREF_KEY,
-            "Path to the Conda installation directory", parent);
-        // Make sure that "Return" does not close the dialog if the directory field is selected
-        m_condaInstallationDirectory.getTextControl(parent).addListener(SWT.Traverse, event -> {
+            "Path to the Conda installation directory", condaBody);
+        addField(m_condaInstallationDirectory);
+
+        // IMPORTANT: use the field editor's actual parent (condaBody), not the page parent
+        m_condaInstallationDirectory.getTextControl(condaBody).addListener(SWT.Traverse, event -> {
             checkCondaInstallDir(m_condaInstallationDirectory.getStringValue());
             if (event.detail == SWT.TRAVERSE_RETURN) {
                 event.doit = false;
             }
         });
-        addField(m_condaInstallationDirectory);
 
-        // Conda directory path status
-        m_condaStatus = new Label(parent, SWT.NONE);
+        // Status label: place it in the same 2-col body and span both columns
+        m_condaStatus = new Label(condaBody, SWT.NONE);
+        m_condaStatus.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 2, 1));
+
         m_colorDefault = m_condaStatus.getForeground();
-        m_colorError = new Color(parent.getDisplay(), 255, 0, 0);
-        final var gridData = new GridData();
-        gridData.horizontalSpan = 2;
-        m_condaStatus.setLayoutData(gridData);
+        m_colorError = new Color(page.getDisplay(), 255, 0, 0);
+
+        // ---------- Pixi Environment Settings ----------
+        Group pixiGroup = new Group(page, SWT.NONE);
+        pixiGroup.setText("Pixi Environment Settings");
+        pixiGroup.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false, 2, 1));
+        pixiGroup.setLayout(new GridLayout(1, false));
+
+        m_pixiBody = new Composite(pixiGroup, SWT.NONE);
+        m_pixiBody.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+        m_pixiBody.setLayout(new GridLayout(2, false));
+
+        m_useTempPixiEnv = new BooleanFieldEditor(CondaPreferences.PIXI_ENVS_ARE_TEMPORARY_KEY,
+            "Store pixi environments temporary", m_pixiBody);
+        addField(m_useTempPixiEnv);
+
+        m_pixiEnvDir = new DirectoryFieldEditor(CondaPreferences.PIXI_ENV_PATH_KEY,
+            "Base directory for pixi environments", m_pixiBody);
+        addField(m_pixiEnvDir);
+
+        // Set initial enabled state
+        m_pixiEnvDir.setEnabled(!m_useTempPixiEnv.getBooleanValue(), m_pixiBody);
     }
 
     @Override
@@ -127,6 +166,9 @@ public final class CondaPreferencePage extends FieldEditorPreferencePage impleme
         super.propertyChange(event);
         if (event.getSource() == m_condaInstallationDirectory) {
             checkCondaInstallDir((String)event.getNewValue());
+        } else if (event.getSource() == m_useTempPixiEnv) {
+            final boolean useTemp = m_useTempPixiEnv.getBooleanValue();
+            m_pixiEnvDir.setEnabled(!useTemp, m_pixiBody);
         }
     }
 

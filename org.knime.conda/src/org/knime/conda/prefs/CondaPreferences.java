@@ -48,7 +48,10 @@
  */
 package org.knime.conda.prefs;
 
+import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import org.eclipse.core.runtime.preferences.DefaultScope;
@@ -58,6 +61,7 @@ import org.eclipse.jface.util.IPropertyChangeListener;
 import org.eclipse.ui.preferences.ScopedPreferenceStore;
 import org.knime.conda.Conda;
 import org.knime.core.node.NodeLogger;
+import org.knime.core.util.PathUtils;
 import org.osgi.framework.FrameworkUtil;
 import org.osgi.service.prefs.BackingStoreException;
 
@@ -78,6 +82,12 @@ public final class CondaPreferences {
         new ScopedPreferenceStore(InstanceScope.INSTANCE, CONDA_BUNDLE_NAME);
 
     static final String CONDA_DIR_PREF_KEY = "condaDirectoryPath";
+
+    static final String PIXI_ENVS_ARE_TEMPORARY_KEY = "pixiEnvironmentsAreTemporary";
+
+    static final String PIXI_ENV_PATH_KEY = "pixiEnvironmentBasePath";
+
+    private static Path pixiEnvsTempDir = null;
 
     private CondaPreferences() {
     }
@@ -131,6 +141,7 @@ public final class CondaPreferences {
     /** Initialize the defaults for the Conda preferences */
     static void initDefaults() {
         initDefaultCondaInstallationDirectory();
+        initDefaultPixiSettings();
 
         // Legacy support:
         // Copy the Conda installation directory preference from
@@ -208,6 +219,11 @@ public final class CondaPreferences {
         PREF_STORE.setDefault(CONDA_DIR_PREF_KEY, defaultCondaInstallDir);
     }
 
+    private static void initDefaultPixiSettings() {
+        PREF_STORE.setDefault(PIXI_ENVS_ARE_TEMPORARY_KEY, true);
+        PREF_STORE.setDefault(PIXI_ENV_PATH_KEY, "");
+    }
+
     /** @return The default value for the Conda installation directory path config entry. */
     private static String getDefaultCondaInstallationDirectory() {
         try {
@@ -247,5 +263,39 @@ public final class CondaPreferences {
             // Ignore and continue with fallback.
         }
         return "";
+    }
+
+    /**
+     * @since 5.10
+     * @return The base path where pixi environments are stored. If the preference to use temporary directories is set,
+     *         a temporary directory is created on first. Subsequent calls will return the same temporary directory.
+     */
+    public static Path getPixiEnvPath() {
+        if (PREF_STORE.getBoolean(PIXI_ENVS_ARE_TEMPORARY_KEY)) {
+            if (pixiEnvsTempDir != null) {
+                return pixiEnvsTempDir;
+            }
+            try {
+                pixiEnvsTempDir = PathUtils.createTempDir("pixi-envs-");
+                return pixiEnvsTempDir;
+            } catch (IOException ex) {
+                throw new IllegalStateException("Unable to create temporary directory for pixi environments.", ex);
+            }
+        }
+        Path file_path;
+        String configuredPath = PREF_STORE.getString(PIXI_ENV_PATH_KEY);
+        try {
+            file_path = Path.of(configuredPath);
+        } catch (Exception e) {
+            throw new InvalidPathException(configuredPath,
+                "The configured base directory for pixi environments '" + configuredPath + "' is not valid.");
+        }
+        try {
+            Files.createDirectories(file_path);
+        } catch (IOException ex) {
+            throw new IllegalStateException(
+                "Unable to create base directory for pixi environments at '" + configuredPath + "'.", ex);
+        }
+        return file_path;
     }
 }

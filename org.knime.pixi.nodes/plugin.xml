@@ -26,16 +26,4 @@
                   factory-class="org.knime.pixi.nodes.PixiYamlEnvironmentCreatorNodeFactory">
             </node>
    </extension>
-      <extension
-            point="org.knime.core.PortType">
-            <portObject
-                  color="#7F7F7F"
-                  hidden="false"
-                  name="Pixi Environment"
-                  objectClass="org.knime.pixi.nodes.PixiEnvironmentPortObject"
-                  objectSerializer="org.knime.pixi.nodes.PixiEnvironmentPortObject$Serializer"
-                  specClass="org.knime.pixi.nodes.PixiEnvironmentPortObjectSpec"
-                  specSerializer="org.knime.pixi.nodes.PixiEnvironmentPortObjectSpec$Serializer">
-            </portObject>
-      </extension>
 </plugin>

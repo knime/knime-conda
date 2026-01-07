@@ -5,7 +5,7 @@
 
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.knime</groupId>
-    <artifactId>org.knime.conda.envinstall-fetch-jars</artifactId>
+    <artifactId>org.knime.pixi.nodes-fetch-jars</artifactId>
     <version>${revision}${changelist}</version>
     <packaging>pom</packaging>
 
@@ -13,7 +13,7 @@
     <description>
         Running the maven goal &quot;package&quot; on this maven project will fetch all jars
         required for
-        org.knime.conda.envinstall and put them into the lib/ directory.
+        org.knime.pixi.nodes and put them into the lib/ directory.
     </description>
 
     <properties>

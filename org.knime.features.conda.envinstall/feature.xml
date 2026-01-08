@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <feature
-      id="org.knime.features.conda.envinstall"
-      label="Conda Environment Installer"
-      version="5.8.1.qualifier"
-      provider-name="KNIME AG, Zurich, Switzerland">
+  id="org.knime.features.conda.envinstall"
+  label="Conda Environment Installer"
+  version="5.8.2.qualifier"
+  provider-name="KNIME AG, Zurich, Switzerland">
 
    <description>
       Provides actions to install conda environments.

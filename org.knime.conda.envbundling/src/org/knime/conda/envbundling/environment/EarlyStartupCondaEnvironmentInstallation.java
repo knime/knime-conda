@@ -48,17 +48,35 @@
  */
 package org.knime.conda.envbundling.environment;
 
+import org.knime.core.node.NodeLogger;
 import org.knime.core.util.IEarlyStartup;
 
 /**
  * Early startup hook that triggers the installation of conda environments.
  *
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
+ * @since 5.8.2
  */
 public class EarlyStartupCondaEnvironmentInstallation implements IEarlyStartup {
 
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(EarlyStartupCondaEnvironmentInstallation.class);
+
+    /**
+     * Default constructor required for OSGi instantiation.
+     */
+    public EarlyStartupCondaEnvironmentInstallation() {
+        // Default constructor
+    }
+
     @Override
     public void run() {
-        CondaEnvironmentRegistry.initializeEnvironments(true);
+        try {
+            LOGGER.info("Starting conda environment initialization during early startup");
+            CondaEnvironmentRegistry.initializeEnvironments(false);
+            LOGGER.info("Conda environment initialization completed successfully");
+        } catch (Exception e) { // NOSONAR catch all to prevent breaking startup
+            LOGGER.error("Failed to initialize conda environments during early startup", e);
+            // Don't rethrow the exception to prevent breaking the entire startup process
+        }
     }
 }

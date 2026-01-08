@@ -49,6 +49,7 @@
 package org.knime.conda.envbundling.environment;
 
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Objects;
 
 import org.osgi.framework.Bundle;
@@ -68,11 +69,19 @@ public final class CondaEnvironment {
 
     private final boolean m_requiresDownload;
 
+    private final boolean m_isDisabled;
+
     CondaEnvironment(final Bundle bundle, final Path path, final String name, final boolean requiresDownload) {
+        this(bundle, path, name, requiresDownload, false);
+    }
+
+    CondaEnvironment(final Bundle bundle, final Path path, final String name, final boolean requiresDownload,
+        final boolean isDisabled) {
         m_bundle = bundle;
         m_path = path;
         m_name = name;
         m_requiresDownload = requiresDownload;
+        m_isDisabled = isDisabled;
     }
 
     /**
@@ -104,6 +113,29 @@ public final class CondaEnvironment {
         return m_requiresDownload;
     }
 
+    /**
+     * @return <code>true</code> if this environment is disabled/unavailable (e.g., permanently skipped by user)
+     * @since 5.9
+     */
+    public boolean isDisabled() {
+        return m_isDisabled;
+    }
+
+    /**
+     * Creates a disabled placeholder environment for environments that are permanently unavailable. This prevents null
+     * pointer exceptions when the environment is accessed but clearly indicates that the environment cannot be used.
+     * 
+     * @param bundle the bundle that defines the environment
+     * @param name   the name of the environment
+     * @return a disabled CondaEnvironment placeholder
+     * @since 5.9
+     */
+    static CondaEnvironment createDisabledPlaceholder(final Bundle bundle, final String name) {
+        // Use a non-existent path to ensure any attempt to use this environment will fail gracefully
+        Path placeholderPath = Paths.get("DISABLED_ENVIRONMENT_" + name);
+        return new CondaEnvironment(bundle, placeholderPath, name, false, true);
+    }
+
     @Override
     public boolean equals(final Object obj) {
         if (obj == this) {
@@ -113,7 +145,8 @@ public final class CondaEnvironment {
             return m_bundle.getBundleId() == other.m_bundle.getBundleId() //
                 && m_name.equals(other.m_name) //
                 && m_path.equals(other.m_path) //
-                && m_requiresDownload == other.m_requiresDownload;
+                && m_requiresDownload == other.m_requiresDownload //
+                && m_isDisabled == other.m_isDisabled;
         } else {
             return false;
         }
@@ -121,6 +154,6 @@ public final class CondaEnvironment {
 
     @Override
     public int hashCode() {
-        return Objects.hash(m_bundle.getBundleId(), m_name, m_path, m_requiresDownload);
+        return Objects.hash(m_bundle.getBundleId(), m_name, m_path, m_requiresDownload, m_isDisabled);
     }
 }

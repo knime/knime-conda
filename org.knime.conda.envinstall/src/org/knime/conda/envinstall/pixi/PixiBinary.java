@@ -88,10 +88,10 @@ public final class PixiBinary {
     /**
      * Encapsulates the result of invoking the {@code pixi} CLI.
      *
-     * @param isSuccess {@code true} iff {@code returnCode == 0}
+     * @param isSuccess  {@code true} iff {@code returnCode == 0}
      * @param returnCode the process' exit code
-     * @param stdout aggregated content written to <em>stdout</em>
-     * @param stderr aggregated content written to <em>stderr</em>
+     * @param stdout     aggregated content written to <em>stdout</em>
+     * @param stderr     aggregated content written to <em>stderr</em>
      */
     public record CallResult(boolean isSuccess, int returnCode, String stdout, String stderr) {
     }
@@ -165,12 +165,12 @@ public final class PixiBinary {
      * the {@link CallResult#isSuccess()} flag simply becomes {@code false}.
      *
      * @param workingDirectory the directory that should be used as the process' working directory (must not be
-     *            {@code null}
-     * @param args additional arguments to pass to the process (excluding the executable itself)
+     *                             {@code null}
+     * @param args             additional arguments to pass to the process (excluding the executable itself)
      * @return a {@link CallResult} containing the process' exit status and captured I/O
      * @throws PixiBinaryLocationException if the pixi executable cannot be found
-     * @throws IOException if the process cannot be started or its streams cannot be read
-     * @throws InterruptedException if the current thread is interrupted while waiting for the process
+     * @throws IOException                 if the process cannot be started or its streams cannot be read
+     * @throws InterruptedException        if the current thread is interrupted while waiting for the process
      */
     public static CallResult callPixi(final java.nio.file.Path workingDirectory, final String... args)
         throws PixiBinaryLocationException, IOException, InterruptedException {
@@ -181,14 +181,33 @@ public final class PixiBinary {
      * Executes the <em>pixi</em> binary in the given working directory with optional environment variables.
      *
      * @param workingDirectory the directory that should be used as the process' working directory (must not be null)
-     * @param envVars additional environment variables to set (may be null)
-     * @param args additional arguments to pass to the process (excluding the executable itself)
+     * @param envVars          additional environment variables to set (may be null)
+     * @param args             additional arguments to pass to the process (excluding the executable itself)
      * @return a {@link CallResult} containing the process' exit status and captured I/O
      * @throws PixiBinaryLocationException if the pixi executable cannot be found
-     * @throws IOException if the process cannot be started or its streams cannot be read
-     * @throws InterruptedException if the current thread is interrupted while waiting for the process
+     * @throws IOException                 if the process cannot be started or its streams cannot be read
+     * @throws InterruptedException        if the current thread is interrupted while waiting for the process
      */
     public static CallResult callPixi(final java.nio.file.Path workingDirectory, final Map<String, String> envVars,
+        final String... args) throws PixiBinaryLocationException, IOException, InterruptedException {
+        return callPixiWithCancellation(workingDirectory, envVars, null, args);
+    }
+
+    /**
+     * Executes the <em>pixi</em> binary with cancellation support.
+     *
+     * @param workingDirectory     the directory that should be used as the process' working directory (must not be
+     *                                 null)
+     * @param envVars              additional environment variables to set (may be null)
+     * @param cancellationCallback callback to check for cancellation (may be null)
+     * @param args                 additional arguments to pass to the process (excluding the executable itself)
+     * @return a {@link CallResult} containing the process' exit status and captured I/O
+     * @throws PixiBinaryLocationException if the pixi executable cannot be found
+     * @throws IOException                 if the process cannot be started or its streams cannot be read
+     * @throws InterruptedException        if the current thread is interrupted or cancellation is requested
+     */
+    public static CallResult callPixiWithCancellation(final java.nio.file.Path workingDirectory,
+        final Map<String, String> envVars, final java.util.function.BooleanSupplier cancellationCallback,
         final String... args) throws PixiBinaryLocationException, IOException, InterruptedException {
         Objects.requireNonNull(workingDirectory, "workingDirectory must not be null");
 
@@ -211,9 +230,31 @@ public final class PixiBinary {
             var stdoutFuture = stdStreamsReadersExec.submit(() -> readStdstream(process.getInputStream()));
             var stderrFuture = stdStreamsReadersExec.submit(() -> readStdstream(process.getErrorStream()));
 
-            boolean finished = process.waitFor(20, TimeUnit.MINUTES);
-            if (!finished) {
-                process.destroy();
+            // Wait for process with periodic cancellation checks
+            boolean finished = false;
+            if (cancellationCallback == null) {
+                // No cancellation support - use original timeout
+                finished = process.waitFor(20, TimeUnit.MINUTES);
+            } else {
+                // Check for cancellation every 500ms
+                while (process.isAlive()) {
+                    if (cancellationCallback.getAsBoolean()) {
+                        // Cancellation requested - terminate the process
+                        process.destroyForcibly();
+                        stdStreamsReadersExec.shutdownNow();
+                        throw new InterruptedException("Pixi process was cancelled");
+                    }
+
+                    // Wait for a short period before checking again
+                    finished = process.waitFor(500, TimeUnit.MILLISECONDS);
+                    if (finished) {
+                        break;
+                    }
+                }
+            }
+
+            if (!finished && process.isAlive()) {
+                process.destroyForcibly();
                 throw new IOException("Timed out waiting for pixi to finish");
             }
 

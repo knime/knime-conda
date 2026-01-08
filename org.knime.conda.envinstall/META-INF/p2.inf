@@ -1,5 +1,0 @@
-metaRequirements.1.namespace = org.eclipse.equinox.p2.iu
-metaRequirements.1.name = org.junit
-metaRequirements.1.range = [4.13.2.v20230809-1000,4.13.2.v20230809-1000]
-metaRequirements.1.greedy = true
-metaRequirements.1.optional = true

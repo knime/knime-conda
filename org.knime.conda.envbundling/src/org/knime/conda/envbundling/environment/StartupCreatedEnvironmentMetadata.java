@@ -60,7 +60,7 @@ import org.osgi.framework.Version;
  * Metadata for startup-created conda environments.
  *
  * @author Marc Lehner, KNIME AG, Zurich, Switzerland
- * @since 5.9
+ * @since 5.8.2
  */
 final class StartupCreatedEnvironmentMetadata {
 

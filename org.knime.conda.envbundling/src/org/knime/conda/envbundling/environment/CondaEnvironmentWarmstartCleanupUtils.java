@@ -76,7 +76,7 @@ import org.osgi.framework.Bundle;
  *
  * @author Marc Lehner, KNIME AG, Zurich, Switzerland
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
- * @since 5.9
+ * @since 5.8.2
  */
 final class CondaEnvironmentWarmstartCleanupUtils {
 

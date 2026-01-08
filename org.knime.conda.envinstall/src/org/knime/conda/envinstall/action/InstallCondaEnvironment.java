@@ -517,7 +517,7 @@ public final class InstallCondaEnvironment {
 
     /**
      * Was used to install the environment contained in the fragment bundle during fragment installation until 5.8.
-     * Environments are installed during startup by default since 5.9.
+     * Environments are installed during startup by default since 5.8.2.
      *
      * However, some plug-ins might still have a call to this action in their p2.inf, and thus we keep the action as
      * empty placeholder.

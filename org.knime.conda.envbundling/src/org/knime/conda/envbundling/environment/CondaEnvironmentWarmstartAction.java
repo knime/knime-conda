@@ -68,7 +68,7 @@ import org.knime.product.headless.IWarmstartAction;
  * </p>
  *
  * @author Marc Lehner, KNIME AG, Zurich, Switzerland
- * @since 5.9
+ * @since 5.8.2
  */
 public class CondaEnvironmentWarmstartAction implements IWarmstartAction {
 

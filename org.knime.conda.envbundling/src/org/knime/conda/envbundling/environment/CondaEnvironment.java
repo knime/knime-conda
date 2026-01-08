@@ -115,7 +115,7 @@ public final class CondaEnvironment {
 
     /**
      * @return <code>true</code> if this environment is disabled/unavailable (e.g., permanently skipped by user)
-     * @since 5.9
+     * @since 5.8.2
      */
     public boolean isDisabled() {
         return m_isDisabled;
@@ -128,7 +128,7 @@ public final class CondaEnvironment {
      * @param bundle the bundle that defines the environment
      * @param name   the name of the environment
      * @return a disabled CondaEnvironment placeholder
-     * @since 5.9
+     * @since 5.8.2
      */
     static CondaEnvironment createDisabledPlaceholder(final Bundle bundle, final String name) {
         // Use a non-existent path to ensure any attempt to use this environment will fail gracefully

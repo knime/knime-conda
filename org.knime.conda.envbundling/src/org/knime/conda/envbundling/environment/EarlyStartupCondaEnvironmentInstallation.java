@@ -55,7 +55,7 @@ import org.knime.core.util.IEarlyStartup;
  * Early startup hook that triggers the installation of conda environments.
  *
  * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
- * @since 5.9
+ * @since 5.8.2
  */
 public class EarlyStartupCondaEnvironmentInstallation implements IEarlyStartup {
 

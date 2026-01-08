@@ -131,7 +131,7 @@ public final class CondaEnvironmentRegistry {
     /**
      * Whether to skip the installation of the conda environments on startup instead of installation time.
      *
-     * @since 5.9
+     * @since 5.8.2
      */
     public static final boolean SKIP_INSTALL_CONDA_ENVIRONMENT_ON_STARTUP =
         Boolean.getBoolean("knime.conda.skip_install_envs_on_startup");
@@ -185,7 +185,7 @@ public final class CondaEnvironmentRegistry {
      * Checks if conda environment installation is currently in progress.
      *
      * @return true if environment installation is currently running
-     * @since 5.9
+     * @since 5.8.2
      */
     public static boolean isEnvironmentInstallationInProgress() {
         return s_environmentInstallationInProgress.get();
@@ -207,7 +207,7 @@ public final class CondaEnvironmentRegistry {
      * Initialize the environment registry and create all environments that are not present yet. Tries to show progress
      * and errors in the UI.
      *
-     * @since 5.9
+     * @since 5.8.2
      */
     public static void initializeEnvironments() {
         initializeEnvironments(false);

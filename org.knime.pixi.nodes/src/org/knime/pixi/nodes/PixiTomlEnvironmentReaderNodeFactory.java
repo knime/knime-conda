@@ -12,49 +12,43 @@ import org.knime.pixi.port.PixiEnvironmentPortObject;
 import org.knime.pixi.port.PixiEnvironmentPortObjectSpec;
 
 /**
- * NodeFactory for the TOML-based Pixi Environment Creator node
+ * NodeFactory for the Pixi TOML Environment Reader node
  *
- * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
+ * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
  * @since 5.10
  */
 @SuppressWarnings("restriction")
-public final class PixiTomlEnvironmentCreatorNodeFactory extends DefaultNodeFactory {
+public final class PixiTomlEnvironmentReaderNodeFactory extends DefaultNodeFactory {
 
-    public PixiTomlEnvironmentCreatorNodeFactory() {
+    public PixiTomlEnvironmentReaderNodeFactory() {
         super(buildNodeDefinition());
     }
 
     private static DefaultNode buildNodeDefinition() {
-        return DefaultNode.create().name("Pixi TOML Environment Creator (Labs)") //
+        return DefaultNode.create().name("Pixi TOML Environment Reader (Labs)") //
             .icon("icon.png") //
-            .shortDescription("Create a pixi environment based on the provided TOML file content") //
+            .shortDescription("Read a pixi environment from an existing pixi.toml file") //
             .fullDescription("""
                     Creates a Python or R environment using <a href="https://pixi.sh">Pixi</a>, a fast package manager
-                    that provides reproducible environments across platforms.
+                    that provides reproducible environments across platforms, by reading an existing pixi.toml file.
 
-                    This node allows you to define your environment by providing a complete pixi.toml manifest file.
-                    The pixi.toml format gives you full control over the environment configuration, including workspace
-                    settings, channels, platforms, and dependencies from both conda and pip ecosystems.
+                    This node allows you to specify a path to an existing pixi.toml manifest file on disk.
+                    The pixi.toml file should be located in a valid pixi project directory structure.
 
                     <h3>Features</h3>
                     <ul>
+                    <li><b>Use Existing Projects:</b> Point to an existing pixi project and use its environment
+                    in KNIME workflows without duplicating the manifest content.</li>
                     <li><b>Reproducible Environments:</b> The same pixi.toml will create identical environments across
                     Windows, Linux, and macOS, making workflows portable and deployable.</li>
-                    <li><b>Multi-Platform Support:</b> Configure your environment to work on all major operating systems
+                    <li><b>Multi-Platform Support:</b> Works with pixi.toml files configured for all major operating systems
                     (win-64, linux-64, osx-64, osx-arm64) for seamless sharing and deployment to KNIME Hub.</li>
-                    <li><b>Mixed Package Sources:</b> Combine conda and pip packages in a single environment with proper
-                    dependency resolution.</li>
-                    <li><b>Compatibility Check:</b> Use the "Check compatibility" button to verify that the environment
-                    can be created on all configured platforms before execution.</li>
                     </ul>
 
                     <h3>Usage</h3>
-                    Paste or edit your pixi.toml content in the text area. The manifest should include:
-                    <ul>
-                    <li><tt>[workspace]</tt> section with channels and platforms</li>
-                    <li><tt>[dependencies]</tt> section for conda packages</li>
-                    <li><tt>[pypi-dependencies]</tt> section for pip packages (optional)</li>
-                    </ul>
+                    Select a pixi.toml file from your file system. The file should be part of a valid pixi project structure.
+                    The node will use the directory containing the file as the pixi project directory and install the
+                    environment based on the manifest specification.
 
                     See the <a href="https://pixi.prefix.dev/latest/reference/pixi_manifest/">pixi manifest
                     specification</a> for complete documentation on the pixi.toml format.
@@ -67,10 +61,10 @@ public final class PixiTomlEnvironmentCreatorNodeFactory extends DefaultNodeFact
                 p.addOutputPort("Pixi Environment", "Pixi Python environment information to be used by script nodes",
                     PixiEnvironmentPortObject.TYPE);
             }).model(modelStage -> modelStage //
-                .parametersClass(PixiTomlEnvironmentCreatorNodeParameters.class) //
-                .configure(PixiTomlEnvironmentCreatorNodeFactory::configure) //
-                .execute(PixiTomlEnvironmentCreatorNodeFactory::execute)) //
-            .keywords("pixi", "python", "environment", "conda", "pip"); //
+                .parametersClass(PixiTomlEnvironmentReaderNodeParameters.class) //
+                .configure(PixiTomlEnvironmentReaderNodeFactory::configure) //
+                .execute(PixiTomlEnvironmentReaderNodeFactory::execute)) //
+            .keywords("pixi", "python", "environment", "conda", "pip", "toml", "file"); //
     }
 
     private static void configure(final ConfigureInput in, final ConfigureOutput out) {
@@ -79,13 +73,13 @@ public final class PixiTomlEnvironmentCreatorNodeFactory extends DefaultNodeFact
     }
 
     private static void execute(final ExecuteInput in, final ExecuteOutput out) {
-        final PixiTomlEnvironmentCreatorNodeParameters params = in.getParameters();
-        final String manifestText = params.m_pixiTomlContent;
+        final PixiTomlEnvironmentReaderNodeParameters params = in.getParameters();
+        final Path tomlFilePath = Path.of(params.m_tomlFile.m_path.getPath());
 
         final var execCtx = in.getExecutionContext();
 
-        // Use shared executor
-        final Path environmentPath = PixiEnvironmentExecutor.executePixiInstall(manifestText, null, execCtx);
+        // Use shared executor - pass empty string for manifestText since we're using file path
+        final Path environmentPath = PixiEnvironmentExecutor.executePixiInstall("", tomlFilePath, execCtx);
 
         // Create and output the Pixi environment port object
         final PixiEnvironmentPortObject portObject = new PixiEnvironmentPortObject(environmentPath);

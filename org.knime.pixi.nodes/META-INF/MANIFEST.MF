@@ -11,7 +11,8 @@ Require-Bundle: org.apache.commons.lang3;bundle-version="[3.9.0,4.0.0)",
  org.knime.conda.envinstall;bundle-version="5.10.0",
  org.knime.conda;bundle-version="5.9.0",
  org.knime.pixi.port;bundle-version="5.10.0",
- org.apache.commons.commons-io
+ org.apache.commons.commons-io,
+ org.knime.filehandling.core;bundle-version="[5.10.0,6.0.0)"
 Bundle-ClassPath: lib/core-3.8.3.jar,
  lib/toml-3.8.3.jar,
  .

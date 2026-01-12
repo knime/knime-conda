@@ -3,13 +3,13 @@ package org.knime.pixi.nodes;
 import java.nio.file.Path;
 
 import org.knime.node.DefaultModel.ConfigureInput;
-import org.knime.pixi.port.PixiEnvironmentPortObject;
-import org.knime.pixi.port.PixiEnvironmentPortObjectSpec;
 import org.knime.node.DefaultModel.ConfigureOutput;
 import org.knime.node.DefaultModel.ExecuteInput;
 import org.knime.node.DefaultModel.ExecuteOutput;
 import org.knime.node.DefaultNode;
 import org.knime.node.DefaultNodeFactory;
+import org.knime.pixi.port.PixiEnvironmentPortObject;
+import org.knime.pixi.port.PixiEnvironmentPortObjectSpec;
 
 /**
  * NodeFactory for the YAML-based Pixi Environment Creator node
@@ -97,10 +97,10 @@ dependencies:
         final var execCtx = in.getExecutionContext();
 
         // Use shared executor
-        final Path pythonEnvPath = PixiEnvironmentExecutor.executePixiInstall(manifestText, execCtx);
+        final Path environmentPath = PixiEnvironmentExecutor.executePixiInstall(manifestText, null, execCtx);
 
-        // Create and output the Pixi environment port object containing the Python path
-        final PixiEnvironmentPortObject portObject = new PixiEnvironmentPortObject(pythonEnvPath);
+        // Create and output the Pixi environment port object
+        final PixiEnvironmentPortObject portObject = new PixiEnvironmentPortObject(environmentPath);
         out.setOutData(portObject);
     }
 }

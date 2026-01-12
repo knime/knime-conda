@@ -25,13 +25,15 @@ final class PixiEnvironmentExecutor {
     }
 
     /**
-     * Execute pixi install for the given manifest and return the pixi environment path.
+     * Execute pixi install for the given manifest and return the environment path.
      *
      * @param manifestText the pixi.toml content
+     * @param tomlFilePath optional path to an existing pixi.toml file (if provided, uses that file's directory)
      * @param execCtx the execution context for progress reporting
-     * @return the path to the newly created Pixi environment on disk
+     * @return the path to the created environment
      */
-    static Path executePixiInstall(final String manifestText, final ExecutionContext execCtx) {
+    static Path executePixiInstall(final String manifestText, final Path tomlFilePath,
+        final ExecutionContext execCtx) {
         execCtx.setProgress(0.1, "Running pixi install");
 
         Path pixiHome, projectDir;
@@ -39,7 +41,7 @@ final class PixiEnvironmentExecutor {
 
         // Setup
         try {
-            projectDir = PixiUtils.saveManifestToDisk(manifestText);
+            projectDir = PixiUtils.resolveProjectDirectory(manifestText, tomlFilePath);
             envName = "default";
             pixiHome = projectDir.resolve(".pixi-home");
             Files.createDirectories(pixiHome);

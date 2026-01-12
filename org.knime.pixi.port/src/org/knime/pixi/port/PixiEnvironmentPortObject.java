@@ -133,4 +133,5 @@ public final class PixiEnvironmentPortObject extends AbstractSimplePortObject {
     public JComponent[] getViews() {
         return new JComponent[]{};
     }
+
 }

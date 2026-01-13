@@ -10,9 +10,6 @@ import java.util.Map;
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
-import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
-import org.knime.core.webui.node.dialog.defaultdialog.widget.handler.WidgetHandlerException;
-import org.knime.node.parameters.NodeParametersInput;
 
 /**
  * Utilities for working with Pixi environments
@@ -71,59 +68,5 @@ final class PixiUtils {
         Path envDir = projectDir.resolve(".pixi").resolve("envs").resolve(envName);
         boolean isWin = System.getProperty("os.name").toLowerCase().contains("win");
         return isWin ? envDir.resolve("python.exe") : envDir.resolve("bin").resolve("python");
-    }
-
-    static abstract class AbstractPixiLockActionHandler<Dependency>
-        extends CancelableActionHandler<String, Dependency> {
-
-        protected abstract String getTomlContent(Dependency dependency);
-
-        @Override
-        protected final String invoke(final Dependency dependency, final NodeParametersInput context)
-            throws WidgetHandlerException {
-            // Build TOML from package array
-            String manifestText = getTomlContent(dependency);
-
-            try {
-                final Path projectDir = PixiUtils.resolveProjectDirectory(manifestText, null);
-                final Path pixiHome = projectDir.resolve(".pixi-home");
-                Files.createDirectories(pixiHome);
-
-                final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());
-
-                final String[] pixiArgs = {"--color", "never", "--no-progress", "lock"};
-
-                final CallResult callResult = PixiBinary.callPixi(projectDir, extraEnv, pixiArgs);
-
-                if (callResult.returnCode() != 0) {
-                    String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
-                    throw new WidgetHandlerException(errorDetails);
-                }
-
-                return "Environment is compatible with all selected operating systems.";
-
-            } catch (IOException ex) {
-                throw new WidgetHandlerException("Unknown error occurred: " + ex.getMessage());
-            } catch (PixiBinaryLocationException ex) {
-                throw new WidgetHandlerException("Pixi binary is not found: " + ex.getMessage());
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                throw new WidgetHandlerException("Operation was interrupted.");
-            }
-        }
-
-        @Override
-        protected final String getButtonText(final CancelableActionHandler.States state) {
-            return switch (state) {
-                case READY -> "Check compatibility";
-                case CANCEL -> "Cancel";
-                case DONE -> "✓ Environment is compatible";
-            };
-        }
-
-        @Override
-        protected final boolean isMultiUse() {
-            return false;
-        }
     }
 }

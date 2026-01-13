@@ -5,9 +5,10 @@ import org.knime.core.webui.node.dialog.defaultdialog.internal.button.Cancelable
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.Widget;
 import org.knime.node.parameters.updates.ParameterReference;
+import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
+import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
-import org.knime.pixi.nodes.PixiUtils.AbstractPixiLockActionHandler;
 
 /**
  * Node Parameters describing the dialog for the YAML-based Pixi Environment Creator node
@@ -34,26 +35,82 @@ final class PixiYamlEnvironmentCreatorNodeParameters implements NodeParameters {
               - knime-python-base=5.9.*
             """;
 
+    // Button that triggers lock file generation and stores the result
     @Widget(title = "Check compatibility",
         description = "Click to check whether this environment can be constructed on all selected operating systems")
     @ButtonWidget(actionHandler = PixiLockActionHandler.class, updateHandler = PixiLockUpdateHandler.class)
+    @ValueReference(ButtonFieldRef.class)
     String m_compatibilityCheckButton;
+
+    // Hidden field that copies lock file content from button for validation message
+    @ValueReference(PixiLockFileRef.class)
+    @ValueProvider(LockFileCopyProvider.class)
+    String m_pixiLockFileContent;
+
+    @TextMessage(LockFileValidationProvider.class)
+    Void m_lockFileValidationMessage;
 
     interface YamlContentRef extends ParameterReference<String> {
     }
 
-    static final class PixiLockActionHandler extends AbstractPixiLockActionHandler<YamlContent> {
+    interface ButtonFieldRef extends ParameterReference<String> {
+    }
+
+    interface PixiLockFileRef extends ParameterReference<String> {
+    }
+
+    static final class PixiLockActionHandler
+        extends PixiParameterUtils.AbstractPixiLockActionHandler<YamlContentGetter> {
+
+        PixiLockActionHandler() {
+            super("[PixiYaml]");
+        }
+
         @Override
-        protected String getTomlContent(final YamlContent dependency) {
-            return PixiYamlImporter.convertYamlToToml(dependency.m_envYamlContent);
+        protected String getManifestContent(final YamlContentGetter contentGetter) {
+            return contentGetter.m_envYamlContent;
+        }
+
+        @Override
+        protected String prepareManifestContent(final String content) throws Exception {
+            return PixiYamlImporter.convertYamlToToml(content);
         }
     }
 
-    static final class PixiLockUpdateHandler extends CancelableActionHandler.UpdateHandler<String, YamlContent> {
+    static final class PixiLockUpdateHandler
+        extends CancelableActionHandler.UpdateHandler<String, YamlContentGetter> {
     }
 
-    static final class YamlContent {
-        // Setting name must match the parameter name that we want to retrieve
+    static final class YamlContentGetter {
+        @ValueReference(YamlContentRef.class)
         String m_envYamlContent;
+    }
+
+    static final class LockFileCopyProvider
+        extends PixiParameterUtils.AbstractLockFileCopyProvider<ButtonFieldRef> {
+
+        @Override
+        protected Class<ButtonFieldRef> getButtonFieldRefClass() {
+            return ButtonFieldRef.class;
+        }
+    }
+
+    static final class LockFileValidationProvider
+        extends PixiParameterUtils.AbstractLockFileValidationProvider<YamlContentRef, PixiLockFileRef, LockFileCopyProvider> {
+
+        @Override
+        protected Class<YamlContentRef> getContentRefClass() {
+            return YamlContentRef.class;
+        }
+
+        @Override
+        protected Class<PixiLockFileRef> getLockFileRefClass() {
+            return PixiLockFileRef.class;
+        }
+
+        @Override
+        protected Class<LockFileCopyProvider> getLockFileCopyProviderClass() {
+            return LockFileCopyProvider.class;
+        }
     }
 }

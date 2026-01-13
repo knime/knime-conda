@@ -5,7 +5,6 @@ import java.nio.file.Path;
 
 import javax.swing.JComponent;
 
-import org.knime.conda.CondaEnvironmentDirectory;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
@@ -50,62 +49,27 @@ public final class PixiEnvironmentPortObject extends AbstractSimplePortObject {
     /**
      * Constructor.
      *
-     * @param pythonExecutablePath the path to the Python executable in the Pixi environment
+     * @param pixiEnvironmentPath the path to the pixi project directory (containing pixi.toml and .pixi/)
      */
-    public PixiEnvironmentPortObject(final Path pythonExecutablePath) {
-        m_pixiEnvironmentPath = pythonExecutablePath;
+    public PixiEnvironmentPortObject(final Path pixiEnvironmentPath) {
+        m_pixiEnvironmentPath = pixiEnvironmentPath;
     }
 
     /**
-     * @return the path to the pixi environment on disk
+     * @return the path to the pixi project directory on disk (containing pixi.toml and .pixi/)
      */
     public Path getPixiEnvironmentPath() {
         return m_pixiEnvironmentPath;
     }
 
     /**
-     * @param baseDir The path to the pixi environment (containing .pixi/envs/default)
-     * @param executableName The executable name, usually "python" or "r"
-     * @return The path to the executable inside the environment
-     */
-    private static Path resolveExecutable(final Path baseDir, final String executableName) {
-        Path envDir = baseDir.resolve(".pixi").resolve("envs").resolve("default");
-        boolean isWin = System.getProperty("os.name").toLowerCase().contains("win");
-        return isWin ? envDir.resolve(executableName + ".exe") : envDir.resolve("bin").resolve(executableName);
-    }
-
-    /**
-     * @return the path to the python executable in the Pixi environment, or "null" if no python executable was found
-     */
-    public Path getPythonExecutablePath() {
-        return resolveExecutable(m_pixiEnvironmentPath, "python");
-    }
-
-    /**
-     * @return the path to the R executable in the Pixi environment, or "null" if no R executable was found
-     */
-    public Path getRExecutablePath() {
-        return resolveExecutable(m_pixiEnvironmentPath, "r");
-    }
-
-    /**
-     * Returns a CondaEnvironmentDirectory for this Pixi environment. This allows reusing conda-related
-     * infrastructure for pixi environments.
+     * Returns the path to the pixi.toml manifest file for this environment.
+     * This path can be used to create a PixiPythonCommand in the knime-python bundle.
      *
-     * @return a CondaEnvironmentDirectory representing this Pixi environment
+     * @return the path to the pixi.toml file
      */
-    public CondaEnvironmentDirectory getAsCondaEnvironmentDirectory() {
-        final Path pythonExec = getPythonExecutablePath();
-        final Path envDir = pythonExec.getParent();
-        final String envDirPath;
-        if (System.getProperty("os.name").toLowerCase().contains("win")) {
-            // On Windows, python.exe is directly in the environment directory
-            envDirPath = envDir.toString();
-        } else {
-            // On Linux/macOS, python is in bin/, so we need the parent of bin/
-            envDirPath = envDir.getParent().toString();
-        }
-        return new CondaEnvironmentDirectory(envDirPath);
+    public Path getPixiTomlPath() {
+        return m_pixiEnvironmentPath.resolve("pixi.toml");
     }
 
     @Override

@@ -15,11 +15,11 @@ import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
+import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
 import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
-import org.knime.pixi.nodes.PixiUtils.AbstractPixiLockActionHandler;
 
 import com.electronwill.nightconfig.core.Config;
 import com.electronwill.nightconfig.toml.TomlParser;
@@ -50,30 +50,86 @@ final class PixiTomlEnvironmentCreatorNodeParameters implements NodeParameters {
             knime-python-base = "5.9.*"
             """;
 
-    @TextMessage(PlatformValidationProvider.class)
-    Void m_platformValidationMessage;
-
+    // Button that triggers lock file generation and stores the result
     @Widget(title = "Check compatibility",
         description = "Click to check whether this pixi environment can be constructed on all selected operating systems")
     @ButtonWidget(actionHandler = PixiLockActionHandler.class, updateHandler = PixiLockUpdateHandler.class)
+    @ValueReference(ButtonFieldRef.class)
     String m_compatibilityCheckButton;
+
+    // Hidden field that copies lock file content from button for validation message
+    @ValueReference(PixiLockFileRef.class)
+    @ValueProvider(LockFileCopyProvider.class)
+    String m_pixiLockFileContent;
+
+    @TextMessage(PlatformValidationProvider.class)
+    Void m_platformValidationMessage;
+
+    @TextMessage(LockFileValidationProvider.class)
+    Void m_lockFileValidationMessage;
 
     interface PixiTomlContentRef extends ParameterReference<String> {
     }
 
-    static final class PixiLockActionHandler extends AbstractPixiLockActionHandler<PixiTomlContent> {
+    interface ButtonFieldRef extends ParameterReference<String> {
+    }
+
+    interface PixiLockFileRef extends ParameterReference<String> {
+    }
+
+    static final class PixiLockActionHandler
+        extends PixiParameterUtils.AbstractPixiLockActionHandler<TomlContentGetter> {
+
+        PixiLockActionHandler() {
+            super("[PixiToml]");
+        }
+
         @Override
-        protected String getTomlContent(final PixiTomlContent dependency) {
-            return dependency.m_pixiTomlContent;
+        protected String getManifestContent(final TomlContentGetter contentGetter) {
+            return contentGetter.m_pixiTomlContent;
+        }
+
+        @Override
+        protected String prepareManifestContent(final String content) {
+            return content; // TOML is already in the right format
         }
     }
 
-    static final class PixiLockUpdateHandler extends CancelableActionHandler.UpdateHandler<String, PixiTomlContent> {
+    static final class PixiLockUpdateHandler
+        extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
     }
 
-    static final class PixiTomlContent {
-        // Setting name must match the parameter name that we want to retrieve
+    static final class TomlContentGetter {
+        @ValueReference(PixiTomlContentRef.class)
         String m_pixiTomlContent;
+    }
+
+    static final class LockFileCopyProvider
+        extends PixiParameterUtils.AbstractLockFileCopyProvider<ButtonFieldRef> {
+
+        @Override
+        protected Class<ButtonFieldRef> getButtonFieldRefClass() {
+            return ButtonFieldRef.class;
+        }
+    }
+
+    static final class LockFileValidationProvider
+        extends PixiParameterUtils.AbstractLockFileValidationProvider<PixiTomlContentRef, PixiLockFileRef, LockFileCopyProvider> {
+
+        @Override
+        protected Class<PixiTomlContentRef> getContentRefClass() {
+            return PixiTomlContentRef.class;
+        }
+
+        @Override
+        protected Class<PixiLockFileRef> getLockFileRefClass() {
+            return PixiLockFileRef.class;
+        }
+
+        @Override
+        protected Class<LockFileCopyProvider> getLockFileCopyProviderClass() {
+            return LockFileCopyProvider.class;
+        }
     }
 
     static final class PlatformValidationProvider implements StateProvider<Optional<TextMessage.Message>> {

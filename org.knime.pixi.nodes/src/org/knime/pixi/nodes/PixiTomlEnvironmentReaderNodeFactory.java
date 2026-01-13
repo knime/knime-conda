@@ -79,7 +79,7 @@ public final class PixiTomlEnvironmentReaderNodeFactory extends DefaultNodeFacto
         final var execCtx = in.getExecutionContext();
 
         // Use shared executor - pass empty string for manifestText since we're using file path
-        final Path environmentPath = PixiEnvironmentExecutor.executePixiInstall("", tomlFilePath, execCtx);
+        final Path environmentPath = PixiEnvironmentExecutor.executePixiInstall("", tomlFilePath, null, execCtx);
 
         // Create and output the Pixi environment port object
         final PixiEnvironmentPortObject portObject = new PixiEnvironmentPortObject(environmentPath);

@@ -9,9 +9,10 @@ import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.Widget;
 import org.knime.node.parameters.array.ArrayWidget;
 import org.knime.node.parameters.updates.ParameterReference;
+import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
 import org.knime.node.parameters.widget.choices.Label;
-import org.knime.pixi.nodes.PixiUtils.AbstractPixiLockActionHandler;
+import org.knime.node.parameters.widget.message.TextMessage;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.Config;
@@ -44,12 +45,28 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
         return buildTomlFromPackages(m_packages);
     }
 
+    // Button that triggers lock file generation and stores the result
     @Widget(title = "Check compatibility",
         description = "Click to check whether this pixi environment can be constructed on all selected operating systems")
     @ButtonWidget(actionHandler = PixiLockActionHandler.class, updateHandler = PixiLockUpdateHandler.class)
+    @ValueReference(ButtonFieldRef.class)
     String m_compatibilityCheckButton;
 
+    // Hidden field that copies lock file content from button for validation message
+    @ValueReference(PixiLockFileRef.class)
+    @ValueProvider(LockFileCopyProvider.class)
+    String m_pixiLockFileContent;
+
+    @TextMessage(LockFileValidationProvider.class)
+    Void m_lockFileValidationMessage;
+
     interface PackageArrayRef extends ParameterReference<PackageSpec[]> {
+    }
+
+    interface ButtonFieldRef extends ParameterReference<String> {
+    }
+
+    interface PixiLockFileRef extends ParameterReference<String> {
     }
 
     static final class PackageSpec implements NodeParameters {
@@ -76,6 +93,25 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
             m_minVersion = minVersion;
             m_maxVersion = maxVersion;
         }
+
+        @Override
+        public boolean equals(final Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof PackageSpec other)) {
+                return false;
+            }
+            return java.util.Objects.equals(m_name, other.m_name)
+                && m_source == other.m_source
+                && java.util.Objects.equals(m_minVersion, other.m_minVersion)
+                && java.util.Objects.equals(m_maxVersion, other.m_maxVersion);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(m_name, m_source, m_minVersion, m_maxVersion);
+        }
     }
 
     enum PackageSource {
@@ -85,10 +121,21 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
         PIP
     }
 
-    static final class PixiLockActionHandler extends AbstractPixiLockActionHandler<PackagesContent> {
+    static final class PixiLockActionHandler
+        extends PixiParameterUtils.AbstractPixiLockActionHandler<PackagesContent> {
+
+        PixiLockActionHandler() {
+            super("[PixiPackages]");
+        }
+
         @Override
-        protected String getTomlContent(final PackagesContent dependency) {
-            return buildTomlFromPackages(dependency.m_packages);
+        protected String getManifestContent(final PackagesContent contentGetter) {
+            return buildTomlFromPackages(contentGetter.m_packages);
+        }
+
+        @Override
+        protected String prepareManifestContent(final String content) {
+            return content; // Already TOML from buildTomlFromPackages
         }
     }
 
@@ -96,7 +143,45 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
     }
 
     static final class PackagesContent {
+        @ValueReference(PackageArrayRef.class)
         PackageSpec[] m_packages;
+    }
+
+    static final class LockFileCopyProvider
+        extends PixiParameterUtils.AbstractLockFileCopyProvider<ButtonFieldRef> {
+
+        @Override
+        protected Class<ButtonFieldRef> getButtonFieldRefClass() {
+            return ButtonFieldRef.class;
+        }
+    }
+
+    static final class LockFileValidationProvider
+        extends PixiParameterUtils.AbstractLockFileValidationProvider<PackageArrayRef, PixiLockFileRef, LockFileCopyProvider> {
+
+        @Override
+        protected Class<PackageArrayRef> getContentRefClass() {
+            return PackageArrayRef.class;
+        }
+
+        @Override
+        protected Class<PixiLockFileRef> getLockFileRefClass() {
+            return PixiLockFileRef.class;
+        }
+
+        @Override
+        protected Class<LockFileCopyProvider> getLockFileCopyProviderClass() {
+            return LockFileCopyProvider.class;
+        }
+
+        @Override
+        protected boolean contentEquals(final Object content1, final Object content2) {
+            // Custom comparison for PackageSpec arrays
+            if (content1 instanceof PackageSpec[] arr1 && content2 instanceof PackageSpec[] arr2) {
+                return Arrays.equals(arr1, arr2);
+            }
+            return super.contentEquals(content1, content2);
+        }
     }
 
     private static String buildTomlFromPackages(final PackageSpec[] packages) {
@@ -144,12 +229,12 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
     private static String formatVersionConstraint(final PackageSpec pkg) {
         if (pkg.m_minVersion != null && !pkg.m_minVersion.isBlank()) {
             if (pkg.m_maxVersion != null && !pkg.m_maxVersion.isBlank()) {
-                return ">=" + pkg.m_minVersion + ",<" + pkg.m_maxVersion;
+                return ">=" + pkg.m_minVersion + ",<=" + pkg.m_maxVersion;
             } else {
                 return ">=" + pkg.m_minVersion;
             }
         } else if (pkg.m_maxVersion != null && !pkg.m_maxVersion.isBlank()) {
-            return "<" + pkg.m_maxVersion;
+            return "<=" + pkg.m_maxVersion;
         } else {
             return "*";
         }

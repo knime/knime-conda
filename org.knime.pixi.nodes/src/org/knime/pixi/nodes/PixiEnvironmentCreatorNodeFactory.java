@@ -96,7 +96,7 @@ public final class PixiEnvironmentCreatorNodeFactory extends DefaultNodeFactory 
         final var execCtx = in.getExecutionContext();
 
         // Use shared executor
-        final Path pythonEnvPath = PixiEnvironmentExecutor.executePixiInstall(manifestText, null, execCtx);
+        final Path pythonEnvPath = PixiEnvironmentExecutor.executePixiInstall(manifestText, null, null, execCtx);
 
         // Create and output the Pixi environment port object containing the Python path
         final PixiEnvironmentPortObject portObject = new PixiEnvironmentPortObject(pythonEnvPath);

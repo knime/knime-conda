@@ -96,8 +96,16 @@ dependencies:
 
         final var execCtx = in.getExecutionContext();
 
-        // Use shared executor
-        final Path environmentPath = PixiEnvironmentExecutor.executePixiInstall(manifestText, null, execCtx);
+        if (params.m_pixiLockFileContent != null && !params.m_pixiLockFileContent.isEmpty()) {
+            System.out.println("[PixiYaml] Execute received lock file from settings (" 
+                + params.m_pixiLockFileContent.length() + " chars)");
+        } else {
+            System.out.println("[PixiYaml] Execute: no lock file in settings");
+        }
+
+        // Use shared executor, passing lock file content from settings if available
+        final Path environmentPath = PixiEnvironmentExecutor.executePixiInstall(
+            manifestText, null, params.m_pixiLockFileContent, execCtx);
 
         // Create and output the Pixi environment port object
         final PixiEnvironmentPortObject portObject = new PixiEnvironmentPortObject(environmentPath);

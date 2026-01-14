@@ -124,6 +124,99 @@ final class PixiParameterUtils {
     }
 
     /**
+     * Base class for button action handlers that update packages using pixi update.
+     * Updates all dependencies and generates a new lock file.
+     *
+     * @param <ContentGetter> a functional interface that extracts the manifest content from dependencies
+     */
+    static abstract class AbstractPixiUpdateActionHandler<ContentGetter>
+        extends CancelableActionHandler<String, ContentGetter> {
+
+        private final String m_logPrefix;
+
+        /**
+         * Constructor.
+         *
+         * @param logPrefix prefix for console logging (e.g., "[PixiToml]" or "[PixiYaml]")
+         */
+        protected AbstractPixiUpdateActionHandler(final String logPrefix) {
+            m_logPrefix = logPrefix;
+        }
+
+        /**
+         * Extract the manifest content from the dependency object.
+         */
+        protected abstract String getManifestContent(ContentGetter contentGetter);
+
+        /**
+         * Prepare the manifest content for pixi update. For TOML, this is a no-op. For YAML/packages, convert to TOML.
+         *
+         * @param content the raw content
+         * @return the TOML manifest content ready for pixi
+         * @throws Exception if conversion/preparation fails
+         */
+        protected abstract String prepareManifestContent(String content) throws Exception;
+
+        @Override
+        protected String invoke(final ContentGetter settings, final NodeParametersInput context)
+            throws WidgetHandlerException {
+            System.out.println(m_logPrefix + " Button clicked - running pixi update...");
+
+            try {
+                final String rawContent = getManifestContent(settings);
+                if (rawContent == null || rawContent.isBlank()) {
+                    throw new WidgetHandlerException("No manifest content provided");
+                }
+
+                final String manifestContent = prepareManifestContent(rawContent);
+                final Path projectDir = PixiUtils.resolveProjectDirectory(manifestContent, null);
+                final Path pixiHome = projectDir.resolve(".pixi-home");
+                Files.createDirectories(pixiHome);
+
+                final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());
+                final String[] pixiArgs = {"--color", "never", "--no-progress", "update"};
+
+                final var callResult = PixiBinary.callPixi(projectDir, extraEnv, pixiArgs);
+
+                if (callResult.returnCode() != 0) {
+                    String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
+                    System.out.println(m_logPrefix + " Pixi update failed");
+                    throw new WidgetHandlerException("Pixi update failed:\n" + errorDetails);
+                }
+
+                // Read the updated lock file
+                final Path lockFilePath = projectDir.resolve("pixi.lock");
+                if (Files.exists(lockFilePath)) {
+                    final String lockContent = Files.readString(lockFilePath);
+                    System.out.println(m_logPrefix + " Lock file updated (" + lockContent.length() + " bytes)");
+                    return lockContent;
+                } else {
+                    throw new WidgetHandlerException("Lock file was not found after update at: " + lockFilePath);
+                }
+            } catch (WidgetHandlerException e) {
+                throw e;
+            } catch (Exception ex) {
+                System.out.println(m_logPrefix + " Failed to update environment: " + ex.getMessage());
+                throw new WidgetHandlerException("Failed to update environment: " + ex.getMessage());
+            }
+        }
+
+        @Override
+        protected String getButtonText(final States state) {
+            return switch (state) {
+                case READY -> "Update Dependencies";
+                case CANCEL -> "Cancel";
+                case DONE -> "Update Again";
+            };
+        }
+
+        @Override
+        protected boolean isMultiUse() {
+            return true; // Allow re-updating
+        }
+    }
+
+    /**
      * State provider that copies the lock file content from the button field to a hidden field.
      * This enables the validation message to react to lock file changes.
      *
@@ -280,7 +373,7 @@ final class PixiParameterUtils {
 
             if (!contentEquals(m_lastValidContent, currentContent)) {
                 return Optional.of(new TextMessage.Message("Lock file status",
-                    "Lock file outdated (content changed). Click 'Check compatibility' to update.",
+                    "Lock file outdated (content changed). Click 'Lock Environment' to regenerate.",
                     MessageType.WARNING));
             }
 

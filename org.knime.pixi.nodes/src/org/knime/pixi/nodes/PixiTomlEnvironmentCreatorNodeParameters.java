@@ -60,6 +60,12 @@ final class PixiTomlEnvironmentCreatorNodeParameters implements NodeParameters {
     @ValueReference(ButtonFieldRef.class)
     String m_PixiLockButton;
 
+    @Widget(title = "Update dependencies",
+        description = "Click to update all dependencies to their latest compatible versions and update the lock file")
+    @ButtonWidget(actionHandler = PixiUpdateActionHandler.class, updateHandler = PixiUpdateUpdateHandler.class)
+    @ValueReference(ButtonFieldRef.class)
+    String m_PixiUpdateButton;
+
     @ValueReference(PixiLockFileRef.class)
     @ValueProvider(ResetLockFileProvider.class)
     String m_pixiLockFileContent = "";
@@ -107,6 +113,28 @@ final class PixiTomlEnvironmentCreatorNodeParameters implements NodeParameters {
     }
 
     static final class PixiLockUpdateHandler
+        extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
+    }
+
+    static final class PixiUpdateActionHandler
+        extends PixiParameterUtils.AbstractPixiUpdateActionHandler<TomlContentGetter> {
+
+        PixiUpdateActionHandler() {
+            super("[PixiToml]");
+        }
+
+        @Override
+        protected String getManifestContent(final TomlContentGetter contentGetter) {
+            return contentGetter.m_pixiTomlContent;
+        }
+
+        @Override
+        protected String prepareManifestContent(final String content) {
+            return content;
+        }
+    }
+
+    static final class PixiUpdateUpdateHandler
         extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
     }
 

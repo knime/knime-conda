@@ -44,6 +44,12 @@ final class PixiYamlEnvironmentCreatorNodeParameters implements NodeParameters {
     @ValueReference(ButtonFieldRef.class)
     String m_PixiLockButton;
 
+    @Widget(title = "Update dependencies",
+        description = "Click to update all dependencies to their latest compatible versions and update the lock file")
+    @ButtonWidget(actionHandler = PixiUpdateActionHandler.class, updateHandler = PixiUpdateUpdateHandler.class)
+    @ValueReference(ButtonFieldRef.class)
+    String m_PixiUpdateButton;
+
     // Hidden field that stores lock file content from button, reset to empty when YAML changes
     @ValueReference(PixiLockFileRef.class)
     @ValueProvider(ResetLockFileProvider.class)
@@ -81,6 +87,28 @@ final class PixiYamlEnvironmentCreatorNodeParameters implements NodeParameters {
     }
 
     static final class PixiLockUpdateHandler
+        extends CancelableActionHandler.UpdateHandler<String, YamlContentGetter> {
+    }
+
+    static final class PixiUpdateActionHandler
+        extends PixiParameterUtils.AbstractPixiUpdateActionHandler<YamlContentGetter> {
+
+        PixiUpdateActionHandler() {
+            super("[PixiYaml]");
+        }
+
+        @Override
+        protected String getManifestContent(final YamlContentGetter contentGetter) {
+            return contentGetter.m_envYamlContent;
+        }
+
+        @Override
+        protected String prepareManifestContent(final String content) throws Exception {
+            return PixiYamlImporter.convertYamlToToml(content);
+        }
+    }
+
+    static final class PixiUpdateUpdateHandler
         extends CancelableActionHandler.UpdateHandler<String, YamlContentGetter> {
     }
 

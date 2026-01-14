@@ -8,6 +8,8 @@ import org.knime.core.webui.node.dialog.defaultdialog.internal.button.Cancelable
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.Widget;
 import org.knime.node.parameters.array.ArrayWidget;
+import org.knime.node.parameters.updates.Effect;
+import org.knime.node.parameters.updates.Effect.EffectType;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
@@ -50,14 +52,21 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
         description = "Click to check whether this pixi environment can be constructed on all selected operating systems")
     @ButtonWidget(actionHandler = PixiLockActionHandler.class, updateHandler = PixiLockUpdateHandler.class)
     @ValueReference(ButtonFieldRef.class)
-    String m_compatibilityCheckButton;
+    String m_PixiLockButton;
 
-    // Hidden field that copies lock file content from button for validation message
+    @Widget(title = "Update dependencies",
+        description = "Click to update all dependencies to their latest compatible versions and update the lock file")
+    @ButtonWidget(actionHandler = PixiUpdateActionHandler.class, updateHandler = PixiUpdateUpdateHandler.class)
+    @ValueReference(ButtonFieldRef.class)
+    String m_PixiUpdateButton;
+
+    // Hidden field that stores lock file content from button, reset to empty when packages change
     @ValueReference(PixiLockFileRef.class)
-    @ValueProvider(LockFileCopyProvider.class)
-    String m_pixiLockFileContent;
+    @ValueProvider(ResetLockFileProvider.class)
+    String m_pixiLockFileContent = "";
 
     @TextMessage(LockFileValidationProvider.class)
+    @Effect(predicate = LockFileIsEmpty.class, type = EffectType.SHOW)
     Void m_lockFileValidationMessage;
 
     interface PackageArrayRef extends ParameterReference<PackageSpec[]> {
@@ -142,36 +151,41 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
     static final class PixiLockUpdateHandler extends CancelableActionHandler.UpdateHandler<String, PackagesContent> {
     }
 
+    static final class PixiUpdateActionHandler
+        extends PixiParameterUtils.AbstractPixiUpdateActionHandler<PackagesContent> {
+
+        PixiUpdateActionHandler() {
+            super("[PixiPackages]");
+        }
+
+        @Override
+        protected String getManifestContent(final PackagesContent contentGetter) {
+            return buildTomlFromPackages(contentGetter.m_packages);
+        }
+
+        @Override
+        protected String prepareManifestContent(final String content) {
+            return content; // Already TOML from buildTomlFromPackages
+        }
+    }
+
+    static final class PixiUpdateUpdateHandler extends CancelableActionHandler.UpdateHandler<String, PackagesContent> {
+    }
+
     static final class PackagesContent {
         @ValueReference(PackageArrayRef.class)
         PackageSpec[] m_packages;
     }
 
-    static final class LockFileCopyProvider
-        extends PixiParameterUtils.AbstractLockFileCopyProvider<ButtonFieldRef> {
-
-        @Override
-        protected Class<ButtonFieldRef> getButtonFieldRefClass() {
-            return ButtonFieldRef.class;
-        }
-    }
-
-    static final class LockFileValidationProvider
-        extends PixiParameterUtils.AbstractLockFileValidationProvider<PackageArrayRef, PixiLockFileRef, LockFileCopyProvider> {
-
+    static final class ResetLockFileProvider extends PixiParameterUtils.AbstractResetLockFileProvider<PackageArrayRef, ButtonFieldRef> {
         @Override
         protected Class<PackageArrayRef> getContentRefClass() {
             return PackageArrayRef.class;
         }
 
         @Override
-        protected Class<PixiLockFileRef> getLockFileRefClass() {
-            return PixiLockFileRef.class;
-        }
-
-        @Override
-        protected Class<LockFileCopyProvider> getLockFileCopyProviderClass() {
-            return LockFileCopyProvider.class;
+        protected Class<ButtonFieldRef> getButtonFieldRefClass() {
+            return ButtonFieldRef.class;
         }
 
         @Override
@@ -181,6 +195,20 @@ final class PixiEnvironmentCreatorNodeParameters implements NodeParameters {
                 return Arrays.equals(arr1, arr2);
             }
             return super.contentEquals(content1, content2);
+        }
+    }
+
+    static final class LockFileValidationProvider extends PixiParameterUtils.AbstractLockFileValidationWithEffectProvider<PixiLockFileRef> {
+        @Override
+        protected Class<PixiLockFileRef> getLockFileRefClass() {
+            return PixiLockFileRef.class;
+        }
+    }
+
+    static final class LockFileIsEmpty extends PixiParameterUtils.AbstractLockFileIsEmptyPredicate<PixiLockFileRef> {
+        @Override
+        protected Class<PixiLockFileRef> getLockFileRefClass() {
+            return PixiLockFileRef.class;
         }
     }
 

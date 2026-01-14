@@ -13,6 +13,10 @@ import org.knime.core.webui.node.dialog.defaultdialog.internal.button.Cancelable
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
+import org.knime.node.parameters.updates.Effect;
+import org.knime.node.parameters.updates.Effect.EffectType;
+import org.knime.node.parameters.updates.EffectPredicate;
+import org.knime.node.parameters.updates.EffectPredicateProvider;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.updates.ValueProvider;
@@ -50,22 +54,32 @@ final class PixiTomlEnvironmentCreatorNodeParameters implements NodeParameters {
             knime-python-base = "5.9.*"
             """;
 
-    // Button that triggers lock file generation and stores the result
-    @Widget(title = "Check compatibility",
-        description = "Click to check whether this pixi environment can be constructed on all selected operating systems")
+    @Widget(title = "Lock the environment",
+        description = "Click to check whether this pixi environment can be constructed on all selected operating systems and generate a lock file")
     @ButtonWidget(actionHandler = PixiLockActionHandler.class, updateHandler = PixiLockUpdateHandler.class)
     @ValueReference(ButtonFieldRef.class)
-    String m_compatibilityCheckButton;
+    String m_PixiLockButton;
 
-    // Hidden field that copies lock file content from button for validation message
+    @Widget(title = "Update dependencies",
+        description = "Click to update all dependencies to their latest compatible versions and update the lock file")
+    @ButtonWidget(actionHandler = PixiUpdateActionHandler.class, updateHandler = PixiUpdateUpdateHandler.class)
+    @ValueReference(ButtonFieldRef.class)
+    String m_PixiUpdateButton;
+
     @ValueReference(PixiLockFileRef.class)
-    @ValueProvider(LockFileCopyProvider.class)
-    String m_pixiLockFileContent;
+    @ValueProvider(ResetLockFileProvider.class)
+    String m_pixiLockFileContent = "";
+
+    @ValueReference(PlatformValidationIsWarningRef.class)
+    @ValueProvider(PlatformValidationIsWarningProvider.class)
+    Boolean m_platformValidationIsWarning = false;
 
     @TextMessage(PlatformValidationProvider.class)
+    @Effect(predicate = PlatformValidationIsWarning.class, type = EffectType.SHOW)
     Void m_platformValidationMessage;
 
     @TextMessage(LockFileValidationProvider.class)
+    @Effect(predicate = LockFileIsEmpty.class, type = EffectType.SHOW)
     Void m_lockFileValidationMessage;
 
     interface PixiTomlContentRef extends ParameterReference<String> {
@@ -75,6 +89,9 @@ final class PixiTomlEnvironmentCreatorNodeParameters implements NodeParameters {
     }
 
     interface PixiLockFileRef extends ParameterReference<String> {
+    }
+
+    interface PlatformValidationIsWarningRef extends ParameterReference<Boolean> {
     }
 
     static final class PixiLockActionHandler
@@ -91,11 +108,33 @@ final class PixiTomlEnvironmentCreatorNodeParameters implements NodeParameters {
 
         @Override
         protected String prepareManifestContent(final String content) {
-            return content; // TOML is already in the right format
+            return content;
         }
     }
 
     static final class PixiLockUpdateHandler
+        extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
+    }
+
+    static final class PixiUpdateActionHandler
+        extends PixiParameterUtils.AbstractPixiUpdateActionHandler<TomlContentGetter> {
+
+        PixiUpdateActionHandler() {
+            super("[PixiToml]");
+        }
+
+        @Override
+        protected String getManifestContent(final TomlContentGetter contentGetter) {
+            return contentGetter.m_pixiTomlContent;
+        }
+
+        @Override
+        protected String prepareManifestContent(final String content) {
+            return content;
+        }
+    }
+
+    static final class PixiUpdateUpdateHandler
         extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
     }
 
@@ -104,17 +143,11 @@ final class PixiTomlEnvironmentCreatorNodeParameters implements NodeParameters {
         String m_pixiTomlContent;
     }
 
-    static final class LockFileCopyProvider
-        extends PixiParameterUtils.AbstractLockFileCopyProvider<ButtonFieldRef> {
-
-        @Override
-        protected Class<ButtonFieldRef> getButtonFieldRefClass() {
-            return ButtonFieldRef.class;
-        }
-    }
-
-    static final class LockFileValidationProvider
-        extends PixiParameterUtils.AbstractLockFileValidationProvider<PixiTomlContentRef, PixiLockFileRef, LockFileCopyProvider> {
+    /**
+     * Resets lock file to empty when TOML content changes.
+     */
+    static final class ResetLockFileProvider
+        extends PixiParameterUtils.AbstractResetLockFileProvider<PixiTomlContentRef, ButtonFieldRef> {
 
         @Override
         protected Class<PixiTomlContentRef> getContentRefClass() {
@@ -122,13 +155,117 @@ final class PixiTomlEnvironmentCreatorNodeParameters implements NodeParameters {
         }
 
         @Override
+        protected Class<ButtonFieldRef> getButtonFieldRefClass() {
+            return ButtonFieldRef.class;
+        }
+    }
+
+    /**
+     * Provides validation message when lock file is missing.
+     */
+    static final class LockFileValidationProvider
+        extends PixiParameterUtils.AbstractLockFileValidationWithEffectProvider<PixiLockFileRef> {
+
+        @Override
         protected Class<PixiLockFileRef> getLockFileRefClass() {
             return PixiLockFileRef.class;
         }
+    }
+
+    /**
+     * Predicate that returns true when lock file is empty.
+     */
+    static final class LockFileIsEmpty
+        extends PixiParameterUtils.AbstractLockFileIsEmptyPredicate<PixiLockFileRef> {
 
         @Override
-        protected Class<LockFileCopyProvider> getLockFileCopyProviderClass() {
-            return LockFileCopyProvider.class;
+        protected Class<PixiLockFileRef> getLockFileRefClass() {
+            return PixiLockFileRef.class;
+        }
+    }
+
+    /**
+     * Predicate that returns true when platform validation message is a warning or error.
+     */
+    static final class PlatformValidationIsWarning implements EffectPredicateProvider {
+
+        @Override
+        public EffectPredicate init(final PredicateInitializer i) {
+            return i.getBoolean(PlatformValidationIsWarningRef.class).isTrue();
+        }
+    }
+
+    /**
+     * State provider that computes whether platform validation message is a warning or error.
+     */
+    static final class PlatformValidationIsWarningProvider implements StateProvider<Boolean> {
+
+        private Supplier<String> m_tomlContentSupplier;
+
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            initializer.computeOnValueChange(PixiTomlContentRef.class);
+            initializer.computeAfterOpenDialog();
+            m_tomlContentSupplier = initializer.getValueSupplier(PixiTomlContentRef.class);
+        }
+
+        @Override
+        public Boolean computeState(final NodeParametersInput context) {
+            String tomlContent = m_tomlContentSupplier.get();
+
+            if (tomlContent == null || tomlContent.isBlank()) {
+                return false;
+            }
+
+            try {
+                TomlParser parser = new TomlParser();
+                Config config = parser.parse(new StringReader(tomlContent));
+
+                // Try to get the workspace section
+                Config workspace = config.get("workspace");
+                if (workspace == null) {
+                    return true; // WARNING: No '[workspace]' section
+                }
+
+                // Try to get the platforms list
+                List<?> platformsList = workspace.get("platforms");
+                if (platformsList == null || platformsList.isEmpty()) {
+                    return true; // WARNING: No 'platforms' field
+                }
+
+                // Convert to set of strings
+                Set<String> platforms = platformsList.stream()
+                    .map(Object::toString)
+                    .collect(Collectors.toSet());
+
+                Set<String> allPlatforms = Set.of("win-64", "linux-64", "osx-64", "osx-arm64");
+
+                // Check if all platforms are present
+                if (platforms.equals(allPlatforms)) {
+                    return false; // INFO: All good
+                }
+
+                // Check whether all platforms are known
+                Set<String> unknownPlatforms = new HashSet<>(platforms);
+                unknownPlatforms.removeAll(allPlatforms);
+
+                if (!unknownPlatforms.isEmpty()) {
+                    return true; // WARNING: Unknown platforms
+                }
+
+                // Check which platforms are missing
+                Set<String> missingPlatforms = new HashSet<>(allPlatforms);
+                missingPlatforms.removeAll(platforms);
+
+                if (!missingPlatforms.isEmpty()) {
+                    return true; // WARNING: Missing platforms
+                }
+
+                return false; // All good
+
+            } catch (Exception ex) {
+                return true; // ERROR: Parse error
+            }
         }
     }
 

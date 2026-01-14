@@ -10,6 +10,8 @@ import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
 import org.knime.core.webui.node.dialog.defaultdialog.widget.handler.WidgetHandlerException;
 import org.knime.node.parameters.NodeParametersInput;
+import org.knime.node.parameters.updates.EffectPredicate;
+import org.knime.node.parameters.updates.EffectPredicateProvider;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.widget.message.TextMessage;
@@ -109,9 +111,9 @@ final class PixiParameterUtils {
         @Override
         protected String getButtonText(final States state) {
             return switch (state) {
-                case READY -> "Check compatibility";
+                case READY -> "Lock Environment";
                 case CANCEL -> "Cancel";
-                case DONE -> "Recheck compatibility";
+                case DONE -> "Re-lock Environment";
             };
         }
 
@@ -126,7 +128,9 @@ final class PixiParameterUtils {
      * This enables the validation message to react to lock file changes.
      *
      * @param <ButtonFieldRef> the button field reference
+     * @deprecated Use {@link AbstractResetLockFileProvider} instead for Effect-based visibility control
      */
+    @Deprecated
     static abstract class AbstractLockFileCopyProvider<ButtonFieldRef extends ParameterReference<String>>
         implements StateProvider<String> {
 
@@ -135,8 +139,10 @@ final class PixiParameterUtils {
         /**
          * Get the button field reference class.
          */
+        @Deprecated
         protected abstract Class<ButtonFieldRef> getButtonFieldRefClass();
 
+        @Deprecated
         @Override
         public void init(final StateProviderInitializer initializer) {
             // Trigger whenever button field changes (after lock file generation)
@@ -144,9 +150,69 @@ final class PixiParameterUtils {
             m_buttonFieldSupplier = initializer.getValueSupplier(getButtonFieldRefClass());
         }
 
+        @Deprecated
         @Override
         public String computeState(final NodeParametersInput context) {
             return m_buttonFieldSupplier.get();
+        }
+    }
+
+    /**
+     * State provider that copies lock file content from button, but resets to empty string when content changes.
+     * This enables Effect-based visibility control: message shown when lock file is empty, hidden otherwise.
+     *
+     * @param <ContentRef> the parameter reference for content (TOML, YAML, or packages)
+     * @param <ButtonFieldRef> the button field reference
+     */
+    static abstract class AbstractResetLockFileProvider<ContentRef extends ParameterReference<?>,
+            ButtonFieldRef extends ParameterReference<String>>
+        implements StateProvider<String> {
+
+        private Supplier<String> m_buttonFieldSupplier;
+        private Supplier<?> m_contentSupplier;
+        private Object m_lastContent;
+
+        /**
+         * Get the content reference class.
+         */
+        protected abstract Class<ContentRef> getContentRefClass();
+
+        /**
+         * Get the button field reference class.
+         */
+        protected abstract Class<ButtonFieldRef> getButtonFieldRefClass();
+
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            initializer.computeOnValueChange(getButtonFieldRefClass());
+            initializer.computeOnValueChange(getContentRefClass());
+            m_buttonFieldSupplier = initializer.getValueSupplier(getButtonFieldRefClass());
+            m_contentSupplier = initializer.getValueSupplier(getContentRefClass());
+        }
+
+        @Override
+        public String computeState(final NodeParametersInput context) {
+            final Object currentContent = m_contentSupplier.get();
+            final String buttonValue = m_buttonFieldSupplier.get();
+
+            // If content changed, reset lock file to empty (invalidates previous lock)
+            if (m_lastContent != null && !contentEquals(m_lastContent, currentContent)) {
+                m_lastContent = currentContent;
+                return ""; // Reset to empty when content changes
+            }
+
+            m_lastContent = currentContent;
+            return buttonValue != null ? buttonValue : "";
+        }
+
+        /**
+         * Compare content objects for equality. Override if content type needs custom comparison.
+         */
+        protected boolean contentEquals(final Object content1, final Object content2) {
+            if (content1 == null || content2 == null) {
+                return content1 == content2;
+            }
+            return content1.equals(content2);
         }
     }
 
@@ -231,6 +297,56 @@ final class PixiParameterUtils {
                 return content1 == content2;
             }
             return content1.equals(content2);
+        }
+    }
+
+    /**
+     * Validation message provider for lock file with Effect-based visibility.
+     * Always returns the same warning message. Visibility is controlled by an Effect with LockFileIsEmpty predicate.
+     * Use @Effect(predicate = LockFileIsEmpty.class, type = EffectType.SHOW) on the message field.
+     *
+     * @param <LockFileRef> the lock file reference
+     */
+    static abstract class AbstractLockFileValidationWithEffectProvider<LockFileRef extends ParameterReference<String>>
+        implements StateProvider<Optional<TextMessage.Message>> {
+
+        /**
+         * Get the lock file reference class.
+         */
+        protected abstract Class<LockFileRef> getLockFileRefClass();
+
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            // Depend on lock file content to trigger visibility updates via Effect
+            initializer.computeOnValueChange(getLockFileRefClass());
+            initializer.computeAfterOpenDialog();
+        }
+
+        @Override
+        public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
+            return Optional.of(new TextMessage.Message("Lock file status",
+                "Please click 'Check compatibility' to verify that the environment can be resolved on all platforms.",
+                MessageType.WARNING));
+        }
+    }
+
+    /**
+     * Predicate that returns true when the lock file content is empty.
+     * Used with @Effect(predicate = LockFileIsEmpty.class, type = EffectType.SHOW) to show message when empty.
+     *
+     * @param <LockFileRef> the lock file reference
+     */
+    static abstract class AbstractLockFileIsEmptyPredicate<LockFileRef extends ParameterReference<String>>
+        implements EffectPredicateProvider {
+
+        /**
+         * Get the lock file reference class.
+         */
+        protected abstract Class<LockFileRef> getLockFileRefClass();
+
+        @Override
+        public EffectPredicate init(final PredicateInitializer i) {
+            return i.getString(getLockFileRefClass()).isEqualTo("");
         }
     }
 }

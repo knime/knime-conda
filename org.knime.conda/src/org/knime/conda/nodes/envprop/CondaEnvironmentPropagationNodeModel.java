@@ -102,21 +102,21 @@ final class CondaEnvironmentPropagationNodeModel extends NodeModel {
 
     private static final NodeLogger LOGGER = NodeLogger.getLogger(CondaEnvironmentPropagationNodeModel.class);
 
-    private static final String CFG_KEY_CONDA_ENV = "conda_environment";
+    static final String CFG_KEY_CONDA_ENV = "conda_environment";
 
-    private static final String CFG_KEY_ENV_VALIDATION_METHOD = "environment_validation";
+    static final String CFG_KEY_ENV_VALIDATION_METHOD = "environment_validation";
 
-    private static final String VALIDATION_METHOD_NAME = "name";
+    static final String VALIDATION_METHOD_NAME = "name";
 
-    private static final String VALIDATION_METHOD_NAME_PACKAGES = "name_packages";
+    static final String VALIDATION_METHOD_NAME_PACKAGES = "name_packages";
 
-    private static final String VALIDATION_METHOD_OVERWRITE = "overwrite";
+    static final String VALIDATION_METHOD_OVERWRITE = "overwrite";
 
-    private static final String CFG_KEY_OUTPUT_VARIABLE_NAME = "output_variable_name";
+    static final String CFG_KEY_OUTPUT_VARIABLE_NAME = "output_variable_name";
 
-    private static final String CFG_KEY_SOURCE_OS_NAME = "source_operating_system";
+    static final String CFG_KEY_SOURCE_OS_NAME = "source_operating_system";
 
-    private static final String CFG_KEY_PRESERVE_INCOMPLETE_ENVS = "preserve_incomplete_environments";
+    static final String CFG_KEY_PRESERVE_INCOMPLETE_ENVS = "preserve_incomplete_environments";
 
     private static final String OS_LINUX = "linux";
 

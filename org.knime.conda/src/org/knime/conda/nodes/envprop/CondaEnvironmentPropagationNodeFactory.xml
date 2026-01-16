@@ -8,11 +8,16 @@
 	</shortDescription>
 	<fullDescription>
 		<intro>
-			This node ensures the existence of a specific configurable Conda environment and propagates the environment
-			to Python, R, or other Conda-aware downstream nodes. 
-			This is useful to make workflows that contain Conda-aware nodes more portable by
-			allowing to recreate the Conda environment used on the source machine (for example your personal computer)
-			on the target machine (for example a KNIME Server instance). The node is intended to be used as follows:
+			<p>
+				<b>Note:</b> When used on KNIME Hub, this node displays a read-only view of the
+				configured environment. To configure custom Python or R environments when editing workflows
+				on the KNIME Hub, use the <i>Python Environment Provider</i> or <i>R Environment Provider</i> nodes instead. 
+			</p>
+			This node ensures the existence of a specific configurable Conda environment and propagates the environment to
+			Python, R, or other Conda-aware downstream nodes. This is useful to make workflows that
+			contain Conda-aware nodes more portable by allowing to recreate the Conda environment used
+			on the source machine (for example your personal computer) on the target machine (for
+			example a KNIME Server instance). The node is intended to be used as follows: 
 			<ol>
 				<li>On your local machine, you need to have Conda set up and configured in the Preferences of the KNIME
 					Conda Integration as described in the

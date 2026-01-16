@@ -54,11 +54,21 @@ import org.knime.conda.CondaEnvironmentIdentifier;
 import org.knime.core.node.NodeDialogPane;
 import org.knime.core.node.NodeFactory;
 import org.knime.core.node.NodeView;
+import org.knime.core.webui.node.dialog.NodeDialog;
+import org.knime.core.webui.node.dialog.NodeDialogFactory;
+import org.knime.core.webui.node.dialog.NodeDialogManager;
+import org.knime.core.webui.node.dialog.SettingsType;
+import org.knime.core.webui.node.dialog.defaultdialog.DefaultNodeDialog;
 
 /**
  * @author Marcel Wiedenmann, KNIME GmbH, Konstanz, Germany
  */
-public final class CondaEnvironmentPropagationNodeFactory extends NodeFactory<CondaEnvironmentPropagationNodeModel> {
+public final class CondaEnvironmentPropagationNodeFactory extends NodeFactory<CondaEnvironmentPropagationNodeModel>
+    implements NodeDialogFactory {
+
+    private static final boolean HAS_WEBUI_DIALOG = //
+        "js".equals(System.getProperty("org.knime.scripting.ui.mode")) // feature flag for new Scripting dialogs
+            || Boolean.getBoolean("java.awt.headless"); // headless (remote workflow editing) -> we enforce webUI dialog
 
     /** Provides a function to select an default environment from a list of environments. */
     @FunctionalInterface
@@ -96,7 +106,19 @@ public final class CondaEnvironmentPropagationNodeFactory extends NodeFactory<Co
 
     @Override
     protected NodeDialogPane createNodeDialogPane() {
-        return new CondaEnvironmentPropagationNodeDialog();
+        if (HAS_WEBUI_DIALOG) {
+            return NodeDialogManager.createLegacyFlowVariableNodeDialog(createNodeDialog());
+        } else {
+            return new CondaEnvironmentPropagationNodeDialog();
+        }
+    }
+
+    /**
+     * @since 5.10
+     */
+    @Override
+    public NodeDialog createNodeDialog() {
+        return new DefaultNodeDialog(SettingsType.MODEL, CondaEnvironmentPropagationNodeParameters.class);
     }
 
     @Override

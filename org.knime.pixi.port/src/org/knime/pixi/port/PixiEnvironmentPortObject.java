@@ -55,7 +55,11 @@ public final class PixiEnvironmentPortObject extends AbstractSimplePortObject {
         m_pixiEnvironmentPath = pixiEnvironmentPath;
     }
 
-    /**
+    public PixiEnvironmentPortObject(String pixiTomlContent, String pixiLockContent) {
+		// TODO Auto-generated constructor stub
+	}
+
+	/**
      * @return the path to the pixi project directory on disk (containing pixi.toml and .pixi/)
      */
     public Path getPixiEnvironmentPath() {

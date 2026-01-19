@@ -12,5 +12,14 @@
                   specClass="org.knime.pixi.port.PixiEnvironmentPortObjectSpec"
                   specSerializer="org.knime.pixi.port.PixiEnvironmentPortObjectSpec$Serializer">
             </portObject>
+            <portObject
+                  color="#4CAF50"
+                  hidden="false"
+                  name="Python Environment"
+                  objectClass="org.knime.pixi.port.PythonEnvironmentPortObject"
+                  objectSerializer="org.knime.pixi.port.PythonEnvironmentPortObject$Serializer"
+                  specClass="org.knime.pixi.port.PythonEnvironmentPortObjectSpec"
+                  specSerializer="org.knime.pixi.port.PythonEnvironmentPortObjectSpec$Serializer">
+            </portObject>
       </extension>
 </plugin>

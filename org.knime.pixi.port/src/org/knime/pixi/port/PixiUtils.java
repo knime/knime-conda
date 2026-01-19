@@ -1,4 +1,4 @@
-package org.knime.pixi.nodes;
+package org.knime.pixi.port;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,11 +17,11 @@ import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  */
 @SuppressWarnings("restriction")
-final class PixiUtils {
+public final class PixiUtils {
     private PixiUtils() {
     }
 
-    static Path resolveProjectDirectory(final String manifestText, final Path tomlFilePath) throws IOException {
+    public static Path resolveProjectDirectory(final String manifestText, final Path tomlFilePath) throws IOException {
         // If a file path is provided, use that file's parent directory (don't write anything)
         if (tomlFilePath != null) {
             if (!Files.exists(tomlFilePath)) {
@@ -53,7 +53,7 @@ final class PixiUtils {
         return projectDir;
     }
 
-    static String getMessageFromCallResult(final CallResult callResult) {
+    public static String getMessageFromCallResult(final CallResult callResult) {
         // TODO implement this in a better way
         final String stdout = callResult.stdout() == null ? "" : callResult.stdout();
         final String stderr = callResult.stderr() == null ? "" : callResult.stderr();
@@ -64,7 +64,7 @@ final class PixiUtils {
         return msg;
     }
 
-    static Path resolvePython(final Path projectDir, final String envName) {
+    public static Path resolvePython(final Path projectDir, final String envName) {
         Path envDir = projectDir.resolve(".pixi").resolve("envs").resolve(envName);
         boolean isWin = System.getProperty("os.name").toLowerCase().contains("win");
         return isWin ? envDir.resolve("python.exe") : envDir.resolve("bin").resolve("python");

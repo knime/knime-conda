@@ -12,6 +12,7 @@ import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 import org.knime.core.node.KNIMEException;
+import org.knime.pixi.port.PixiUtils;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.Config;
@@ -25,7 +26,7 @@ import com.electronwill.nightconfig.toml.TomlWriter;
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  * @since 5.10
  */
-final class PixiYamlImporter {
+public final class PixiYamlImporter {
 
     private PixiYamlImporter() {
         // Utility class
@@ -38,7 +39,7 @@ final class PixiYamlImporter {
      * @return the pixi.toml content as string with all platforms configured
      */
     @SuppressWarnings("restriction")
-    static String convertYamlToToml(final String yamlContent) {
+    public static String convertYamlToToml(final String yamlContent) {
         Path tempDir = null;
         try {
             // Create temporary directory

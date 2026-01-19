@@ -15,19 +15,7 @@
          point="org.knime.workbench.repository.nodes">
             <node
                   category-path="/scripting/pixi"
-                  factory-class="org.knime.pixi.nodes.PixiTomlEnvironmentCreatorNodeFactory">
-            </node>
-            <node
-                  category-path="/scripting/pixi"
-                  factory-class="org.knime.pixi.nodes.PixiEnvironmentCreatorNodeFactory">
-            </node>
-            <node
-                  category-path="/scripting/pixi"
-                  factory-class="org.knime.pixi.nodes.PixiYamlEnvironmentCreatorNodeFactory">
-            </node>
-            <node
-                  category-path="/scripting/pixi"
-                  factory-class="org.knime.pixi.nodes.PixiTomlEnvironmentReaderNodeFactory">
+                  factory-class="org.knime.pixi.nodes.PythonEnvironmentProviderNodeFactory">
             </node>
    </extension>
 </plugin>

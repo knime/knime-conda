@@ -46,7 +46,7 @@
  * History
  *   Jan 7, 2026 (Marc Lehner): created
  */
-package org.knime.pixi.nodes;
+package org.knime.pixi.port;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -66,11 +66,11 @@ import org.knime.core.node.NodeLogger;
  */
 public class PixiEnvMapping {
 
-    private static final NodeLogger LOGGER = NodeLogger.getLogger(PixiUtils.class);
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(PixiEnvMapping.class);
 
     private static final String ENV_MAPPING_FILE = "knime_env_mapping.txt";
 
-    static synchronized Path resolvePixiEnvDirectory(final String manifestText) {
+    public static synchronized Path resolvePixiEnvDirectory(final String manifestText) {
         final Path base = CondaPreferences.getPixiEnvPath();
         Map<String, String> envMapping = new HashMap<>();
         if (Files.exists(base.resolve(ENV_MAPPING_FILE))) {

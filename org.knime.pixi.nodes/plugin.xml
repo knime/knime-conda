@@ -29,5 +29,9 @@
                   category-path="/scripting/pixi"
                   factory-class="org.knime.pixi.nodes.PixiTomlEnvironmentReaderNodeFactory">
             </node>
+            <node
+                  category-path="/scripting/pixi"
+                  factory-class="org.knime.pixi.nodes.PythonEnvironmentProviderNodeFactory">
+            </node>
    </extension>
 </plugin>

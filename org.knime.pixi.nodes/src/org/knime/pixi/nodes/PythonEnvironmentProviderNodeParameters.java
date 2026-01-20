@@ -49,13 +49,8 @@
 package org.knime.pixi.nodes;
 
 import java.io.IOException;
-import java.io.StringReader;
-import java.io.StringWriter;
-import java.nio.file.Files;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -105,12 +100,6 @@ import org.knime.node.parameters.widget.message.TextMessage.MessageType;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
 import org.knime.pixi.nodes.PixiYamlImporter;
 import org.knime.pixi.port.PixiUtils;
-
-import com.electronwill.nightconfig.core.CommentedConfig;
-import com.electronwill.nightconfig.core.Config;
-import com.electronwill.nightconfig.core.io.IndentStyle;
-import com.electronwill.nightconfig.toml.TomlParser;
-import com.electronwill.nightconfig.toml.TomlWriter;
 
 /**
  * Node Parameters for the Python Environment Provider node.
@@ -308,7 +297,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         public List<String> choices(final NodeParametersInput context) {
             try {
                 // Get the bundling root directory (same logic as BundlingRoot)
-                Path bundlingRoot = getBundlingRootPath();
+                Path bundlingRoot = PixiBundlingUtils.getBundlingRootPath();
                 LOGGER.debug("Scanning bundling root: " + bundlingRoot);
 
                 if (!Files.exists(bundlingRoot)) {
@@ -401,47 +390,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     }
 
     String getPixiTomlFileContent() throws IOException {
-        switch (m_mainInputSource) {
-            case SIMPLE:
-                LOGGER.debug("Building pixi.toml from packages");
-                return buildPixiTomlFromPackages(m_packages);
-            case TOML_EDITOR:
-                LOGGER.debug("Using pixi.toml from editor");
-                return m_pixiTomlContent;
-            case TOML_FILE:
-                LOGGER.debug("Reading pixi.toml from file");
-                if (m_tomlFile == null || m_tomlFile.m_path == null) {
-                    throw new IOException("No TOML file selected");
-                }
-                Path tomlPath = Path.of(m_tomlFile.m_path.getPath());
-                if (!Files.exists(tomlPath)) {
-                    throw new IOException("TOML file does not exist: " + tomlPath);
-                }
-                return Files.readString(tomlPath);
-            case YAML_EDITOR:
-                LOGGER.debug("Converting YAML from editor to TOML");
-                return PixiYamlImporter.convertYamlToToml(m_envYamlContent);
-            case BUNDLING_ENVIRONMENT:
-                LOGGER.debug("Reading pixi.toml from bundled environment");
-                if (m_bundledEnvironment == null || m_bundledEnvironment.isEmpty()) {
-                    throw new IOException("No bundled environment selected");
-                }
-                try {
-                    // Get the bundling root and construct path to environment directory
-                    Path bundlingRoot = getBundlingRootPath();
-                    Path bundledEnvDir = bundlingRoot.resolve(m_bundledEnvironment);
-                    Path bundledTomlPath = bundledEnvDir.resolve("pixi.toml");
-                    if (!Files.exists(bundledTomlPath)) {
-                        throw new IOException("pixi.toml not found in bundled environment: " + bundledTomlPath);
-                    }
-                    return Files.readString(bundledTomlPath);
-                } catch (Exception e) {
-                    throw new IOException("Failed to read bundled environment: " + e.getMessage(), e);
-                }
-            default:
-                LOGGER.error("Unknown input source: " + m_mainInputSource);
-                throw new IOException("Unknown input source: " + m_mainInputSource);
-        }
+        return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent,
+            m_tomlFile, m_envYamlContent, m_bundledEnvironment, LOGGER);
     }
 
     // Package specification
@@ -484,7 +434,12 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         @Override
         protected String invoke(final TomlContentGetter deps, final NodeParametersInput context)
             throws WidgetHandlerException {
-            final String tomlContent = deps.getTomlContent();
+            final String tomlContent;
+            try {
+                tomlContent = deps.getTomlContent();
+            } catch (IOException e) {
+                throw new WidgetHandlerException("Failed to get TOML content: " + e.getMessage());
+            }
             LOGGER.debug("Button clicked - running pixi lock...");
             if (tomlContent == null || tomlContent.isBlank()) {
                 throw new WidgetHandlerException("No manifest content provided");
@@ -568,71 +523,9 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         @ValueReference(BundledEnvironmentRef.class)
         String m_bundledEnvironment;
 
-        String getTomlContent() {
-            LOGGER.debug("Getting TOML content for: " + m_mainInputSource);
-            switch (m_mainInputSource) {
-                case SIMPLE:
-                    LOGGER.debug("Building TOML from " + m_packages.length + " packages");
-                    String result = buildPixiTomlFromPackages(m_packages);
-                    LOGGER.debug("Generated TOML (" + result.length() + " chars)");
-                    return result;
-                case TOML_EDITOR:
-                    LOGGER.debug("Using TOML from editor (" + m_pixiTomlContent.length() + " chars)");
-                    return m_pixiTomlContent;
-                case TOML_FILE:
-                    LOGGER.debug("Reading TOML from file for lock generation");
-                    try {
-                        if (m_tomlFile == null || m_tomlFile.m_path == null) {
-                            LOGGER.debug("No file selected");
-                            return "";
-                        }
-                        Path tomlPath = Path.of(m_tomlFile.m_path.getPath());
-                        if (!Files.exists(tomlPath)) {
-                            LOGGER.debug("File does not exist: " + tomlPath);
-                            return "";
-                        }
-                        String content = Files.readString(tomlPath);
-                        LOGGER.debug("Read TOML (" + content.length() + " chars)");
-                        return content;
-                    } catch (IOException e) {
-                        LOGGER.warn("Error reading file: " + e.getMessage());
-                        return "";
-                    }
-                case YAML_EDITOR:
-                    LOGGER.debug("Converting YAML from editor to TOML");
-                    try {
-                        String toml = PixiYamlImporter.convertYamlToToml(m_envYamlContent);
-                        LOGGER.debug("Converted TOML (" + toml.length() + " chars)");
-                        return toml;
-                    } catch (Exception e) {
-                        LOGGER.warn("Error converting YAML: " + e.getMessage());
-                        return "";
-                    }
-                case BUNDLING_ENVIRONMENT:
-                    LOGGER.debug("Reading TOML from bundled environment");
-                    try {
-                        if (m_bundledEnvironment == null || m_bundledEnvironment.isEmpty()) {
-                            LOGGER.debug("No bundled environment selected");
-                            return "";
-                        }
-                        Path bundlingRoot = getBundlingRootPath();
-                        Path bundledEnvDir = bundlingRoot.resolve(m_bundledEnvironment);
-                        Path bundledTomlPath = bundledEnvDir.resolve("pixi.toml");
-                        if (!Files.exists(bundledTomlPath)) {
-                            LOGGER.debug("TOML file does not exist: " + bundledTomlPath);
-                            return "";
-                        }
-                        String content = Files.readString(bundledTomlPath);
-                        LOGGER.debug("Read TOML (" + content.length() + " chars)");
-                        return content;
-                    } catch (Exception e) {
-                        LOGGER.warn("Error reading bundled environment: " + e.getMessage());
-                        return "";
-                    }
-                default:
-                    LOGGER.error("Unknown input source: " + m_mainInputSource);
-                    return "";
-            }
+        String getTomlContent() throws IOException {
+            return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent,
+                m_tomlFile, m_envYamlContent, m_bundledEnvironment, LOGGER);
         }
     }
 
@@ -648,7 +541,11 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
         @Override
         protected String getManifestContent(final TomlContentGetter contentGetter) {
-            return contentGetter.getTomlContent();
+            try {
+                return contentGetter.getTomlContent();
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to get TOML content: " + e.getMessage(), e);
+            }
         }
 
         @Override
@@ -782,62 +679,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         }
     }
 
-    // Helper method to build TOML from packages (using workspace structure for pixi)
-    private static String buildPixiTomlFromPackages(final PackageSpec[] packages) {
-        Config config = Config.inMemory();
-
-        // [workspace] section (required by pixi)
-        CommentedConfig workspace = CommentedConfig.inMemory();
-        workspace.set("channels", Arrays.asList("knime", "conda-forge"));
-        workspace.set("platforms", Arrays.asList("win-64", "linux-64", "osx-64", "osx-arm64"));
-        config.set("workspace", workspace);
-
-        // [dependencies] section for conda packages
-        CommentedConfig dependencies = CommentedConfig.inMemory();
-        for (PackageSpec pkg : packages) {
-            if (pkg.m_packageName == null || pkg.m_packageName.isBlank() || pkg.m_source == PackageSource.PIP) {
-                continue;
-            }
-            dependencies.set(pkg.m_packageName, formatVersionConstraint(pkg));
-        }
-        config.set("dependencies", dependencies);
-
-        // [pypi-dependencies] section for pip packages
-        CommentedConfig pypiDependencies = CommentedConfig.inMemory();
-        boolean hasPipPackages = false;
-        for (PackageSpec pkg : packages) {
-            if (pkg.m_packageName != null && !pkg.m_packageName.isBlank() && pkg.m_source == PackageSource.PIP) {
-                pypiDependencies.set(pkg.m_packageName, formatVersionConstraint(pkg));
-                hasPipPackages = true;
-            }
-        }
-        if (hasPipPackages) {
-            config.set("pypi-dependencies", pypiDependencies);
-        }
-
-        // Write to string
-        StringWriter writer = new StringWriter();
-        TomlWriter tomlWriter = new TomlWriter();
-        tomlWriter.setIndent(IndentStyle.SPACES_2);
-        tomlWriter.setWriteTableInlinePredicate(path -> false); // Never write tables inline
-        tomlWriter.write(config, writer);
-        return writer.toString();
-    }
-
-    private static String formatVersionConstraint(final PackageSpec pkg) {
-        boolean hasMin = pkg.m_minVersion != null && !pkg.m_minVersion.isBlank();
-        boolean hasMax = pkg.m_maxVersion != null && !pkg.m_maxVersion.isBlank();
-
-        if (hasMin && hasMax) {
-            return ">="+ pkg.m_minVersion + ",<=" + pkg.m_maxVersion;
-        } else if (hasMin) {
-            return ">=" + pkg.m_minVersion;
-        } else if (hasMax) {
-            return "<=" + pkg.m_maxVersion;
-        } else {
-            return "*";
-        }
-    }
 
     /**
      * Custom persistor that doesn't persist the field - used for computed/display-only fields.
@@ -857,32 +698,5 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         public String[][] getConfigPaths() {
             return new String[0][];
         }
-    }
-
-    /**
-     * Get the bundling root path using the same logic as BundlingRoot.
-     * Helper method used by both the choices provider and TOML reading logic.
-     */
-    static Path getBundlingRootPath() throws Exception {
-        // Check for KNIME_PYTHON_BUNDLING_PATH environment variable
-        var bundlingPathFromVar = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
-        if (bundlingPathFromVar != null && !bundlingPathFromVar.isBlank()) {
-            return Path.of(bundlingPathFromVar);
-        }
-
-        // Otherwise use installation_root/bundling
-        Path installationRoot = getInstallationRoot();
-        return installationRoot.resolve("bundling");
-    }
-
-    /**
-     * Get the KNIME installation root directory.
-     * Helper method used by getBundlingRootPath().
-     */
-    private static Path getInstallationRoot() throws Exception {
-        var bundle = org.eclipse.core.runtime.Platform.getBundle("org.knime.pixi.nodes");
-        String bundleLocationString = org.eclipse.core.runtime.FileLocator.getBundleFileLocation(bundle).orElseThrow().getAbsolutePath();
-        Path bundleLocationPath = Path.of(bundleLocationString);
-        return bundleLocationPath.getParent().getParent();
     }
 }

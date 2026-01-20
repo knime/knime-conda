@@ -153,7 +153,7 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                             throw new IllegalStateException("No bundled environment selected.");
                         }
                         try {
-                            projectDir = PythonEnvironmentProviderNodeParameters.getBundlingRootPath()
+                            projectDir = PixiBundlingUtils.getBundlingRootPath()
                                 .resolve(params.m_bundledEnvironment).toAbsolutePath().normalize();
                             final Path bundledTomlPath = projectDir.resolve("pixi.toml");
                             if (!Files.exists(bundledTomlPath)) {

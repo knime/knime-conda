@@ -49,7 +49,10 @@
 package org.knime.pixi.nodes;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
+import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
 import org.knime.node.DefaultModel.ConfigureInput;
 import org.knime.node.DefaultModel.ConfigureOutput;
 import org.knime.node.DefaultModel.ExecuteInput;
@@ -101,21 +104,86 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
         final var execCtx = in.getExecutionContext();
 
         try {
-            final String pixiLockContent = params.getPixiLockFileContent();
             final String pixiTomlContent = params.getPixiTomlFileContent();
 
-            // Validate that we have both TOML and lock file content
+            // Validate that we have TOML content
             if (pixiTomlContent == null || pixiTomlContent.isBlank()) {
                 throw new IllegalStateException("TOML content is empty. Please configure the environment.");
             }
-            if (pixiLockContent == null || pixiLockContent.isBlank()) {
-                throw new IllegalStateException(
-                    "Lock file content is empty. Please click 'Check compatibility' to generate the lock file.");
+
+            // Handle different input modes
+            final PythonEnvironmentPortObject portObject;
+            switch (params.m_mainInputSource) {
+                case SIMPLE:
+                case TOML_EDITOR:
+                    // For generated/edited TOML, get lock file (may be empty - that's ok)
+                    final String pixiLockContent = params.getPixiLockFileContent();
+                    final String lockToUse = (pixiLockContent != null) ? pixiLockContent : "";
+                    if (lockToUse.isBlank()) {
+                        System.out.println("No lock file - proceeding without lock (may fail on installation)");
+                    }
+                    portObject = new PythonEnvironmentPortObject(pixiTomlContent, lockToUse);
+                    break;
+
+                case TOML_FILE:
+                case BUNDLING_ENVIRONMENT:
+                    // For file-based or bundled input, determine the project directory (pixi root)
+                    final Path projectDir;
+                    
+                    if (params.m_mainInputSource == PythonEnvironmentProviderNodeParameters.MainInputSource.TOML_FILE) {
+                        // File-based: get parent directory of selected TOML file
+                        if (params.m_tomlFile == null || params.m_tomlFile.m_path == null) {
+                            throw new IllegalStateException("No TOML file selected.");
+                        }
+                        final Path tomlPath = Path.of(params.m_tomlFile.m_path.getPath());
+                        if (!Files.exists(tomlPath)) {
+                            throw new IllegalStateException("TOML file does not exist: " + tomlPath);
+                        }
+                        projectDir = tomlPath.getParent();
+                        if (projectDir == null) {
+                            throw new IllegalStateException("Cannot determine parent directory of TOML file: " + tomlPath);
+                        }
+                    } else {
+                        // Bundled environment: get directory from bundling root
+                        if (params.m_bundledEnvironment == null || params.m_bundledEnvironment.isEmpty()) {
+                            throw new IllegalStateException("No bundled environment selected.");
+                        }
+                        try {
+                            projectDir = PythonEnvironmentProviderNodeParameters.getBundlingRootPath()
+                                .resolve(params.m_bundledEnvironment).toAbsolutePath().normalize();
+                            final Path bundledTomlPath = projectDir.resolve("pixi.toml");
+                            if (!Files.exists(bundledTomlPath)) {
+                                throw new IllegalStateException("pixi.toml not found in bundled environment: " + bundledTomlPath);
+                            }
+                            System.out.println("Using bundled environment at: " + projectDir);
+                        } catch (Exception e) {
+                            throw new IllegalStateException("Failed to access bundled environment: " + e.getMessage(), e);
+                        }
+                    }
+                    
+                    // Get lock content from params (may be from disk or generated)
+                    String lockContent = params.getPixiLockFileContent();
+                    
+                    // If no lock in params, try reading from disk
+                    if (lockContent == null || lockContent.isBlank()) {
+                        final Path lockPath = projectDir.resolve("pixi.lock");
+                        if (Files.exists(lockPath)) {
+                            lockContent = Files.readString(lockPath);
+                            System.out.println("Read existing lock file from disk (" + lockContent.length() + " bytes)");
+                        } else {
+                            lockContent = "";
+                            System.out.println("No lock file found at " + lockPath);
+                        }
+                    }
+                    
+                    // Create port object with project directory - same for both file and bundled cases
+                    portObject = new PythonEnvironmentPortObject(pixiTomlContent, lockContent, projectDir);
+                    break;
+
+                default:
+                    throw new IllegalStateException("Unknown input source: " + params.m_mainInputSource);
             }
 
-            // Create and output the Python environment port object
-            final PythonEnvironmentPortObject portObject =
-                new PythonEnvironmentPortObject(pixiTomlContent, pixiLockContent);
             out.setOutData(portObject);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read environment configuration: " + e.getMessage(), e);

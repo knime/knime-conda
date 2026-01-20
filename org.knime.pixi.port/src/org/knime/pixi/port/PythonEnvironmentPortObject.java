@@ -23,17 +23,17 @@ import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 
 /**
- * Port object containing information about a Pixi environment.
+ * Port object containing information about a Python environment.
  *
- * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
+ * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
  * @since 5.10
  */
 public final class PythonEnvironmentPortObject extends AbstractSimplePortObject {
 
-    /** The port type for Pixi environment port objects. */
+    /** The port type for Python environment port objects. */
     public static final PortType TYPE = PortTypeRegistry.getInstance().getPortType(PythonEnvironmentPortObject.class);
 
-    /** The port type for optional Pixi environment port objects. */
+    /** The port type for optional Python environment port objects. */
     public static final PortType TYPE_OPTIONAL =
         PortTypeRegistry.getInstance().getPortType(PythonEnvironmentPortObject.class, true);
 
@@ -85,7 +85,26 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
      */
     public Path getPixiEnvironmentPath() throws IOException {
         if (m_pixiEnvironmentPath != null) {
-            return m_pixiEnvironmentPath;
+            // Custom path provided - normalize it to remove .. segments
+            final Path normalizedPath = m_pixiEnvironmentPath.toAbsolutePath().normalize();
+            
+            // Check if it exists and has installed environment
+            System.out.println("Checking custom path: " + normalizedPath);
+            System.out.println("Path exists: " + Files.exists(normalizedPath));
+            
+            final Path envDir = normalizedPath.resolve(".pixi").resolve("envs").resolve("default");
+            System.out.println("Expected env dir: " + envDir);
+            System.out.println("Env dir exists: " + Files.exists(envDir));
+            
+            if (Files.exists(normalizedPath) && Files.exists(envDir)) {
+                System.out.println("Using custom environment path (exists and installed): " + normalizedPath);
+                return normalizedPath;
+            } else {
+                // Path doesn't exist or environment not installed - fall back to hash-based directory
+                System.out.println("Custom path not available (" + normalizedPath + "), falling back to hash-based directory");
+                // Don't cache this fallback path - use the hash-based one
+                return resolveProjectDirectory(m_pixiTomlContent, null);
+            }
         } else {
             return resolveProjectDirectory(m_pixiTomlContent, null);
         }
@@ -100,8 +119,13 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
      */
     public PythonCommand getPythonCommand() throws IOException {
         installPixiEnvironment();
-        final Path tomlPath = getPixiEnvironmentPath().resolve("pixi.toml");
-        System.out.println("Creating PixiPythonCommand with toml path: " + tomlPath);
+        final Path envPath = getPixiEnvironmentPath();
+        final Path tomlPath = envPath.resolve("pixi.toml");
+        System.out.println("Creating PixiPythonCommand:");
+        System.out.println("  Environment path: " + envPath);
+        System.out.println("  TOML path: " + tomlPath);
+        System.out.println("  TOML exists: " + Files.exists(tomlPath));
+        System.out.println("  TOML absolute: " + tomlPath.toAbsolutePath().normalize());
         return new PixiPythonCommand(tomlPath, "default");
     }
     

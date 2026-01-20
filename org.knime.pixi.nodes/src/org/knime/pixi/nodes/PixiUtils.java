@@ -10,6 +10,7 @@ import java.util.Map;
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
+import org.knime.pixi.port.PixiEnvMapping;
 
 /**
  * Utilities for working with Pixi environments
@@ -17,7 +18,7 @@ import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  */
 @SuppressWarnings("restriction")
-final class PixiUtils {
+public final class PixiUtils {
     private PixiUtils() {
     }
 

@@ -1,13 +1,18 @@
 package org.knime.pixi.nodes;
 
+import java.io.IOException;
 import java.nio.file.Path;
 
+import org.knime.conda.envbundling.environment.CondaEnvironment;
+import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
+import org.knime.core.node.KNIMEException;
 import org.knime.node.DefaultModel.ConfigureInput;
 import org.knime.node.DefaultModel.ConfigureOutput;
 import org.knime.node.DefaultModel.ExecuteInput;
 import org.knime.node.DefaultModel.ExecuteOutput;
 import org.knime.node.DefaultNode;
 import org.knime.node.DefaultNodeFactory;
+import org.knime.pixi.nodes.PixiTomlEnvironmentReaderNodeParameters.EnvironmentSource;
 import org.knime.pixi.port.PixiEnvironmentPortObject;
 import org.knime.pixi.port.PixiEnvironmentPortObjectSpec;
 
@@ -46,9 +51,14 @@ public final class PixiTomlEnvironmentReaderNodeFactory extends DefaultNodeFacto
                     </ul>
 
                     <h3>Usage</h3>
-                    Select a pixi.toml file from your file system. The file should be part of a valid pixi project structure.
-                    The node will use the directory containing the file as the pixi project directory and install the
-                    environment based on the manifest specification.
+                    <p>You can choose between two input methods:</p>
+                    <ul>
+                    <li><b>File:</b> Select a pixi.toml file from your file system. The file should be part of a valid pixi
+                    project structure. The node will use the directory containing the file as the pixi project directory.</li>
+                    <li><b>Bundled Environment:</b> Select a pixi environment from the bundled environments directory.
+                    This is useful for using environments that were installed as part of KNIME extensions or via the
+                    environment bundling mechanism.</li>
+                    </ul>
 
                     See the <a href="https://pixi.prefix.dev/latest/reference/pixi_manifest/">pixi manifest
                     specification</a> for complete documentation on the pixi.toml format.
@@ -74,9 +84,31 @@ public final class PixiTomlEnvironmentReaderNodeFactory extends DefaultNodeFacto
 
     private static void execute(final ExecuteInput in, final ExecuteOutput out) {
         final PixiTomlEnvironmentReaderNodeParameters params = in.getParameters();
-        final Path tomlFilePath = Path.of(params.m_tomlFile.m_path.getPath());
-
         final var execCtx = in.getExecutionContext();
+
+        final Path tomlFilePath;
+
+        // Determine the path to the pixi.toml file based on the selected source
+        if (params.m_environmentSource == EnvironmentSource.FILE) {
+            // Use the file selected by the user
+            if (params.m_tomlFile == null || params.m_tomlFile.m_path == null) {
+                throw new KNIMEException("No pixi.toml file selected").toUnchecked();
+            }
+            tomlFilePath = Path.of(params.m_tomlFile.m_path.getPath());
+        } else {
+            // Use the bundled environment
+            if (params.m_bundledEnvironment == null || params.m_bundledEnvironment.isEmpty()) {
+                throw new KNIMEException("No bundled environment selected").toUnchecked();
+            }
+            // Get the environment from the registry
+            CondaEnvironment condaEnv = CondaEnvironmentRegistry.getEnvironment(params.m_bundledEnvironment);
+            if (condaEnv == null) {
+                throw new KNIMEException(
+                    "Bundled environment '" + params.m_bundledEnvironment + "' not found").toUnchecked();
+            }
+            Path bundledEnvDir = condaEnv.getPath();
+            tomlFilePath = bundledEnvDir.resolve("pixi.toml");
+        }
 
         // Use shared executor - pass empty string for manifestText since we're using file path
         final Path environmentPath = PixiEnvironmentExecutor.executePixiInstall("", tomlFilePath, null, execCtx);

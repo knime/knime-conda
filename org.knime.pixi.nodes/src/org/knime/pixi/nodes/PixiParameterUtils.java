@@ -361,7 +361,7 @@ final class PixiParameterUtils {
             if (lockFileContent == null || lockFileContent.isBlank()) {
                 m_lastValidContent = null;
                 return Optional.of(new TextMessage.Message("Lock file status",
-                    "Lock file not stored. Click 'Check compatibility' to verify environment reproducibility.",
+                    "Lock file not stored. Click 'Lock Environment' to generate a lock file for reproducibility.",
                     MessageType.WARNING));
             }
 
@@ -418,7 +418,7 @@ final class PixiParameterUtils {
         @Override
         public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
             return Optional.of(new TextMessage.Message("Lock file status",
-                "Please click 'Check compatibility' to verify that the environment can be resolved on all platforms.",
+                "Please click 'Lock Environment' to generate the lock file for reproducibility.",
                 MessageType.WARNING));
         }
     }

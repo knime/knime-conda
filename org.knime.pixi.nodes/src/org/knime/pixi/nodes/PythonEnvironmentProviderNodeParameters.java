@@ -52,7 +52,9 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.file.Files;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +67,10 @@ import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
+import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.NodeLogger;
+import org.knime.core.node.NodeSettingsRO;
+import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.ButtonWidget;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.file.FileReaderWidget;
@@ -78,13 +84,16 @@ import org.knime.node.parameters.Widget;
 import org.knime.node.parameters.array.ArrayWidget;
 import org.knime.node.parameters.layout.After;
 import org.knime.node.parameters.layout.Layout;
+import org.knime.node.parameters.persistence.NodeParametersPersistor;
 import org.knime.node.parameters.persistence.Persist;
+import org.knime.node.parameters.persistence.Persistor;
 import org.knime.node.parameters.updates.Effect;
 import org.knime.node.parameters.updates.Effect.EffectType;
 import org.knime.node.parameters.updates.EffectPredicate;
 import org.knime.node.parameters.updates.EffectPredicateProvider;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
+import org.knime.node.parameters.updates.StateProvider.StateProviderInitializer;
 import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
 import org.knime.node.parameters.widget.choices.ChoicesProvider;
@@ -123,8 +132,18 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     static final class tomlEditorSection {
     }
 
+    @After(mainInputSelectionSection.class)
+    static final class tomlFileSection {
+    }
+
+    @After(mainInputSelectionSection.class)
+    static final class bundledEnvironmentSection {
+    }
+
     @After(simpleInputSection.class)
     @After(tomlEditorSection.class)
+    @After(tomlFileSection.class)
+    @After(bundledEnvironmentSection.class)
     static final class lockFileSection {
     }
 
@@ -133,7 +152,11 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         @Label("Packages")
         SIMPLE,
         @Label("TOML editor")
-        TOML_EDITOR
+        TOML_EDITOR,
+        @Label("TOML file")
+        TOML_FILE,
+        @Label("Bundled environment")
+        BUNDLING_ENVIRONMENT
     }
 
     @Widget(title = "Input source", description = "Choose how to define the Python environment")
@@ -152,8 +175,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @ValueReference(PackageArrayRef.class)
     @Effect(predicate = InputIsSimple.class, type = EffectType.SHOW)
     PackageSpec[] m_packages = new PackageSpec[]{
-        new PackageSpec("python", PackageSource.CONDA, "3.14"),
-        new PackageSpec("knime-python-base", PackageSource.CONDA, "5.9")
+        new PackageSpec("python", PackageSource.CONDA, "3.14", "3.14"),
+        new PackageSpec("knime-python-base", PackageSource.CONDA, "5.9", "5.9")
     };
 
     interface PackageArrayRef extends ParameterReference<PackageSpec[]> {
@@ -194,6 +217,90 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         }
     }
 
+    // TOML file input
+    @Widget(title = "pixi.toml file",
+        description = "Select the pixi.toml file to read the environment specification from.")
+    @FileSelectionWidget(value = SingleFileSelectionMode.FILE)
+    @FileReaderWidget(fileExtensions = {"toml"})
+    @Layout(tomlFileSection.class)
+    @ValueReference(TomlFileRef.class)
+    @Effect(predicate = InputIsTomlFile.class, type = EffectType.SHOW)
+    FileSelection m_tomlFile = new FileSelection();
+
+    interface TomlFileRef extends ParameterReference<FileSelection> {
+    }
+
+    interface BundledEnvironmentRef extends ParameterReference<String> {
+    }
+
+    static final class InputIsTomlFile implements EffectPredicateProvider {
+        @Override
+        public EffectPredicate init(final PredicateInitializer i) {
+            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.TOML_FILE);
+        }
+    }
+
+    // Bundled environment input
+    @Widget(title = "Bundled environment",
+        description = "Select a pixi environment from the bundled environments directory.")
+    @ChoicesProvider(BundledPixiEnvironmentChoicesProvider.class)
+    @Layout(bundledEnvironmentSection.class)
+    @Effect(predicate = InputIsBundledEnvironment.class, type = EffectType.SHOW)
+    String m_bundledEnvironment;
+
+    static final class InputIsBundledEnvironment implements EffectPredicateProvider {
+        @Override
+        public EffectPredicate init(final PredicateInitializer i) {
+            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.BUNDLING_ENVIRONMENT);
+        }
+    }
+
+    /**
+     * Provider that lists all pixi environments from the bundling folder that contain a pixi.toml file.
+     */
+    static final class BundledPixiEnvironmentChoicesProvider implements StringChoicesProvider {
+
+        private static final NodeLogger LOGGER =
+            NodeLogger.getLogger(BundledPixiEnvironmentChoicesProvider.class);
+
+        @Override
+        public List<String> choices(final NodeParametersInput context) {
+            try {
+                // Get the bundling root directory (same logic as BundlingRoot)
+                Path bundlingRoot = getBundlingRootPath();
+                System.out.println("[BundledPixiEnvironmentChoicesProvider] Scanning bundling root: " + bundlingRoot);
+
+                if (!Files.exists(bundlingRoot)) {
+                    System.out.println("[BundledPixiEnvironmentChoicesProvider] Bundling root does not exist");
+                    return List.of();
+                }
+
+                // List all subdirectories in bundling/ that contain pixi.toml
+                // Structure: bundling/<some_name>/pixi.toml
+                var environments = Files.list(bundlingRoot)
+                    .filter(Files::isDirectory)
+                    .filter(dir -> {
+                        Path tomlPath = dir.resolve("pixi.toml");
+                        boolean hasToml = Files.exists(tomlPath);
+                        System.out.println("[BundledPixiEnvironmentChoicesProvider] Checking " + dir.getFileName() + ": pixi.toml " + (hasToml ? "found" : "not found"));
+                        return hasToml;
+                    })
+                    .map(dir -> dir.getFileName().toString())
+                    .sorted()
+                    .collect(Collectors.toList());
+
+                System.out.println("[BundledPixiEnvironmentChoicesProvider] Found " + environments.size() + " environments");
+                return environments;
+
+            } catch (Exception e) {
+                LOGGER.error("Failed to list bundled pixi environments: " + e.getMessage(), e);
+                System.out.println("[BundledPixiEnvironmentChoicesProvider] Error: " + e.getMessage());
+                e.printStackTrace();
+                return List.of();
+            }
+        }
+    }
+
     // Lock file generation
     @Widget(title = "Check compatibility",
         description = "Click to check whether this environment can be constructed on all selected operating systems")
@@ -201,6 +308,13 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @ButtonWidget(actionHandler = PixiLockActionHandler.class, updateHandler = PixiLockUpdateHandler.class)
     @ValueReference(ButtonFieldRef.class)
     String m_pixiLockButton;
+
+    @Widget(title = "Update dependencies",
+        description = "Click to update all dependencies to their latest compatible versions and update the lock file")
+    @Layout(lockFileSection.class)
+    @ButtonWidget(actionHandler = PixiUpdateActionHandler.class, updateHandler = PixiUpdateUpdateHandler.class)
+    @ValueReference(ButtonFieldRef.class)
+    String m_pixiUpdateButton;
 
     interface ButtonFieldRef extends ParameterReference<String> {
     }
@@ -217,6 +331,31 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @Layout(lockFileSection.class)
     Void m_validationMessage;
 
+    // Read-only display of lock file content (advanced setting)
+    @Widget(title = "Lock file content",
+        description = "Content of the generated or loaded pixi.lock file.", advanced = true)
+    @Layout(lockFileSection.class)
+    @TextAreaWidget(rows = 10)
+    @Persistor(DoNotPersist.class)
+    @ValueProvider(LockContentDisplayProvider.class)
+    String m_lockFileDisplay = "";
+
+    static final class LockContentDisplayProvider implements StateProvider<String> {
+        private Supplier<String> m_lockContentSupplier;
+
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            initializer.computeOnValueChange(PixiLockFileRef.class);
+            m_lockContentSupplier = initializer.getValueSupplier(PixiLockFileRef.class);
+        }
+
+        @Override
+        public String computeState(final NodeParametersInput context) {
+            final String lockContent = m_lockContentSupplier.get();
+            return (lockContent != null) ? lockContent : "";
+        }
+    }
+
     // Helper methods
     String getPixiLockFileContent() {
         return m_pixiLockFileContent;
@@ -230,6 +369,33 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             case TOML_EDITOR:
                 System.out.println("Using pixi.toml from editor");
                 return m_pixiTomlContent;
+            case TOML_FILE:
+                System.out.println("Reading pixi.toml from file");
+                if (m_tomlFile == null || m_tomlFile.m_path == null) {
+                    throw new IOException("No TOML file selected");
+                }
+                Path tomlPath = Path.of(m_tomlFile.m_path.getPath());
+                if (!Files.exists(tomlPath)) {
+                    throw new IOException("TOML file does not exist: " + tomlPath);
+                }
+                return Files.readString(tomlPath);
+            case BUNDLING_ENVIRONMENT:
+                System.out.println("Reading pixi.toml from bundled environment");
+                if (m_bundledEnvironment == null || m_bundledEnvironment.isEmpty()) {
+                    throw new IOException("No bundled environment selected");
+                }
+                try {
+                    // Get the bundling root and construct path to environment directory
+                    Path bundlingRoot = getBundlingRootPath();
+                    Path bundledEnvDir = bundlingRoot.resolve(m_bundledEnvironment);
+                    Path bundledTomlPath = bundledEnvDir.resolve("pixi.toml");
+                    if (!Files.exists(bundledTomlPath)) {
+                        throw new IOException("pixi.toml not found in bundled environment: " + bundledTomlPath);
+                    }
+                    return Files.readString(bundledTomlPath);
+                } catch (Exception e) {
+                    throw new IOException("Failed to read bundled environment: " + e.getMessage(), e);
+                }
             default:
                 System.out.println("Unknown input source: " + m_mainInputSource);
                 throw new IOException("Unknown input source: " + m_mainInputSource);
@@ -251,16 +417,20 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         @Widget(title = "Source", description = "Package source (Conda or Pip)")
         PackageSource m_source = PackageSource.CONDA;
 
-        @Widget(title = "Version", description = "Package version constraint")
-        String m_version = "";
+        @Widget(title = "Min version", description = "Minimum version (inclusive, optional)")
+        String m_minVersion = "";
+
+        @Widget(title = "Max version", description = "Maximum version (exclusive, optional)")
+        String m_maxVersion = "";
 
         PackageSpec() {
         }
 
-        PackageSpec(final String name, final PackageSource source, final String version) {
+        PackageSpec(final String name, final PackageSource source, final String minVersion, final String maxVersion) {
             m_packageName = name;
             m_source = source;
-            m_version = version;
+            m_minVersion = minVersion;
+            m_maxVersion = maxVersion;
         }
     }
 
@@ -343,6 +513,12 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         @ValueReference(TomlContentRef.class)
         String m_pixiTomlContent;
 
+        @ValueReference(TomlFileRef.class)
+        FileSelection m_tomlFile;
+
+        @ValueReference(BundledEnvironmentRef.class)
+        String m_bundledEnvironment;
+
         String getTomlContent() {
             System.out.println("[TomlContentGetter] Getting TOML content for: " + m_mainInputSource);
             switch (m_mainInputSource) {
@@ -356,6 +532,46 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                     System.out.println("[TomlContentGetter] Using TOML from editor (" + m_pixiTomlContent.length() + " chars)");
                     System.out.println(m_pixiTomlContent);
                     return m_pixiTomlContent;
+                case TOML_FILE:
+                    System.out.println("[TomlContentGetter] Reading TOML from file for lock generation");
+                    try {
+                        if (m_tomlFile == null || m_tomlFile.m_path == null) {
+                            System.out.println("[TomlContentGetter] No file selected");
+                            return "";
+                        }
+                        Path tomlPath = Path.of(m_tomlFile.m_path.getPath());
+                        if (!Files.exists(tomlPath)) {
+                            System.out.println("[TomlContentGetter] File does not exist: " + tomlPath);
+                            return "";
+                        }
+                        String content = Files.readString(tomlPath);
+                        System.out.println("[TomlContentGetter] Read TOML (" + content.length() + " chars)");
+                        return content;
+                    } catch (IOException e) {
+                        System.out.println("[TomlContentGetter] Error reading file: " + e.getMessage());
+                        return "";
+                    }
+                case BUNDLING_ENVIRONMENT:
+                    System.out.println("[TomlContentGetter] Reading TOML from bundled environment");
+                    try {
+                        if (m_bundledEnvironment == null || m_bundledEnvironment.isEmpty()) {
+                            System.out.println("[TomlContentGetter] No bundled environment selected");
+                            return "";
+                        }
+                        Path bundlingRoot = getBundlingRootPath();
+                        Path bundledEnvDir = bundlingRoot.resolve(m_bundledEnvironment);
+                        Path bundledTomlPath = bundledEnvDir.resolve("pixi.toml");
+                        if (!Files.exists(bundledTomlPath)) {
+                            System.out.println("[TomlContentGetter] TOML file does not exist: " + bundledTomlPath);
+                            return "";
+                        }
+                        String content = Files.readString(bundledTomlPath);
+                        System.out.println("[TomlContentGetter] Read TOML (" + content.length() + " chars)");
+                        return content;
+                    } catch (Exception e) {
+                        System.out.println("[TomlContentGetter] Error reading bundled environment: " + e.getMessage());
+                        return "";
+                    }
                 default:
                     System.out.println("[TomlContentGetter] Unknown input source: " + m_mainInputSource);
                     return "";
@@ -364,6 +580,28 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     }
 
     static final class PixiLockUpdateHandler extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
+    }
+
+    static final class PixiUpdateActionHandler
+        extends PixiParameterUtils.AbstractPixiUpdateActionHandler<TomlContentGetter> {
+
+        public PixiUpdateActionHandler() {
+            super("[PythonEnvironmentProviderNode]");
+        }
+
+        @Override
+        protected String getManifestContent(final TomlContentGetter contentGetter) {
+            return contentGetter.getTomlContent();
+        }
+
+        @Override
+        protected String prepareManifestContent(final String content) throws Exception {
+            // Content is already TOML, no conversion needed
+            return content;
+        }
+    }
+
+    static final class PixiUpdateUpdateHandler extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
     }
 
     /**
@@ -471,38 +709,107 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         }
     }
 
-    // Helper method to build TOML from packages
+    // Helper method to build TOML from packages (using workspace structure for pixi)
     private static String buildPixiTomlFromPackages(final PackageSpec[] packages) {
-        final CommentedConfig config = CommentedConfig.inMemory();
+        Config config = Config.inMemory();
 
-        final Config projectConfig = Config.inMemory();
-        projectConfig.set("name", "myenv");
-        projectConfig.set("version", "0.1.0");
-        projectConfig.set("description", "Environment created from package list");
-        projectConfig.set("channels", List.of("knime", "conda-forge"));
-        projectConfig.set("platforms", List.of("win-64", "linux-64", "osx-64", "osx-arm64"));
-        config.set("project", projectConfig);
+        // [workspace] section (required by pixi)
+        CommentedConfig workspace = CommentedConfig.inMemory();
+        workspace.set("channels", Arrays.asList("knime", "conda-forge"));
+        workspace.set("platforms", Arrays.asList("win-64", "linux-64", "osx-64", "osx-arm64"));
+        config.set("workspace", workspace);
 
-        final Config dependencies = Config.inMemory();
-        final Config pipDeps = Config.inMemory();
-
+        // [dependencies] section for conda packages
+        CommentedConfig dependencies = CommentedConfig.inMemory();
         for (PackageSpec pkg : packages) {
-            if (pkg.m_source == PackageSource.CONDA) {
-                dependencies.set(pkg.m_packageName, pkg.m_version + ".*");
-            } else {
-                pipDeps.set(pkg.m_packageName, pkg.m_version + ".*");
+            if (pkg.m_packageName == null || pkg.m_packageName.isBlank() || pkg.m_source == PackageSource.PIP) {
+                continue;
+            }
+            dependencies.set(pkg.m_packageName, formatVersionConstraint(pkg));
+        }
+        config.set("dependencies", dependencies);
+
+        // [pypi-dependencies] section for pip packages
+        CommentedConfig pypiDependencies = CommentedConfig.inMemory();
+        boolean hasPipPackages = false;
+        for (PackageSpec pkg : packages) {
+            if (pkg.m_packageName != null && !pkg.m_packageName.isBlank() && pkg.m_source == PackageSource.PIP) {
+                pypiDependencies.set(pkg.m_packageName, formatVersionConstraint(pkg));
+                hasPipPackages = true;
             }
         }
-
-        config.set("dependencies", dependencies);
-        if (!pipDeps.isEmpty()) {
-            config.set("pypi-dependencies", pipDeps);
+        if (hasPipPackages) {
+            config.set("pypi-dependencies", pypiDependencies);
         }
 
-        final TomlWriter writer = new TomlWriter();
-        writer.setIndent(IndentStyle.SPACES_2);
-        final StringWriter stringWriter = new StringWriter();
-        writer.write(config, stringWriter);
-        return stringWriter.toString();
+        // Write to string
+        StringWriter writer = new StringWriter();
+        TomlWriter tomlWriter = new TomlWriter();
+        tomlWriter.setIndent(IndentStyle.SPACES_2);
+        tomlWriter.setWriteTableInlinePredicate(path -> false); // Never write tables inline
+        tomlWriter.write(config, writer);
+        return writer.toString();
+    }
+
+    private static String formatVersionConstraint(final PackageSpec pkg) {
+        boolean hasMin = pkg.m_minVersion != null && !pkg.m_minVersion.isBlank();
+        boolean hasMax = pkg.m_maxVersion != null && !pkg.m_maxVersion.isBlank();
+
+        if (hasMin && hasMax) {
+            return ">="+ pkg.m_minVersion + ",<=" + pkg.m_maxVersion;
+        } else if (hasMin) {
+            return ">=" + pkg.m_minVersion;
+        } else if (hasMax) {
+            return "<=" + pkg.m_maxVersion;
+        } else {
+            return "*";
+        }
+    }
+
+    /**
+     * Custom persistor that doesn't persist the field - used for computed/display-only fields.
+     */
+    static final class DoNotPersist implements NodeParametersPersistor<String> {
+        @Override
+        public String load(final NodeSettingsRO settings) throws InvalidSettingsException {
+            return null;
+        }
+
+        @Override
+        public void save(final String obj, final NodeSettingsWO settings) {
+            // Don't persist - this is a computed field
+        }
+
+        @Override
+        public String[][] getConfigPaths() {
+            return new String[0][];
+        }
+    }
+
+    /**
+     * Get the bundling root path using the same logic as BundlingRoot.
+     * Helper method used by both the choices provider and TOML reading logic.
+     */
+    static Path getBundlingRootPath() throws Exception {
+        // Check for KNIME_PYTHON_BUNDLING_PATH environment variable
+        var bundlingPathFromVar = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
+        if (bundlingPathFromVar != null && !bundlingPathFromVar.isBlank()) {
+            return Path.of(bundlingPathFromVar);
+        }
+
+        // Otherwise use installation_root/bundling
+        Path installationRoot = getInstallationRoot();
+        return installationRoot.resolve("bundling");
+    }
+
+    /**
+     * Get the KNIME installation root directory.
+     * Helper method used by getBundlingRootPath().
+     */
+    private static Path getInstallationRoot() throws Exception {
+        var bundle = org.eclipse.core.runtime.Platform.getBundle("org.knime.pixi.nodes");
+        String bundleLocationString = org.eclipse.core.runtime.FileLocator.getBundleFileLocation(bundle).orElseThrow().getAbsolutePath();
+        Path bundleLocationPath = Path.of(bundleLocationString);
+        return bundleLocationPath.getParent().getParent();
     }
 }

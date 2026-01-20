@@ -116,7 +116,8 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
             switch (params.m_mainInputSource) {
                 case SIMPLE:
                 case TOML_EDITOR:
-                    // For generated/edited TOML, get lock file (may be empty - that's ok)
+                case YAML_EDITOR:
+                    // For generated/edited TOML/YAML, get lock file (may be empty - that's ok)
                     final String pixiLockContent = params.getPixiLockFileContent();
                     final String lockToUse = (pixiLockContent != null) ? pixiLockContent : "";
                     if (lockToUse.isBlank()) {

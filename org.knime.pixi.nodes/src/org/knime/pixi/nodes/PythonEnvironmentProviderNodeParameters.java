@@ -140,10 +140,15 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     static final class bundledEnvironmentSection {
     }
 
+    @After(mainInputSelectionSection.class)
+    static final class yamlEditorSection {
+    }
+
     @After(simpleInputSection.class)
     @After(tomlEditorSection.class)
     @After(tomlFileSection.class)
     @After(bundledEnvironmentSection.class)
+    @After(yamlEditorSection.class)
     static final class lockFileSection {
     }
 
@@ -155,6 +160,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         TOML_EDITOR,
         @Label("TOML file")
         TOML_FILE,
+        @Label("YAML editor")
+        YAML_EDITOR,
         @Label("Bundled environment")
         BUNDLING_ENVIRONMENT
     }
@@ -247,6 +254,36 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @Layout(bundledEnvironmentSection.class)
     @Effect(predicate = InputIsBundledEnvironment.class, type = EffectType.SHOW)
     String m_bundledEnvironment;
+
+    // YAML editor input
+    @Widget(title = "Environment specification (conda environment.yaml)", description = """
+            Content of the conda environment.yaml file that describes the environment.
+            This will be imported into pixi using `pixi init --import` and converted to a pixi.toml manifest.
+            The environment will automatically be configured to work on all major platforms (win-64, linux-64, osx-64, osx-arm64).
+            """)
+    @Layout(yamlEditorSection.class)
+    @TextAreaWidget(rows = 20)
+    @ValueReference(YamlContentRef.class)
+    @Effect(predicate = InputIsYaml.class, type = EffectType.SHOW)
+    String m_envYamlContent = """
+            name: myenv
+            channels:
+              - knime
+              - conda-forge
+            dependencies:
+              - python=3.14.*
+              - knime-python-base=5.9.*
+            """;
+
+    interface YamlContentRef extends ParameterReference<String> {
+    }
+
+    static final class InputIsYaml implements EffectPredicateProvider {
+        @Override
+        public EffectPredicate init(final PredicateInitializer i) {
+            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.YAML_EDITOR);
+        }
+    }
 
     static final class InputIsBundledEnvironment implements EffectPredicateProvider {
         @Override
@@ -379,6 +416,9 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                     throw new IOException("TOML file does not exist: " + tomlPath);
                 }
                 return Files.readString(tomlPath);
+            case YAML_EDITOR:
+                System.out.println("Converting YAML from editor to TOML");
+                return PixiYamlImporter.convertYamlToToml(m_envYamlContent);
             case BUNDLING_ENVIRONMENT:
                 System.out.println("Reading pixi.toml from bundled environment");
                 if (m_bundledEnvironment == null || m_bundledEnvironment.isEmpty()) {
@@ -516,6 +556,9 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         @ValueReference(TomlFileRef.class)
         FileSelection m_tomlFile;
 
+        @ValueReference(YamlContentRef.class)
+        String m_envYamlContent;
+
         @ValueReference(BundledEnvironmentRef.class)
         String m_bundledEnvironment;
 
@@ -549,6 +592,16 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                         return content;
                     } catch (IOException e) {
                         System.out.println("[TomlContentGetter] Error reading file: " + e.getMessage());
+                        return "";
+                    }
+                case YAML_EDITOR:
+                    System.out.println("[TomlContentGetter] Converting YAML from editor to TOML");
+                    try {
+                        String toml = PixiYamlImporter.convertYamlToToml(m_envYamlContent);
+                        System.out.println("[TomlContentGetter] Converted TOML (" + toml.length() + " chars)");
+                        return toml;
+                    } catch (Exception e) {
+                        System.out.println("[TomlContentGetter] Error converting YAML: " + e.getMessage());
                         return "";
                     }
                 case BUNDLING_ENVIRONMENT:
@@ -612,11 +665,13 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         private Supplier<MainInputSource> m_inputSourceSupplier;
         private Supplier<PackageSpec[]> m_packagesSupplier;
         private Supplier<String> m_tomlContentSupplier;
+        private Supplier<String> m_yamlContentSupplier;
         private Supplier<String> m_buttonFieldSupplier;
 
         private MainInputSource m_lastInputSource;
         private PackageSpec[] m_lastPackages;
         private String m_lastTomlContent;
+        private String m_lastYamlContent;
 
         @Override
         public void init(final StateProviderInitializer initializer) {
@@ -624,11 +679,13 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             initializer.computeOnValueChange(MainInputSourceRef.class);
             initializer.computeOnValueChange(PackageArrayRef.class);
             initializer.computeOnValueChange(TomlContentRef.class);
+            initializer.computeOnValueChange(YamlContentRef.class);
             initializer.computeOnValueChange(ButtonFieldRef.class);
 
             m_inputSourceSupplier = initializer.getValueSupplier(MainInputSourceRef.class);
             m_packagesSupplier = initializer.getValueSupplier(PackageArrayRef.class);
             m_tomlContentSupplier = initializer.getValueSupplier(TomlContentRef.class);
+            m_yamlContentSupplier = initializer.getValueSupplier(YamlContentRef.class);
             m_buttonFieldSupplier = initializer.getValueSupplier(ButtonFieldRef.class);
         }
 
@@ -637,6 +694,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             final MainInputSource currentInputSource = m_inputSourceSupplier.get();
             final PackageSpec[] currentPackages = m_packagesSupplier.get();
             final String currentTomlContent = m_tomlContentSupplier.get();
+            final String currentYamlContent = m_yamlContentSupplier.get();
             final String buttonValue = m_buttonFieldSupplier.get();
 
             System.out.println("[ResetLockFileProvider] Computing state for: " + currentInputSource);
@@ -662,10 +720,17 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                 contentChanged = true;
             }
 
+            if (currentInputSource == MainInputSource.YAML_EDITOR &&
+                m_lastYamlContent != null && !m_lastYamlContent.equals(currentYamlContent)) {
+                System.out.println("[ResetLockFileProvider] YAML content changed");
+                contentChanged = true;
+            }
+
             // Update last values
             m_lastInputSource = currentInputSource;
             m_lastPackages = currentPackages;
             m_lastTomlContent = currentTomlContent;
+            m_lastYamlContent = currentYamlContent;
 
             // If content changed, reset lock file; otherwise return button value
             if (contentChanged) {

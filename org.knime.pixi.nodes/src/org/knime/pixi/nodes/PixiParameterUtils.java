@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 import org.knime.conda.envinstall.pixi.PixiBinary;
+import org.knime.core.node.NodeLogger;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
 import org.knime.core.webui.node.dialog.defaultdialog.widget.handler.WidgetHandlerException;
 import org.knime.node.parameters.NodeParametersInput;
@@ -16,6 +17,7 @@ import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
+import org.knime.pixi.port.PixiUtils;
 
 /**
  * Utility class for reducing code duplication in Pixi parameter classes.
@@ -25,6 +27,8 @@ import org.knime.node.parameters.widget.message.TextMessage.MessageType;
  */
 @SuppressWarnings("restriction")
 final class PixiParameterUtils {
+
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(PixiParameterUtils.class);
 
     private PixiParameterUtils() {
         // Utility class
@@ -67,7 +71,7 @@ final class PixiParameterUtils {
         @Override
         protected String invoke(final ContentGetter settings, final NodeParametersInput context)
             throws WidgetHandlerException {
-            System.out.println(m_logPrefix + " Button clicked - running pixi lock...");
+            LOGGER.debug(m_logPrefix + " Button clicked - running pixi lock...");
 
             try {
                 final String rawContent = getManifestContent(settings);
@@ -87,7 +91,7 @@ final class PixiParameterUtils {
 
                 if (callResult.returnCode() != 0) {
                     String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
-                    System.out.println(m_logPrefix + " Pixi lock failed");
+                    LOGGER.warn(m_logPrefix + " Pixi lock failed: " + errorDetails);
                     throw new WidgetHandlerException("Pixi lock failed:\n" + errorDetails);
                 }
 
@@ -95,7 +99,7 @@ final class PixiParameterUtils {
                 final Path lockFilePath = projectDir.resolve("pixi.lock");
                 if (Files.exists(lockFilePath)) {
                     final String lockContent = Files.readString(lockFilePath);
-                    System.out.println(m_logPrefix + " Lock file generated (" + lockContent.length() + " bytes)");
+                    LOGGER.debug(m_logPrefix + " Lock file generated (" + lockContent.length() + " bytes)");
                     return lockContent;
                 } else {
                     throw new WidgetHandlerException("Lock file was not generated at: " + lockFilePath);
@@ -103,7 +107,7 @@ final class PixiParameterUtils {
             } catch (WidgetHandlerException e) {
                 throw e;
             } catch (Exception ex) {
-                System.out.println(m_logPrefix + " Failed to generate lock file: " + ex.getMessage());
+                LOGGER.error(m_logPrefix + " Failed to generate lock file: " + ex.getMessage(), ex);
                 throw new WidgetHandlerException("Failed to generate lock file: " + ex.getMessage());
             }
         }
@@ -160,7 +164,7 @@ final class PixiParameterUtils {
         @Override
         protected String invoke(final ContentGetter settings, final NodeParametersInput context)
             throws WidgetHandlerException {
-            System.out.println(m_logPrefix + " Button clicked - running pixi update...");
+            LOGGER.debug(m_logPrefix + " Button clicked - running pixi update...");
 
             try {
                 final String rawContent = getManifestContent(settings);
@@ -180,7 +184,7 @@ final class PixiParameterUtils {
 
                 if (callResult.returnCode() != 0) {
                     String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
-                    System.out.println(m_logPrefix + " Pixi update failed");
+                    LOGGER.warn(m_logPrefix + " Pixi update failed: " + errorDetails);
                     throw new WidgetHandlerException("Pixi update failed:\n" + errorDetails);
                 }
 
@@ -188,7 +192,7 @@ final class PixiParameterUtils {
                 final Path lockFilePath = projectDir.resolve("pixi.lock");
                 if (Files.exists(lockFilePath)) {
                     final String lockContent = Files.readString(lockFilePath);
-                    System.out.println(m_logPrefix + " Lock file updated (" + lockContent.length() + " bytes)");
+                    LOGGER.debug(m_logPrefix + " Lock file updated (" + lockContent.length() + " bytes)");
                     return lockContent;
                 } else {
                     throw new WidgetHandlerException("Lock file was not found after update at: " + lockFilePath);
@@ -196,7 +200,7 @@ final class PixiParameterUtils {
             } catch (WidgetHandlerException e) {
                 throw e;
             } catch (Exception ex) {
-                System.out.println(m_logPrefix + " Failed to update environment: " + ex.getMessage());
+                LOGGER.error(m_logPrefix + " Failed to update environment: " + ex.getMessage(), ex);
                 throw new WidgetHandlerException("Failed to update environment: " + ex.getMessage());
             }
         }

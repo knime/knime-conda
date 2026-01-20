@@ -103,6 +103,8 @@ import org.knime.node.parameters.widget.choices.ValueSwitchWidget;
 import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
+import org.knime.pixi.nodes.PixiYamlImporter;
+import org.knime.pixi.port.PixiUtils;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.Config;
@@ -119,6 +121,8 @@ import com.electronwill.nightconfig.toml.TomlWriter;
  */
 @SuppressWarnings("restriction")
 public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
+
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(PythonEnvironmentProviderNodeParameters.class);
 
     // Layout sections
     static final class mainInputSelectionSection {
@@ -305,10 +309,10 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             try {
                 // Get the bundling root directory (same logic as BundlingRoot)
                 Path bundlingRoot = getBundlingRootPath();
-                System.out.println("[BundledPixiEnvironmentChoicesProvider] Scanning bundling root: " + bundlingRoot);
+                LOGGER.debug("Scanning bundling root: " + bundlingRoot);
 
                 if (!Files.exists(bundlingRoot)) {
-                    System.out.println("[BundledPixiEnvironmentChoicesProvider] Bundling root does not exist");
+                    LOGGER.debug("Bundling root does not exist");
                     return List.of();
                 }
 
@@ -319,20 +323,18 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                     .filter(dir -> {
                         Path tomlPath = dir.resolve("pixi.toml");
                         boolean hasToml = Files.exists(tomlPath);
-                        System.out.println("[BundledPixiEnvironmentChoicesProvider] Checking " + dir.getFileName() + ": pixi.toml " + (hasToml ? "found" : "not found"));
+                        LOGGER.debug("Checking " + dir.getFileName() + ": pixi.toml " + (hasToml ? "found" : "not found"));
                         return hasToml;
                     })
                     .map(dir -> dir.getFileName().toString())
                     .sorted()
                     .collect(Collectors.toList());
 
-                System.out.println("[BundledPixiEnvironmentChoicesProvider] Found " + environments.size() + " environments");
+                LOGGER.debug("Found " + environments.size() + " environments");
                 return environments;
 
             } catch (Exception e) {
                 LOGGER.error("Failed to list bundled pixi environments: " + e.getMessage(), e);
-                System.out.println("[BundledPixiEnvironmentChoicesProvider] Error: " + e.getMessage());
-                e.printStackTrace();
                 return List.of();
             }
         }
@@ -401,13 +403,13 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     String getPixiTomlFileContent() throws IOException {
         switch (m_mainInputSource) {
             case SIMPLE:
-                System.out.println("Building pixi.toml from packages");
+                LOGGER.debug("Building pixi.toml from packages");
                 return buildPixiTomlFromPackages(m_packages);
             case TOML_EDITOR:
-                System.out.println("Using pixi.toml from editor");
+                LOGGER.debug("Using pixi.toml from editor");
                 return m_pixiTomlContent;
             case TOML_FILE:
-                System.out.println("Reading pixi.toml from file");
+                LOGGER.debug("Reading pixi.toml from file");
                 if (m_tomlFile == null || m_tomlFile.m_path == null) {
                     throw new IOException("No TOML file selected");
                 }
@@ -417,10 +419,10 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                 }
                 return Files.readString(tomlPath);
             case YAML_EDITOR:
-                System.out.println("Converting YAML from editor to TOML");
+                LOGGER.debug("Converting YAML from editor to TOML");
                 return PixiYamlImporter.convertYamlToToml(m_envYamlContent);
             case BUNDLING_ENVIRONMENT:
-                System.out.println("Reading pixi.toml from bundled environment");
+                LOGGER.debug("Reading pixi.toml from bundled environment");
                 if (m_bundledEnvironment == null || m_bundledEnvironment.isEmpty()) {
                     throw new IOException("No bundled environment selected");
                 }
@@ -437,7 +439,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                     throw new IOException("Failed to read bundled environment: " + e.getMessage(), e);
                 }
             default:
-                System.out.println("Unknown input source: " + m_mainInputSource);
+                LOGGER.error("Unknown input source: " + m_mainInputSource);
                 throw new IOException("Unknown input source: " + m_mainInputSource);
         }
     }
@@ -477,11 +479,13 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     // Button action handler for lock file generation
     static final class PixiLockActionHandler extends CancelableActionHandler<String, TomlContentGetter> {
 
+        private static final NodeLogger LOGGER = NodeLogger.getLogger(PixiLockActionHandler.class);
+
         @Override
         protected String invoke(final TomlContentGetter deps, final NodeParametersInput context)
             throws WidgetHandlerException {
             final String tomlContent = deps.getTomlContent();
-            System.out.println("[PixiLockActionHandler] Button clicked - running pixi lock...");
+            LOGGER.debug("Button clicked - running pixi lock...");
             if (tomlContent == null || tomlContent.isBlank()) {
                 throw new WidgetHandlerException("No manifest content provided");
             }
@@ -494,12 +498,12 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                 final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());
                 final String[] pixiArgs = {"--color", "never", "--no-progress", "lock"};
 
-                System.out.println("[PixiLockActionHandler] Running pixi lock in: " + projectDir);
+                LOGGER.debug("Running pixi lock in: " + projectDir);
                 final CallResult callResult = PixiBinary.callPixi(projectDir, extraEnv, pixiArgs);
 
                 if (callResult.returnCode() != 0) {
                     String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
-                    System.out.println("[PixiLockActionHandler] Pixi lock failed");
+                    LOGGER.warn("Pixi lock failed: " + errorDetails);
                     throw new WidgetHandlerException("Pixi lock failed:\n" + errorDetails);
                 }
 
@@ -507,7 +511,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                 final Path lockFilePath = projectDir.resolve("pixi.lock");
                 if (Files.exists(lockFilePath)) {
                     final String lockContent = Files.readString(lockFilePath);
-                    System.out.println("[PixiLockActionHandler] Lock file generated (" + lockContent.length() + " bytes)");
+                    LOGGER.debug("Lock file generated (" + lockContent.length() + " bytes)");
                     return lockContent;
                 } else {
                     throw new WidgetHandlerException("Lock file was not generated at: " + lockFilePath);
@@ -544,6 +548,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     }
 
     static final class TomlContentGetter {
+        private static final NodeLogger LOGGER = NodeLogger.getLogger(TomlContentGetter.class);
+
         @ValueReference(MainInputSourceRef.class)
         MainInputSource m_mainInputSource;
 
@@ -563,70 +569,68 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         String m_bundledEnvironment;
 
         String getTomlContent() {
-            System.out.println("[TomlContentGetter] Getting TOML content for: " + m_mainInputSource);
+            LOGGER.debug("Getting TOML content for: " + m_mainInputSource);
             switch (m_mainInputSource) {
                 case SIMPLE:
-                    System.out.println("[TomlContentGetter] Building TOML from " + m_packages.length + " packages");
+                    LOGGER.debug("Building TOML from " + m_packages.length + " packages");
                     String result = buildPixiTomlFromPackages(m_packages);
-                    System.out.println("[TomlContentGetter] Generated TOML (" + result.length() + " chars):");
-                    System.out.println(result);
+                    LOGGER.debug("Generated TOML (" + result.length() + " chars)");
                     return result;
                 case TOML_EDITOR:
-                    System.out.println("[TomlContentGetter] Using TOML from editor (" + m_pixiTomlContent.length() + " chars)");
-                    System.out.println(m_pixiTomlContent);
+                    LOGGER.debug("Using TOML from editor (" + m_pixiTomlContent.length() + " chars)");
                     return m_pixiTomlContent;
                 case TOML_FILE:
-                    System.out.println("[TomlContentGetter] Reading TOML from file for lock generation");
+                    LOGGER.debug("Reading TOML from file for lock generation");
                     try {
                         if (m_tomlFile == null || m_tomlFile.m_path == null) {
-                            System.out.println("[TomlContentGetter] No file selected");
+                            LOGGER.debug("No file selected");
                             return "";
                         }
                         Path tomlPath = Path.of(m_tomlFile.m_path.getPath());
                         if (!Files.exists(tomlPath)) {
-                            System.out.println("[TomlContentGetter] File does not exist: " + tomlPath);
+                            LOGGER.debug("File does not exist: " + tomlPath);
                             return "";
                         }
                         String content = Files.readString(tomlPath);
-                        System.out.println("[TomlContentGetter] Read TOML (" + content.length() + " chars)");
+                        LOGGER.debug("Read TOML (" + content.length() + " chars)");
                         return content;
                     } catch (IOException e) {
-                        System.out.println("[TomlContentGetter] Error reading file: " + e.getMessage());
+                        LOGGER.warn("Error reading file: " + e.getMessage());
                         return "";
                     }
                 case YAML_EDITOR:
-                    System.out.println("[TomlContentGetter] Converting YAML from editor to TOML");
+                    LOGGER.debug("Converting YAML from editor to TOML");
                     try {
                         String toml = PixiYamlImporter.convertYamlToToml(m_envYamlContent);
-                        System.out.println("[TomlContentGetter] Converted TOML (" + toml.length() + " chars)");
+                        LOGGER.debug("Converted TOML (" + toml.length() + " chars)");
                         return toml;
                     } catch (Exception e) {
-                        System.out.println("[TomlContentGetter] Error converting YAML: " + e.getMessage());
+                        LOGGER.warn("Error converting YAML: " + e.getMessage());
                         return "";
                     }
                 case BUNDLING_ENVIRONMENT:
-                    System.out.println("[TomlContentGetter] Reading TOML from bundled environment");
+                    LOGGER.debug("Reading TOML from bundled environment");
                     try {
                         if (m_bundledEnvironment == null || m_bundledEnvironment.isEmpty()) {
-                            System.out.println("[TomlContentGetter] No bundled environment selected");
+                            LOGGER.debug("No bundled environment selected");
                             return "";
                         }
                         Path bundlingRoot = getBundlingRootPath();
                         Path bundledEnvDir = bundlingRoot.resolve(m_bundledEnvironment);
                         Path bundledTomlPath = bundledEnvDir.resolve("pixi.toml");
                         if (!Files.exists(bundledTomlPath)) {
-                            System.out.println("[TomlContentGetter] TOML file does not exist: " + bundledTomlPath);
+                            LOGGER.debug("TOML file does not exist: " + bundledTomlPath);
                             return "";
                         }
                         String content = Files.readString(bundledTomlPath);
-                        System.out.println("[TomlContentGetter] Read TOML (" + content.length() + " chars)");
+                        LOGGER.debug("Read TOML (" + content.length() + " chars)");
                         return content;
                     } catch (Exception e) {
-                        System.out.println("[TomlContentGetter] Error reading bundled environment: " + e.getMessage());
+                        LOGGER.warn("Error reading bundled environment: " + e.getMessage());
                         return "";
                     }
                 default:
-                    System.out.println("[TomlContentGetter] Unknown input source: " + m_mainInputSource);
+                    LOGGER.error("Unknown input source: " + m_mainInputSource);
                     return "";
             }
         }
@@ -662,6 +666,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
      */
     static final class ResetLockFileProvider implements StateProvider<String> {
 
+        private static final NodeLogger LOGGER = NodeLogger.getLogger(ResetLockFileProvider.class);
+
         private Supplier<MainInputSource> m_inputSourceSupplier;
         private Supplier<PackageSpec[]> m_packagesSupplier;
         private Supplier<String> m_tomlContentSupplier;
@@ -675,7 +681,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
         @Override
         public void init(final StateProviderInitializer initializer) {
-            System.out.println("[ResetLockFileProvider] Initializing...");
+            LOGGER.debug("Initializing...");
             initializer.computeOnValueChange(MainInputSourceRef.class);
             initializer.computeOnValueChange(PackageArrayRef.class);
             initializer.computeOnValueChange(TomlContentRef.class);
@@ -697,32 +703,32 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             final String currentYamlContent = m_yamlContentSupplier.get();
             final String buttonValue = m_buttonFieldSupplier.get();
 
-            System.out.println("[ResetLockFileProvider] Computing state for: " + currentInputSource);
-            System.out.println("[ResetLockFileProvider] Button value: " + (buttonValue != null ? buttonValue.length() + " chars" : "null"));
+            LOGGER.debug("Computing state for: " + currentInputSource);
+            LOGGER.debug("Button value: " + (buttonValue != null ? buttonValue.length() + " chars" : "null"));
 
             // Check if any relevant content changed
             boolean contentChanged = false;
 
             if (m_lastInputSource != null && currentInputSource != m_lastInputSource) {
-                System.out.println("[ResetLockFileProvider] Input source changed: " + m_lastInputSource + " -> " + currentInputSource);
+                LOGGER.debug("Input source changed: " + m_lastInputSource + " -> " + currentInputSource);
                 contentChanged = true;
             }
 
             if (currentInputSource == MainInputSource.SIMPLE &&
                 m_lastPackages != null && !java.util.Arrays.equals(m_lastPackages, currentPackages)) {
-                System.out.println("[ResetLockFileProvider] Packages changed");
+                LOGGER.debug("Packages changed");
                 contentChanged = true;
             }
 
             if (currentInputSource == MainInputSource.TOML_EDITOR &&
                 m_lastTomlContent != null && !m_lastTomlContent.equals(currentTomlContent)) {
-                System.out.println("[ResetLockFileProvider] TOML content changed");
+                LOGGER.debug("TOML content changed");
                 contentChanged = true;
             }
 
             if (currentInputSource == MainInputSource.YAML_EDITOR &&
                 m_lastYamlContent != null && !m_lastYamlContent.equals(currentYamlContent)) {
-                System.out.println("[ResetLockFileProvider] YAML content changed");
+                LOGGER.debug("YAML content changed");
                 contentChanged = true;
             }
 
@@ -734,16 +740,18 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
             // If content changed, reset lock file; otherwise return button value
             if (contentChanged) {
-                System.out.println("[ResetLockFileProvider] Content changed - resetting lock file");
+                LOGGER.debug("Content changed - resetting lock file");
                 return "";
             }
-            System.out.println("[ResetLockFileProvider] Content unchanged - keeping lock file");
+            LOGGER.debug("Content unchanged - keeping lock file");
             return buttonValue != null ? buttonValue : "";
         }
     }
 
     // Validation message provider
     static final class ValidationMessageProvider implements StateProvider<Optional<TextMessage.Message>> {
+
+        private static final NodeLogger LOGGER = NodeLogger.getLogger(ValidationMessageProvider.class);
 
         private Supplier<String> m_lockContentSupplier;
 
@@ -756,17 +764,17 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         @Override
         public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
             final String lockContent = m_lockContentSupplier.get();
-            System.out.println("[ValidationMessageProvider] Lock file content: " + 
+            LOGGER.debug("Lock file content: " + 
                 (lockContent == null ? "null" : lockContent.length() + " chars"));
 
             if (lockContent == null || lockContent.isBlank()) {
-                System.out.println("[ValidationMessageProvider] No lock file - showing info message");
+                LOGGER.debug("No lock file - showing info message");
                 return Optional.of(new TextMessage.Message("Lock file status",
                     "No lock file generated yet. Click 'Check compatibility' to validate the environment.",
                     MessageType.INFO));
             }
 
-            System.out.println("[ValidationMessageProvider] Lock file present - showing success message");
+            LOGGER.debug("Lock file present - showing success message");
             // If lock file exists and is not empty, it's valid
             return Optional.of(new TextMessage.Message("Environment validated",
                 "Environment validated successfully. Lock file generated.",

@@ -53,6 +53,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
+import org.knime.core.node.NodeLogger;
 import org.knime.node.DefaultModel.ConfigureInput;
 import org.knime.node.DefaultModel.ConfigureOutput;
 import org.knime.node.DefaultModel.ExecuteInput;
@@ -68,6 +69,8 @@ import org.knime.pixi.port.PythonEnvironmentPortObjectSpec;
  * @since 5.10
  */
 public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFactory {
+
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(PythonEnvironmentProviderNodeFactory.class);
 
     /**
      * Constructor
@@ -121,7 +124,7 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                     final String pixiLockContent = params.getPixiLockFileContent();
                     final String lockToUse = (pixiLockContent != null) ? pixiLockContent : "";
                     if (lockToUse.isBlank()) {
-                        System.out.println("No lock file - proceeding without lock (may fail on installation)");
+                        LOGGER.debug("No lock file - proceeding without lock (may fail on installation)");
                     }
                     portObject = new PythonEnvironmentPortObject(pixiTomlContent, lockToUse);
                     break;
@@ -156,7 +159,7 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                             if (!Files.exists(bundledTomlPath)) {
                                 throw new IllegalStateException("pixi.toml not found in bundled environment: " + bundledTomlPath);
                             }
-                            System.out.println("Using bundled environment at: " + projectDir);
+                            LOGGER.debug("Using bundled environment at: " + projectDir);
                         } catch (Exception e) {
                             throw new IllegalStateException("Failed to access bundled environment: " + e.getMessage(), e);
                         }
@@ -170,10 +173,10 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                         final Path lockPath = projectDir.resolve("pixi.lock");
                         if (Files.exists(lockPath)) {
                             lockContent = Files.readString(lockPath);
-                            System.out.println("Read existing lock file from disk (" + lockContent.length() + " bytes)");
+                            LOGGER.debug("Read existing lock file from disk (" + lockContent.length() + " bytes)");
                         } else {
                             lockContent = "";
-                            System.out.println("No lock file found at " + lockPath);
+                            LOGGER.debug("No lock file found at " + lockPath);
                         }
                     }
                     

@@ -62,6 +62,9 @@ import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * @author Marcel Wiedenmann, KNIME GmbH, Konstanz, Germany
  */
@@ -83,10 +86,33 @@ final class CondaPackagesConfig {
 
     private List<CondaPackageSpec> m_excluded = Collections.emptyList();
 
+    /**
+     * Default constructor for Jackson deserialization.
+     */
+    public CondaPackagesConfig() {
+        // Default constructor
+    }
+
+    /**
+     * Constructor for Jackson deserialization with parameters.
+     *
+     * @param included The included packages
+     * @param excluded The excluded packages
+     */
+    @JsonCreator
+    public CondaPackagesConfig(
+            @JsonProperty("included") final List<CondaPackageSpec> included,
+            @JsonProperty("excluded") final List<CondaPackageSpec> excluded) {
+        m_included = included != null ? new ArrayList<>(included) : Collections.emptyList();
+        m_excluded = excluded != null ? new ArrayList<>(excluded) : Collections.emptyList();
+    }
+
+    @JsonProperty("included")
     public List<CondaPackageSpec> getIncludedPackages() {
         return Collections.unmodifiableList(m_included);
     }
 
+    @JsonProperty("excluded")
     public List<CondaPackageSpec> getExcludedPackages() {
         return Collections.unmodifiableList(m_excluded);
     }

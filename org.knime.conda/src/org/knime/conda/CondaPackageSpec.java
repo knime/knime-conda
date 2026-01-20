@@ -50,6 +50,9 @@ package org.knime.conda;
 
 import java.util.Objects;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Describes a package inside a Conda environment.
  *
@@ -73,7 +76,12 @@ public final class CondaPackageSpec {
      * @param build The build spec of the package.
      * @param channel The source channel from which the package was retrieved.
      */
-    public CondaPackageSpec(final String name, final String version, final String build, final String channel) {
+    @JsonCreator
+    public CondaPackageSpec(
+            @JsonProperty("name") final String name,
+            @JsonProperty("version") final String version,
+            @JsonProperty("build") final String build,
+            @JsonProperty("channel") final String channel) {
         m_name = name;
         m_version = version;
         m_build = build;
@@ -83,6 +91,7 @@ public final class CondaPackageSpec {
     /**
      * @return The name of the package.
      */
+    @JsonProperty("name")
     public String getName() {
         return m_name;
     }
@@ -90,6 +99,7 @@ public final class CondaPackageSpec {
     /**
      * @return The version of the package.
      */
+    @JsonProperty("version")
     public String getVersion() {
         return m_version;
     }
@@ -97,6 +107,7 @@ public final class CondaPackageSpec {
     /**
      * @return The build string of the package.
      */
+    @JsonProperty("build")
     public String getBuild() {
         return m_build;
     }
@@ -104,6 +115,7 @@ public final class CondaPackageSpec {
     /**
      * @return The channel from which the package was retrieved.
      */
+    @JsonProperty("channel")
     public String getChannel() {
         return m_channel;
     }

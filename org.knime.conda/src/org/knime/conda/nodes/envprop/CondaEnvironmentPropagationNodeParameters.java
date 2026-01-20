@@ -103,7 +103,7 @@ final class CondaEnvironmentPropagationNodeParameters implements NodeParameters 
     @TextAreaWidget(rows = 15)
     @Effect(predicate = AlwaysTrue.class, type = EffectType.DISABLE)
     @ValueProvider(PixiTomlDisplayProvider.class)
-    @Persistor(DoNotPersist.class)
+    @Persistor(PixiTomlPersistor.class)
     String m_pixiTomlDisplay = "";
 
     @Widget(title = "Environment validation", //
@@ -263,15 +263,17 @@ final class CondaEnvironmentPropagationNodeParameters implements NodeParameters 
     /**
      * Custom persistor that doesn't load or save anything, for the TOML that is computed from other values.
      */
-    static final class DoNotPersist implements NodeParametersPersistor<String> {
+    static final class PixiTomlPersistor implements NodeParametersPersistor<String> {
+        private static final String CFG_KEY = "generated_pixi_toml";
+
         @Override
         public String load(final NodeSettingsRO settings) throws InvalidSettingsException {
-            return null;
+            return settings.getString(CFG_KEY, null);
         }
 
         @Override
         public void save(final String obj, final NodeSettingsWO settings) {
-            // Don't persist - this is a computed field
+            settings.addString(CFG_KEY, obj);
         }
 
         @Override

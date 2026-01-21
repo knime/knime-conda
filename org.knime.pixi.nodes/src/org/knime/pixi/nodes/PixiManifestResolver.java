@@ -70,8 +70,8 @@ final class PixiManifestResolver {
     }
 
     /**
-     * Retrieves TOML manifest content from various input sources.
-     * Throws exceptions for all error cases to provide clear error messages.
+     * Retrieves TOML manifest content from various input sources. Throws exceptions for all error cases to provide
+     * clear error messages.
      *
      * @param inputSource the type of input source
      * @param packages package specifications (for SIMPLE mode)
@@ -83,14 +83,9 @@ final class PixiManifestResolver {
      * @return the pixi.toml content as a string
      * @throws IOException if content cannot be retrieved
      */
-    public static String getTomlContent(
-            final MainInputSource inputSource,
-            final PackageSpec[] packages,
-            final String tomlContent,
-            final FileSelection tomlFile,
-            final String yamlContent,
-            final String bundledEnvironment,
-            final NodeLogger logger) throws IOException {
+    public static String getTomlContent(final MainInputSource inputSource, final PackageSpec[] packages,
+        final String tomlContent, final FileSelection tomlFile, final String yamlContent,
+        final String bundledEnvironment, final NodeLogger logger) throws IOException {
         logger.debug("Getting TOML content for: " + inputSource);
         switch (inputSource) {
             case SIMPLE:

@@ -15,7 +15,8 @@
          point="org.knime.workbench.repository.nodes">
             <node
                   category-path="/scripting/pixi"
-                  factory-class="org.knime.pixi.nodes.PythonEnvironmentProviderNodeFactory">
+                  factory-class="org.knime.pixi.nodes.PythonEnvironmentProviderNodeFactory"
+                  hidden="true">
             </node>
    </extension>
 </plugin>

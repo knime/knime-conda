@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -46,6 +47,14 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	private static final String CFG_PIXI_TOML_CONTENT = "pixi_toml_content";
 	private static final String CFG_PIXI_LOCK_CONTENT = "pixi_lock_content";
 
+	/**
+	 * Global map of installation futures keyed by installation directory path. This
+	 * ensures that concurrent installations to the same directory are serialized,
+	 * as Pixi does not support multiple concurrent installations to the same
+	 * location.
+	 */
+	private static final ConcurrentHashMap<Path, CompletableFuture<Void>> GLOBAL_INSTALL_FUTURES = new ConcurrentHashMap<>();
+
 	private String m_pixiTomlContent;
 
 	private String m_pixiLockContent;
@@ -53,10 +62,11 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	private Path m_pixiEnvironmentPath;
 
 	/**
-	 * Future tracking the installation operation. This ensures thread-safe, single
-	 * installation even when multiple threads call installPixiEnvironment()
-	 * concurrently. - null: Installation not started - non-null: Installation in
-	 * progress or completed
+	 * Future tracking the installation operation for this specific port object
+	 * instance. This ensures thread-safe, single installation even when multiple
+	 * threads call installPixiEnvironment() on the same port object concurrently. -
+	 * null: Installation not started - non-null: Installation in progress or
+	 * completed
 	 */
 	private final AtomicReference<CompletableFuture<Void>> m_installFuture = new AtomicReference<>();
 
@@ -135,7 +145,7 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	 */
 	public PythonCommand getPythonCommand() throws IOException {
 		try {
-			installPixiEnvironment(null);
+			installPixiEnvironment(null, PixiInstallationProgressReporter.NoOpProgressReporter.INSTANCE);
 		} catch (CanceledExecutionException ex) {
 			// Should not happen with null ExecutionMonitor, but handle gracefully
 			throw new IOException("Environment installation was canceled.", ex);
@@ -149,26 +159,9 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 
 	/**
 	 * Install the Pixi environment represented by this port object if it is not
-	 * already installed. This method is thread-safe and cancelable. If multiple
-	 * threads call this method concurrently, only one will perform the installation
-	 * while others wait for it to complete. All threads will receive the same
-	 * result (success or exception).
-	 * 
-	 * @param exec Optional execution monitor for cancellation support. Pass null if
-	 *             cancellation is not needed (e.g., when called from non-node
-	 *             context).
-	 * @throws IOException                if installation fails
-	 * @throws CanceledExecutionException if the operation is canceled via the
-	 *                                    execution monitor
-	 */
-	public void installPixiEnvironment(final ExecutionMonitor exec) throws IOException, CanceledExecutionException {
-		installPixiEnvironment(exec, PixiInstallationProgressReporter.NoOpProgressReporter.INSTANCE);
-	}
-
-	/**
-	 * Install the Pixi environment represented by this port object if it is not
 	 * already installed, with progress reporting. This method is thread-safe and
-	 * cancelable. If multiple threads call this method concurrently, only one will
+	 * cancelable. If multiple threads call this method concurrently (even across
+	 * different port object instances targeting the same directory), only one will
 	 * perform the installation while others wait for it to complete. All threads
 	 * will receive the same result (success or exception).
 	 * 
@@ -185,35 +178,70 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	public void installPixiEnvironment(final ExecutionMonitor exec,
 			final PixiInstallationProgressReporter progressReporter) throws IOException, CanceledExecutionException {
 
-		// Fast path: Check if installation is already complete
+		// Fast path: Check if this port object's installation is already complete
 		CompletableFuture<Void> future = m_installFuture.get();
 		if (future != null && future.isDone() && !future.isCompletedExceptionally()) {
-			// Installation already completed successfully
+			// Installation already completed successfully for this port object
 			return;
 		}
 
-		// Ensure only one thread performs the installation
+		// Get the installation directory - this is the global synchronization point
+		final Path installDir = getPixiEnvironmentPath();
+
+		// Check global installation state for this directory
+		CompletableFuture<Void> globalFuture = GLOBAL_INSTALL_FUTURES.get(installDir);
+		if (globalFuture != null && globalFuture.isDone() && !globalFuture.isCompletedExceptionally()) {
+			// Installation already completed successfully in another port object
+			// Mark this port object as installed too
+			m_installFuture.compareAndSet(null, globalFuture);
+			return;
+		}
+
+		// Attempt to start installation for this port object
 		if (future == null) {
 			final CompletableFuture<Void> newFuture = new CompletableFuture<>();
 			if (m_installFuture.compareAndSet(null, newFuture)) {
-				// This thread won the race - perform the installation
-				try {
-					performInstallation(progressReporter);
-					newFuture.complete(null);
-					LOGGER.debug("Installation completed successfully by thread: " + Thread.currentThread().getName());
-				} catch (Exception ex) {
-					newFuture.completeExceptionally(ex);
-					LOGGER.error("Installation failed in thread: " + Thread.currentThread().getName(), ex);
-					// Re-throw so this thread sees the exception immediately
-					if (ex instanceof IOException) {
-						throw (IOException) ex;
-					} else {
-						throw new IOException("Pixi installation failed.", ex);
+				// This thread won the race for THIS port object
+				// Now try to win the global race for the installation directory
+				final CompletableFuture<Void> newGlobalFuture = new CompletableFuture<>();
+				final CompletableFuture<Void> existingGlobalFuture = 
+					GLOBAL_INSTALL_FUTURES.putIfAbsent(installDir, newGlobalFuture);
+
+				if (existingGlobalFuture == null) {
+					// This thread won both races - perform the installation
+					try {
+						LOGGER.debug("Thread " + Thread.currentThread().getName() + 
+							" starting installation to " + installDir);
+						performInstallation(progressReporter);
+						newGlobalFuture.complete(null);
+						newFuture.complete(null);
+						LOGGER.debug("Installation completed successfully by thread: " + 
+							Thread.currentThread().getName());
+					} catch (Exception ex) {
+						newGlobalFuture.completeExceptionally(ex);
+						newFuture.completeExceptionally(ex);
+						// Remove from global map on failure so retry is possible
+						GLOBAL_INSTALL_FUTURES.remove(installDir, newGlobalFuture);
+						LOGGER.error("Installation failed in thread: " + 
+							Thread.currentThread().getName(), ex);
+						// Re-throw so this thread sees the exception immediately
+						if (ex instanceof IOException) {
+							throw (IOException) ex;
+						} else {
+							throw new IOException("Pixi installation failed.", ex);
+						}
 					}
+					return;
+				} else {
+					// Another thread is installing to the same directory - wait for them
+					LOGGER.debug("Thread " + Thread.currentThread().getName() + 
+						" waiting for global installation to " + installDir);
+					future = existingGlobalFuture;
+					// Update this port object's future to point to the global one
+					m_installFuture.set(existingGlobalFuture);
 				}
-				return; // This thread performed installation - done
 			} else {
-				// Another thread won the race - get their future
+				// Another thread won the race for this port object - get their future
 				future = m_installFuture.get();
 			}
 		}

@@ -54,11 +54,9 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
@@ -80,7 +78,6 @@ import org.knime.node.parameters.array.ArrayWidget;
 import org.knime.node.parameters.layout.After;
 import org.knime.node.parameters.layout.Layout;
 import org.knime.node.parameters.persistence.NodeParametersPersistor;
-import org.knime.node.parameters.persistence.Persist;
 import org.knime.node.parameters.persistence.Persistor;
 import org.knime.node.parameters.updates.Effect;
 import org.knime.node.parameters.updates.Effect.EffectType;
@@ -88,7 +85,6 @@ import org.knime.node.parameters.updates.EffectPredicate;
 import org.knime.node.parameters.updates.EffectPredicateProvider;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
-import org.knime.node.parameters.updates.StateProvider.StateProviderInitializer;
 import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
 import org.knime.node.parameters.widget.choices.ChoicesProvider;
@@ -98,12 +94,11 @@ import org.knime.node.parameters.widget.choices.ValueSwitchWidget;
 import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
-import org.knime.pixi.nodes.PixiYamlImporter;
 import org.knime.pixi.port.PixiUtils;
 
 /**
- * Node Parameters for the Python Environment Provider node.
- * Combines input methods from array-based, TOML-based, and file reader approaches.
+ * Node Parameters for the Python Environment Provider node. Combines input methods from array-based, TOML-based, and
+ * file reader approaches.
  *
  * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
  * @since 5.10
@@ -147,16 +142,12 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
     // Input source selection
     enum MainInputSource {
-        @Label("Packages")
-        SIMPLE,
-        @Label("TOML editor")
-        TOML_EDITOR,
-        @Label("TOML file")
-        TOML_FILE,
-        @Label("YAML editor")
-        YAML_EDITOR,
-        @Label("Bundled environment")
-        BUNDLING_ENVIRONMENT
+            @Label("Packages")
+            SIMPLE, @Label("TOML editor")
+            TOML_EDITOR, @Label("TOML file")
+            TOML_FILE, @Label("YAML editor")
+            YAML_EDITOR, @Label("Bundled environment")
+            BUNDLING_ENVIRONMENT
     }
 
     @Widget(title = "Input source", description = "Choose how to define the Python environment")
@@ -174,10 +165,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @ArrayWidget(elementLayout = ArrayWidget.ElementLayout.HORIZONTAL_SINGLE_LINE, addButtonText = "Add package")
     @ValueReference(PackageArrayRef.class)
     @Effect(predicate = InputIsSimple.class, type = EffectType.SHOW)
-    PackageSpec[] m_packages = new PackageSpec[]{
-        new PackageSpec("python", PackageSource.CONDA, "3.14", "3.14"),
-        new PackageSpec("knime-python-base", PackageSource.CONDA, "5.9", "5.9")
-    };
+    PackageSpec[] m_packages = new PackageSpec[]{new PackageSpec("python", PackageSource.CONDA, "3.14", "3.14"),
+        new PackageSpec("knime-python-base", PackageSource.CONDA, "5.9", "5.9")};
 
     interface PackageArrayRef extends ParameterReference<PackageSpec[]> {
     }
@@ -198,7 +187,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @ValueReference(TomlContentRef.class)
     @Effect(predicate = InputIsToml.class, type = EffectType.SHOW)
     String m_pixiTomlContent = """
-            [project]
+            [workspace]
             channels = ["knime", "conda-forge"]
             platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 
@@ -249,11 +238,12 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     String m_bundledEnvironment;
 
     // YAML editor input
-    @Widget(title = "Environment specification (conda environment.yaml)", description = """
-            Content of the conda environment.yaml file that describes the environment.
-            This will be imported into pixi using `pixi init --import` and converted to a pixi.toml manifest.
-            The environment will automatically be configured to work on all major platforms (win-64, linux-64, osx-64, osx-arm64).
-            """)
+    @Widget(title = "Environment specification (conda environment.yaml)",
+        description = """
+                Content of the conda environment.yaml file that describes the environment.
+                This will be imported into pixi using `pixi init --import` and converted to a pixi.toml manifest.
+                The environment will automatically be configured to work on all major platforms (win-64, linux-64, osx-64, osx-arm64).
+                """)
     @Layout(yamlEditorSection.class)
     @TextAreaWidget(rows = 20)
     @ValueReference(YamlContentRef.class)
@@ -290,8 +280,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
      */
     static final class BundledPixiEnvironmentChoicesProvider implements StringChoicesProvider {
 
-        private static final NodeLogger LOGGER =
-            NodeLogger.getLogger(BundledPixiEnvironmentChoicesProvider.class);
+        private static final NodeLogger LOGGER = NodeLogger.getLogger(BundledPixiEnvironmentChoicesProvider.class);
 
         @Override
         public List<String> choices(final NodeParametersInput context) {
@@ -307,17 +296,12 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
                 // List all subdirectories in bundling/ that contain pixi.toml
                 // Structure: bundling/<some_name>/pixi.toml
-                var environments = Files.list(bundlingRoot)
-                    .filter(Files::isDirectory)
-                    .filter(dir -> {
-                        Path tomlPath = dir.resolve("pixi.toml");
-                        boolean hasToml = Files.exists(tomlPath);
-                        LOGGER.debug("Checking " + dir.getFileName() + ": pixi.toml " + (hasToml ? "found" : "not found"));
-                        return hasToml;
-                    })
-                    .map(dir -> dir.getFileName().toString())
-                    .sorted()
-                    .collect(Collectors.toList());
+                var environments = Files.list(bundlingRoot).filter(Files::isDirectory).filter(dir -> {
+                    Path tomlPath = dir.resolve("pixi.toml");
+                    boolean hasToml = Files.exists(tomlPath);
+                    LOGGER.debug("Checking " + dir.getFileName() + ": pixi.toml " + (hasToml ? "found" : "not found"));
+                    return hasToml;
+                }).map(dir -> dir.getFileName().toString()).sorted().collect(Collectors.toList());
 
                 LOGGER.debug("Found " + environments.size() + " environments");
                 return environments;
@@ -360,8 +344,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     Void m_validationMessage;
 
     // Read-only display of lock file content (advanced setting)
-    @Widget(title = "Lock file content",
-        description = "Content of the generated or loaded pixi.lock file.", advanced = true)
+    @Widget(title = "Lock file content", description = "Content of the generated or loaded pixi.lock file.",
+        advanced = true)
     @Layout(lockFileSection.class)
     @TextAreaWidget(rows = 10)
     @Persistor(DoNotPersist.class)
@@ -390,16 +374,15 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     }
 
     String getPixiTomlFileContent() throws IOException {
-        return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent,
-            m_tomlFile, m_envYamlContent, m_bundledEnvironment, LOGGER);
+        return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent, m_tomlFile,
+            m_envYamlContent, m_bundledEnvironment, LOGGER);
     }
 
     // Package specification
     enum PackageSource {
-        @Label("Conda")
-        CONDA,
-        @Label("Pip")
-        PIP
+            @Label("Conda")
+            CONDA, @Label("Pip")
+            PIP
     }
 
     static final class PackageSpec implements NodeParameters {
@@ -484,7 +467,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             return switch (state) {
                 case READY -> "Lock Environment";
                 case CANCEL -> "Cancel";
-                case DONE -> "Re-lock Environment";
+                case DONE -> "Lock Environment";
             };
         }
 
@@ -496,8 +479,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         private static String getMessageFromCallResult(final CallResult callResult) {
             final String stdout = callResult.stdout() == null ? "" : callResult.stdout();
             final String stderr = callResult.stderr() == null ? "" : callResult.stderr();
-            return "Exit code " + callResult.returnCode() + "\n"
-                + (stderr.isBlank() ? "" : "stderr:\n" + stderr + "\n")
+            return "Exit code " + callResult.returnCode() + "\n" + (stderr.isBlank() ? "" : "stderr:\n" + stderr + "\n")
                 + (stdout.isBlank() ? "" : "stdout:\n" + stdout);
         }
     }
@@ -524,8 +506,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         String m_bundledEnvironment;
 
         String getTomlContent() throws IOException {
-            return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent,
-                m_tomlFile, m_envYamlContent, m_bundledEnvironment, LOGGER);
+            return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent, m_tomlFile,
+                m_envYamlContent, m_bundledEnvironment, LOGGER);
         }
     }
 
@@ -555,7 +537,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         }
     }
 
-    static final class PixiUpdateUpdateHandler extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
+    static final class PixiUpdateUpdateHandler
+        extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
     }
 
     /**
@@ -566,14 +549,21 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         private static final NodeLogger LOGGER = NodeLogger.getLogger(ResetLockFileProvider.class);
 
         private Supplier<MainInputSource> m_inputSourceSupplier;
+
         private Supplier<PackageSpec[]> m_packagesSupplier;
+
         private Supplier<String> m_tomlContentSupplier;
+
         private Supplier<String> m_yamlContentSupplier;
+
         private Supplier<String> m_buttonFieldSupplier;
 
         private MainInputSource m_lastInputSource;
+
         private PackageSpec[] m_lastPackages;
+
         private String m_lastTomlContent;
+
         private String m_lastYamlContent;
 
         @Override
@@ -611,20 +601,20 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                 contentChanged = true;
             }
 
-            if (currentInputSource == MainInputSource.SIMPLE &&
-                m_lastPackages != null && !java.util.Arrays.equals(m_lastPackages, currentPackages)) {
+            if (currentInputSource == MainInputSource.SIMPLE && m_lastPackages != null
+                && !java.util.Arrays.equals(m_lastPackages, currentPackages)) {
                 LOGGER.debug("Packages changed");
                 contentChanged = true;
             }
 
-            if (currentInputSource == MainInputSource.TOML_EDITOR &&
-                m_lastTomlContent != null && !m_lastTomlContent.equals(currentTomlContent)) {
+            if (currentInputSource == MainInputSource.TOML_EDITOR && m_lastTomlContent != null
+                && !m_lastTomlContent.equals(currentTomlContent)) {
                 LOGGER.debug("TOML content changed");
                 contentChanged = true;
             }
 
-            if (currentInputSource == MainInputSource.YAML_EDITOR &&
-                m_lastYamlContent != null && !m_lastYamlContent.equals(currentYamlContent)) {
+            if (currentInputSource == MainInputSource.YAML_EDITOR && m_lastYamlContent != null
+                && !m_lastYamlContent.equals(currentYamlContent)) {
                 LOGGER.debug("YAML content changed");
                 contentChanged = true;
             }
@@ -661,8 +651,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         @Override
         public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
             final String lockContent = m_lockContentSupplier.get();
-            LOGGER.debug("Lock file content: " + 
-                (lockContent == null ? "null" : lockContent.length() + " chars"));
+            LOGGER.debug("Lock file content: " + (lockContent == null ? "null" : lockContent.length() + " chars"));
 
             if (lockContent == null || lockContent.isBlank()) {
                 LOGGER.debug("No lock file - showing info message");
@@ -674,11 +663,9 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             LOGGER.debug("Lock file present - showing success message");
             // If lock file exists and is not empty, it's valid
             return Optional.of(new TextMessage.Message("Environment validated",
-                "Environment validated successfully. Lock file generated.",
-                MessageType.SUCCESS));
+                "Environment validated successfully. Lock file generated.", MessageType.SUCCESS));
         }
     }
-
 
     /**
      * Custom persistor that doesn't persist the field - used for computed/display-only fields.

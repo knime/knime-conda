@@ -72,8 +72,8 @@ public final class PixiTomlBuilder {
     }
 
     /**
-     * Build a pixi.toml manifest from an array of package specifications.
-     * Uses workspace structure with standard KNIME channels and multi-platform support.
+     * Build a pixi.toml manifest from an array of package specifications. Uses workspace structure with standard KNIME
+     * channels and multi-platform support.
      *
      * @param packages the packages to include
      * @return the pixi.toml content as a string

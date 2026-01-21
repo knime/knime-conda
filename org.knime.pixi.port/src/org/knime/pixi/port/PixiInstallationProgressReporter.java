@@ -44,57 +44,83 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Jan 20, 2026 (Marc Lehner): created
+ *   Jan 21, 2026 (Marc Lehner): created
  */
-package org.knime.pixi.nodes;
+package org.knime.pixi.port;
 
-import java.nio.file.Path;
-
-import org.eclipse.core.runtime.Platform;
+import org.knime.core.node.CanceledExecutionException;
 
 /**
- * Utility class for resolving bundled Pixi environment paths.
+ * Interface for reporting progress during Pixi environment installation.
+ * Implementations can direct progress to different targets (node execution
+ * monitor, console, etc.).
  *
- * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
+ * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
  * @since 5.10
  */
-final class PixiBundlingUtils {
+public interface PixiInstallationProgressReporter {
 
-    private PixiBundlingUtils() {
-        // Utility class
-    }
+	/**
+	 * Report installation progress.
+	 *
+	 * @param fraction Progress as fraction between 0.0 and 1.0
+	 * @param message  Progress message describing current operation
+	 */
+	void setProgress(double fraction, String message);
 
-    /**
-     * Get the bundling root path. Checks for KNIME_PYTHON_BUNDLING_PATH environment variable first, otherwise returns
-     * {installation_root}/bundling. This logic needs to be kept in sync with the one used in the
-     * CondaEnvironmentRegistry.
-     *
-     * @return the bundling root path
-     * @throws Exception if unable to resolve the path
-     */
-    public static Path getBundlingRootPath() throws Exception {
-        // Check for KNIME_PYTHON_BUNDLING_PATH environment variable
-        var bundlingPathFromVar = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
-        if (bundlingPathFromVar != null && !bundlingPathFromVar.isBlank()) {
-            return Path.of(bundlingPathFromVar);
-        }
+	/**
+	 * Check if the operation has been canceled.
+	 *
+	 * @throws CanceledExecutionException if the operation was canceled
+	 */
+	void checkCanceled() throws CanceledExecutionException;
 
-        // Otherwise use installation_root/bundling
-        Path installationRoot = getInstallationRoot();
-        return installationRoot.resolve("bundling");
-    }
+	/**
+	 * No-op implementation that ignores all progress updates. Used when no progress
+	 * reporting is needed.
+	 */
+	public static final class NoOpProgressReporter implements PixiInstallationProgressReporter {
 
-    /**
-     * Get the KNIME installation root directory by resolving from the bundle location.
-     *
-     * @return the installation root path
-     * @throws Exception if unable to resolve the path
-     */
-    static Path getInstallationRoot() throws Exception {
-        var bundle = Platform.getBundle("org.knime.pixi.nodes");
-        String bundleLocationString =
-            org.eclipse.core.runtime.FileLocator.getBundleFileLocation(bundle).orElseThrow().getAbsolutePath();
-        Path bundleLocationPath = Path.of(bundleLocationString);
-        return bundleLocationPath.getParent().getParent();
-    }
+		/** Singleton instance. */
+		public static final NoOpProgressReporter INSTANCE = new NoOpProgressReporter();
+
+		private NoOpProgressReporter() {
+		}
+
+		@Override
+		public void setProgress(final double fraction, final String message) {
+			// No-op
+		}
+
+		@Override
+		public void checkCanceled() throws CanceledExecutionException {
+			// No-op - never canceled
+		}
+	}
+
+	/**
+	 * Progress reporter that simulates progress from 10% to 100% over the
+	 * installation. Since we don't yet capture pixi output, this provides visual
+	 * feedback to users that something is happening during the potentially long
+	 * installation.
+	 *
+	 * @param delegate The underlying progress reporter to forward simulated
+	 *                 progress to
+	 * @return A simulated progress reporter
+	 */
+	static PixiInstallationProgressReporter createSimulated(final PixiInstallationProgressReporter delegate) {
+		return new PixiInstallationProgressReporter() {
+			@Override
+			public void setProgress(final double fraction, final String message) {
+				// Map 0.0-1.0 to 0.1-1.0 (start at 10%, end at 100%)
+				final double simulatedProgress = 0.1 + (fraction * 0.9);
+				delegate.setProgress(simulatedProgress, message);
+			}
+
+			@Override
+			public void checkCanceled() throws CanceledExecutionException {
+				delegate.checkCanceled();
+			}
+		};
+	}
 }

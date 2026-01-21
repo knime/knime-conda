@@ -4,15 +4,6 @@
       <extension
             point="org.knime.core.PortType">
             <portObject
-                  color="#7F7F7F"
-                  hidden="false"
-                  name="Pixi Environment"
-                  objectClass="org.knime.pixi.port.PixiEnvironmentPortObject"
-                  objectSerializer="org.knime.pixi.port.PixiEnvironmentPortObject$Serializer"
-                  specClass="org.knime.pixi.port.PixiEnvironmentPortObjectSpec"
-                  specSerializer="org.knime.pixi.port.PixiEnvironmentPortObjectSpec$Serializer">
-            </portObject>
-            <portObject
                   color="#4CAF50"
                   hidden="false"
                   name="Python Environment"

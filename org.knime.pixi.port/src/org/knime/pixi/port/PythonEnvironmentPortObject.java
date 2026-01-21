@@ -158,6 +158,26 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
      */
     public void installPixiEnvironment(final ExecutionMonitor exec) 
             throws IOException, CanceledExecutionException {
+        installPixiEnvironment(exec, PixiInstallationProgressReporter.NoOpProgressReporter.INSTANCE);
+    }
+    
+    /**
+     * Install the Pixi environment represented by this port object if it is not already installed,
+     * with progress reporting.
+     * This method is thread-safe and cancelable. If multiple threads call this method concurrently,
+     * only one will perform the installation while others wait for it to complete. All threads
+     * will receive the same result (success or exception).
+     * 
+     * @param exec Optional execution monitor for cancellation support. Pass null if cancellation
+     *             is not needed (e.g., when called from non-node context).
+     * @param progressReporter Progress reporter for installation feedback. Pass NoOpProgressReporter.INSTANCE
+     *                         if progress reporting is not needed.
+     * @throws IOException if installation fails
+     * @throws CanceledExecutionException if the operation is canceled via the execution monitor
+     */
+    public void installPixiEnvironment(final ExecutionMonitor exec, 
+            final PixiInstallationProgressReporter progressReporter) 
+            throws IOException, CanceledExecutionException {
         
         // Fast path: Check if installation is already complete
         CompletableFuture<Void> future = m_installFuture.get();
@@ -172,7 +192,7 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
             if (m_installFuture.compareAndSet(null, newFuture)) {
                 // This thread won the race - perform the installation
                 try {
-                    performInstallation();
+                    performInstallation(progressReporter);
                     newFuture.complete(null);
                     LOGGER.debug("Installation completed successfully by thread: " 
                         + Thread.currentThread().getName());
@@ -201,24 +221,28 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
     /**
      * Performs the actual Pixi environment installation. This method is only called by one thread.
      * 
+     * @param progressReporter Progress reporter for installation feedback
      * @throws IOException if installation fails
      */
-    private void performInstallation() throws IOException {
+    private void performInstallation(final PixiInstallationProgressReporter progressReporter) throws IOException {
         final Path installDir = getPixiEnvironmentPath();
         
         // Double-check if environment is already installed (could happen with existing path)
         final Path envDir = installDir.resolve(".pixi").resolve("envs").resolve("default");
         if (Files.exists(envDir)) {
             LOGGER.debug("Pixi environment already installed at: " + envDir);
+            progressReporter.setProgress(1.0, "Environment already installed");
             return;
         }
         
         LOGGER.info("Installing Pixi environment at: " + installDir);
+        progressReporter.setProgress(0.0, "Preparing environment installation...");
         
         // Create project directory if needed
         Files.createDirectories(installDir);
         
         // Write pixi.toml
+        progressReporter.setProgress(0.1, "Writing environment configuration...");
         final Path pixiTomlPath = installDir.resolve("pixi.toml");
         Files.writeString(pixiTomlPath, m_pixiTomlContent, StandardCharsets.UTF_8, 
             StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
@@ -229,6 +253,7 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
             StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         
         // Run pixi install to create the environment
+        progressReporter.setProgress(0.2, "Installing Python environment (this may take a minute)...");
         try {
             final Path pixiHome = installDir.resolve(".pixi-home");
             Files.createDirectories(pixiHome);
@@ -241,6 +266,8 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
                 final String errorDetails = getMessageFromCallResult(callResult);
                 throw new IOException("Pixi install failed: " + errorDetails);
             }
+            
+            progressReporter.setProgress(1.0, "Environment installation complete");
         } catch (PixiBinaryLocationException ex) {
             throw new IOException("Could not locate Pixi binary to install environment.", ex);
         } catch (InterruptedException ex) {

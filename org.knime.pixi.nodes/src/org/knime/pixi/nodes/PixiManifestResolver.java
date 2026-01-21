@@ -63,7 +63,7 @@ import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.PackageSpec;
  * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
  * @since 5.10
  */
-public final class PixiManifestResolver {
+final class PixiManifestResolver {
 
     private PixiManifestResolver() {
         // Utility class

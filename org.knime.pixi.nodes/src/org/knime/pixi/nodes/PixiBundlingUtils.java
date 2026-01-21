@@ -58,7 +58,7 @@ import org.eclipse.core.runtime.Platform;
  * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
  * @since 5.10
  */
-public final class PixiBundlingUtils {
+final class PixiBundlingUtils {
 
     private PixiBundlingUtils() {
         // Utility class
@@ -67,6 +67,7 @@ public final class PixiBundlingUtils {
     /**
      * Get the bundling root path. Checks for KNIME_PYTHON_BUNDLING_PATH environment
      * variable first, otherwise returns {installation_root}/bundling.
+     * This logic needs to be kept in sync with the one used in the CondaEnvironmentRegistry.
      *
      * @return the bundling root path
      * @throws Exception if unable to resolve the path

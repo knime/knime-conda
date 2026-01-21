@@ -221,40 +221,6 @@ final class PixiParameterUtils {
     }
 
     /**
-     * State provider that copies the lock file content from the button field to a hidden field.
-     * This enables the validation message to react to lock file changes.
-     *
-     * @param <ButtonFieldRef> the button field reference
-     * @deprecated Use {@link AbstractResetLockFileProvider} instead for Effect-based visibility control
-     */
-    @Deprecated
-    static abstract class AbstractLockFileCopyProvider<ButtonFieldRef extends ParameterReference<String>>
-        implements StateProvider<String> {
-
-        private Supplier<String> m_buttonFieldSupplier;
-
-        /**
-         * Get the button field reference class.
-         */
-        @Deprecated
-        protected abstract Class<ButtonFieldRef> getButtonFieldRefClass();
-
-        @Deprecated
-        @Override
-        public void init(final StateProviderInitializer initializer) {
-            // Trigger whenever button field changes (after lock file generation)
-            initializer.computeOnValueChange(getButtonFieldRefClass());
-            m_buttonFieldSupplier = initializer.getValueSupplier(getButtonFieldRefClass());
-        }
-
-        @Deprecated
-        @Override
-        public String computeState(final NodeParametersInput context) {
-            return m_buttonFieldSupplier.get();
-        }
-    }
-
-    /**
      * State provider that copies lock file content from button, but resets to empty string when content changes.
      * This enables Effect-based visibility control: message shown when lock file is empty, hidden otherwise.
      *
@@ -300,90 +266,6 @@ final class PixiParameterUtils {
 
             m_lastContent = currentContent;
             return buttonValue != null ? buttonValue : "";
-        }
-
-        /**
-         * Compare content objects for equality. Override if content type needs custom comparison.
-         */
-        protected boolean contentEquals(final Object content1, final Object content2) {
-            if (content1 == null || content2 == null) {
-                return content1 == content2;
-            }
-            return content1.equals(content2);
-        }
-    }
-
-    /**
-     * Base class for lock file validation message providers.
-     * Shows warnings when lock file is missing or outdated.
-     *
-     * @param <ContentRef> the parameter reference type for content (TOML, YAML, or packages)
-     * @param <LockFileRef> the parameter reference type for the hidden lock file field
-     * @param <LockFileCopyProviderClass> the lock file copy provider class
-     */
-    static abstract class AbstractLockFileValidationProvider<ContentRef extends ParameterReference<?>,
-            LockFileRef extends ParameterReference<String>,
-            LockFileCopyProviderClass extends StateProvider<String>>
-        implements StateProvider<Optional<TextMessage.Message>> {
-
-        private Supplier<String> m_lockFileContentSupplier;
-        private Supplier<?> m_contentSupplier;
-        private Object m_lastValidContent;
-
-        /**
-         * Get the content reference class for initialization.
-         */
-        protected abstract Class<ContentRef> getContentRefClass();
-
-        /**
-         * Get the lock file reference class for initialization.
-         */
-        protected abstract Class<LockFileRef> getLockFileRefClass();
-
-        /**
-         * Get the lock file copy provider class for initialization.
-         */
-        protected abstract Class<LockFileCopyProviderClass> getLockFileCopyProviderClass();
-
-        @Override
-        public void init(final StateProviderInitializer initializer) {
-            // Trigger on content changes, dialog open, and when lock file is updated
-            initializer.computeOnValueChange(getContentRefClass());
-            initializer.computeAfterOpenDialog();
-            initializer.computeFromProvidedState(getLockFileCopyProviderClass());
-            // Get suppliers for both lock file and content
-            m_lockFileContentSupplier = initializer.getValueSupplier(getLockFileRefClass());
-            m_contentSupplier = initializer.getValueSupplier(getContentRefClass());
-        }
-
-        @Override
-        public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
-            final String lockFileContent = m_lockFileContentSupplier.get();
-            final Object currentContent = m_contentSupplier.get();
-
-            // No lock file stored
-            if (lockFileContent == null || lockFileContent.isBlank()) {
-                m_lastValidContent = null;
-                return Optional.of(new TextMessage.Message("Lock file status",
-                    "Lock file not stored. Click 'Lock Environment' to generate a lock file for reproducibility.",
-                    MessageType.WARNING));
-            }
-
-            // Lock file exists - check if content changed since generation
-            if (m_lastValidContent == null) {
-                // First time we see a lock file - assume it's valid for current content
-                m_lastValidContent = currentContent;
-            }
-
-            if (!contentEquals(m_lastValidContent, currentContent)) {
-                return Optional.of(new TextMessage.Message("Lock file status",
-                    "Lock file outdated (content changed). Click 'Lock Environment' to regenerate.",
-                    MessageType.WARNING));
-            }
-
-            return Optional.of(new TextMessage.Message("Lock file status",
-                "Lock file saved (" + lockFileContent.length() + " bytes). Environment is reproducible.",
-                MessageType.INFO));
         }
 
         /**

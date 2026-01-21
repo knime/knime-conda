@@ -7,6 +7,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.JComponent;
 
@@ -50,6 +53,14 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
     private String m_pixiLockContent;
 
     private Path m_pixiEnvironmentPath;
+    
+    /**
+     * Future tracking the installation operation. This ensures thread-safe, single installation
+     * even when multiple threads call installPixiEnvironment() concurrently.
+     * - null: Installation not started
+     * - non-null: Installation in progress or completed
+     */
+    private final AtomicReference<CompletableFuture<Void>> m_installFuture = new AtomicReference<>();
 
     /**
      * Serializer for {@link PythonEnvironmentPortObject}.
@@ -121,7 +132,12 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
      * @throws IOException if the environment cannot be installed
      */
     public PythonCommand getPythonCommand() throws IOException {
-        installPixiEnvironment();
+        try {
+            installPixiEnvironment(null);
+        } catch (CanceledExecutionException ex) {
+            // Should not happen with null ExecutionMonitor, but handle gracefully
+            throw new IOException("Environment installation was canceled.", ex);
+        }
         final Path envPath = getPixiEnvironmentPath();
         final Path tomlPath = envPath.resolve("pixi.toml");
         LOGGER.debug("Creating PixiPythonCommand: envPath=" + envPath + ", tomlPath=" + tomlPath 
@@ -131,21 +147,74 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
     
     /**
      * Install the Pixi environment represented by this port object if it is not already installed.
+     * This method is thread-safe and cancelable. If multiple threads call this method concurrently,
+     * only one will perform the installation while others wait for it to complete. All threads
+     * will receive the same result (success or exception).
+     * 
+     * @param exec Optional execution monitor for cancellation support. Pass null if cancellation
+     *             is not needed (e.g., when called from non-node context).
+     * @throws IOException if installation fails
+     * @throws CanceledExecutionException if the operation is canceled via the execution monitor
+     */
+    public void installPixiEnvironment(final ExecutionMonitor exec) 
+            throws IOException, CanceledExecutionException {
+        
+        // Fast path: Check if installation is already complete
+        CompletableFuture<Void> future = m_installFuture.get();
+        if (future != null && future.isDone() && !future.isCompletedExceptionally()) {
+            // Installation already completed successfully
+            return;
+        }
+        
+        // Ensure only one thread performs the installation
+        if (future == null) {
+            final CompletableFuture<Void> newFuture = new CompletableFuture<>();
+            if (m_installFuture.compareAndSet(null, newFuture)) {
+                // This thread won the race - perform the installation
+                try {
+                    performInstallation();
+                    newFuture.complete(null);
+                    LOGGER.debug("Installation completed successfully by thread: " 
+                        + Thread.currentThread().getName());
+                } catch (Exception ex) {
+                    newFuture.completeExceptionally(ex);
+                    LOGGER.error("Installation failed in thread: " 
+                        + Thread.currentThread().getName(), ex);
+                    // Re-throw so this thread sees the exception immediately
+                    if (ex instanceof IOException) {
+                        throw (IOException)ex;
+                    } else {
+                        throw new IOException("Pixi installation failed.", ex);
+                    }
+                }
+                return; // This thread performed installation - done
+            } else {
+                // Another thread won the race - get their future
+                future = m_installFuture.get();
+            }
+        }
+        
+        // Wait for the installation to complete with cancellation support
+        waitForInstallation(future, exec);
+    }
+    
+    /**
+     * Performs the actual Pixi environment installation. This method is only called by one thread.
      * 
      * @throws IOException if installation fails
      */
-    public void installPixiEnvironment() throws IOException {
+    private void performInstallation() throws IOException {
         final Path installDir = getPixiEnvironmentPath();
         
-        // Check if environment is already installed
+        // Double-check if environment is already installed (could happen with existing path)
         final Path envDir = installDir.resolve(".pixi").resolve("envs").resolve("default");
         if (Files.exists(envDir)) {
-            // Environment already exists, no need to install
             LOGGER.debug("Pixi environment already installed at: " + envDir);
             return;
         }
         
         LOGGER.info("Installing Pixi environment at: " + installDir);
+        
         // Create project directory if needed
         Files.createDirectories(installDir);
         
@@ -177,6 +246,64 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new IOException("Pixi installation was interrupted.", ex);
+        }
+    }
+    
+    /**
+     * Waits for the installation future to complete, with support for cancellation.
+     * 
+     * @param future The future representing the installation operation
+     * @param exec Optional execution monitor for cancellation checks
+     * @throws IOException if installation failed
+     * @throws CanceledExecutionException if canceled via execution monitor
+     */
+    private void waitForInstallation(final CompletableFuture<Void> future, final ExecutionMonitor exec) 
+            throws IOException, CanceledExecutionException {
+        
+        if (future == null) {
+            return; // No installation in progress
+        }
+        
+        LOGGER.debug("Thread " + Thread.currentThread().getName() + " waiting for installation to complete");
+        
+        // Poll the future with periodic cancellation checks
+        while (!future.isDone()) {
+            // Check for cancellation if execution monitor provided
+            if (exec != null) {
+                try {
+                    exec.checkCanceled();
+                } catch (CanceledExecutionException ex) {
+                    LOGGER.info("Installation wait canceled for thread: " 
+                        + Thread.currentThread().getName());
+                    throw ex;
+                }
+            }
+            
+            // Sleep briefly before checking again
+            try {
+                Thread.sleep(100); // Check every 100ms
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Wait for installation was interrupted.", ex);
+            }
+        }
+        
+        // Installation completed - check if it succeeded or failed
+        try {
+            future.get(); // This will throw if installation failed
+            LOGGER.debug("Thread " + Thread.currentThread().getName() 
+                + " finished waiting - installation succeeded");
+        } catch (ExecutionException ex) {
+            // Installation failed - propagate the exception
+            final Throwable cause = ex.getCause();
+            if (cause instanceof IOException) {
+                throw (IOException)cause;
+            } else {
+                throw new IOException("Pixi installation failed.", cause);
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Wait for installation was interrupted.", ex);
         }
     }
     

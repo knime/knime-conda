@@ -51,36 +51,42 @@ package org.knime.pixi.port;
 import java.nio.file.Path;
 
 /**
- * Pixi-specific implementation of {@link PythonCommand}. Executes Python processes via {@code pixi run python}
- * to ensure proper environment activation and variable setup.
+ * Pixi-specific implementation of {@link PythonCommand}. Executes Python
+ * processes via {@code pixi run python} to ensure proper environment activation
+ * and variable setup.
  * <P>
- * This command resolves the pixi binary and constructs a command line that invokes Python through pixi's
- * environment runner, which handles all necessary environment setup automatically.
+ * This command resolves the pixi binary and constructs a command line that
+ * invokes Python through pixi's environment runner, which handles all necessary
+ * environment setup automatically.
  *
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
  */
 public final class PixiPythonCommand extends AbstractPixiPythonCommand {
 
-    /**
-     * Constructs a {@link PythonCommand} that describes a Python process run via pixi in the environment
-     * identified by the given pixi.toml manifest file.<br>
-     * The validity of the given arguments is not tested.
-     *
-     * @param pixiTomlPath The path to the pixi.toml manifest file that describes the environment.
-     * @param environmentName The name of the environment within the pixi project (e.g., "default").
-     */
-    public PixiPythonCommand(final Path pixiTomlPath, final String environmentName) {
-        super(pixiTomlPath, environmentName);
-    }
+	/**
+	 * Constructs a {@link PythonCommand} that describes a Python process run via
+	 * pixi in the environment identified by the given pixi.toml manifest file.<br>
+	 * The validity of the given arguments is not tested.
+	 *
+	 * @param pixiTomlPath    The path to the pixi.toml manifest file that describes
+	 *                        the environment.
+	 * @param environmentName The name of the environment within the pixi project
+	 *                        (e.g., "default").
+	 */
+	public PixiPythonCommand(final Path pixiTomlPath, final String environmentName) {
+		super(pixiTomlPath, environmentName);
+	}
 
-    /**
-     * Constructs a {@link PythonCommand} that describes a Python process run via pixi in the default environment
-     * identified by the given pixi.toml manifest file.<br>
-     * The validity of the given arguments is not tested.
-     *
-     * @param pixiTomlPath The path to the pixi.toml manifest file that describes the environment.
-     */
-    public PixiPythonCommand(final Path pixiTomlPath) {
-        super(pixiTomlPath, "default");
-    }
+	/**
+	 * Constructs a {@link PythonCommand} that describes a Python process run via
+	 * pixi in the default environment identified by the given pixi.toml manifest
+	 * file.<br>
+	 * The validity of the given arguments is not tested.
+	 *
+	 * @param pixiTomlPath The path to the pixi.toml manifest file that describes
+	 *                     the environment.
+	 */
+	public PixiPythonCommand(final Path pixiTomlPath) {
+		super(pixiTomlPath, "default");
+	}
 }

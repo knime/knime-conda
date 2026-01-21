@@ -52,7 +52,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import org.knime.conda.envbundling.environment.CondaEnvironmentRegistry;
 import org.knime.core.node.NodeLogger;
 import org.knime.node.DefaultModel.ConfigureInput;
 import org.knime.node.DefaultModel.ConfigureOutput;
@@ -133,7 +132,7 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                 case BUNDLING_ENVIRONMENT:
                     // For file-based or bundled input, determine the project directory (pixi root)
                     final Path projectDir;
-                    
+
                     if (params.m_mainInputSource == PythonEnvironmentProviderNodeParameters.MainInputSource.TOML_FILE) {
                         // File-based: get parent directory of selected TOML file
                         if (params.m_tomlFile == null || params.m_tomlFile.m_path == null) {
@@ -145,7 +144,8 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                         }
                         projectDir = tomlPath.getParent();
                         if (projectDir == null) {
-                            throw new IllegalStateException("Cannot determine parent directory of TOML file: " + tomlPath);
+                            throw new IllegalStateException(
+                                "Cannot determine parent directory of TOML file: " + tomlPath);
                         }
                     } else {
                         // Bundled environment: get directory from bundling root
@@ -153,21 +153,23 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                             throw new IllegalStateException("No bundled environment selected.");
                         }
                         try {
-                            projectDir = PixiBundlingUtils.getBundlingRootPath()
-                                .resolve(params.m_bundledEnvironment).toAbsolutePath().normalize();
+                            projectDir = PixiBundlingUtils.getBundlingRootPath().resolve(params.m_bundledEnvironment)
+                                .toAbsolutePath().normalize();
                             final Path bundledTomlPath = projectDir.resolve("pixi.toml");
                             if (!Files.exists(bundledTomlPath)) {
-                                throw new IllegalStateException("pixi.toml not found in bundled environment: " + bundledTomlPath);
+                                throw new IllegalStateException(
+                                    "pixi.toml not found in bundled environment: " + bundledTomlPath);
                             }
                             LOGGER.debug("Using bundled environment at: " + projectDir);
                         } catch (Exception e) {
-                            throw new IllegalStateException("Failed to access bundled environment: " + e.getMessage(), e);
+                            throw new IllegalStateException("Failed to access bundled environment: " + e.getMessage(),
+                                e);
                         }
                     }
-                    
+
                     // Get lock content from params (may be from disk or generated)
                     String lockContent = params.getPixiLockFileContent();
-                    
+
                     // If no lock in params, try reading from disk
                     if (lockContent == null || lockContent.isBlank()) {
                         final Path lockPath = projectDir.resolve("pixi.lock");
@@ -179,7 +181,7 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                             LOGGER.debug("No lock file found at " + lockPath);
                         }
                     }
-                    
+
                     // Create port object with project directory - same for both file and bundled cases
                     portObject = new PythonEnvironmentPortObject(pixiTomlContent, lockContent, projectDir);
                     break;

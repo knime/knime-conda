@@ -57,107 +57,110 @@ import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 
 /**
- * Abstract base class for Python commands that use Pixi environments. Executes Python via {@code pixi run python}
- * to ensure proper environment activation and variable setup.
+ * Abstract base class for Python commands that use Pixi environments. Executes
+ * Python via {@code pixi run python} to ensure proper environment activation
+ * and variable setup.
  * <P>
- * Implementation note: Implementors must provide value-based implementations of {@link #hashCode()},
- * {@link #equals(Object)}, and {@link #toString()}.
+ * Implementation note: Implementors must provide value-based implementations of
+ * {@link #hashCode()}, {@link #equals(Object)}, and {@link #toString()}.
  *
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
  */
 abstract class AbstractPixiPythonCommand implements PythonCommand {
 
-    private final Path m_pixiTomlPath;
+	private final Path m_pixiTomlPath;
 
-    private final String m_pixiEnvironmentName;
+	private final String m_pixiEnvironmentName;
 
-    /**
-     * @param pixiTomlPath The path to the pixi.toml manifest file that describes the environment
-     * @param environmentName The name of the environment within the pixi project (typically "default")
-     */
-    protected AbstractPixiPythonCommand(final Path pixiTomlPath, final String environmentName) {
-        m_pixiTomlPath = Objects.requireNonNull(pixiTomlPath, "pixiTomlPath must not be null");
-        m_pixiEnvironmentName = Objects.requireNonNull(environmentName, "environmentName must not be null");
-    }
+	/**
+	 * @param pixiTomlPath    The path to the pixi.toml manifest file that describes
+	 *                        the environment
+	 * @param environmentName The name of the environment within the pixi project
+	 *                        (typically "default")
+	 */
+	protected AbstractPixiPythonCommand(final Path pixiTomlPath, final String environmentName) {
+		m_pixiTomlPath = Objects.requireNonNull(pixiTomlPath, "pixiTomlPath must not be null");
+		m_pixiEnvironmentName = Objects.requireNonNull(environmentName, "environmentName must not be null");
+	}
 
-    /**
-     * @param pixiTomlPath The path to the pixi.toml manifest file that describes the environment
-     */
-    protected AbstractPixiPythonCommand(final Path pixiTomlPath) {
-        this(pixiTomlPath, "default");
-    }
+	/**
+	 * @param pixiTomlPath The path to the pixi.toml manifest file that describes
+	 *                     the environment
+	 */
+	protected AbstractPixiPythonCommand(final Path pixiTomlPath) {
+		this(pixiTomlPath, "default");
+	}
 
-    @Override
-    public ProcessBuilder createProcessBuilder() {
-        try {
-            final String pixiBinaryPath = PixiBinary.getPixiBinaryPath();
-            final List<String> command = new ArrayList<>();
-            command.add(pixiBinaryPath);
-            command.add("run");
-            command.add("--manifest-path");
-            command.add(m_pixiTomlPath.toString());
-            command.add("--environment");
-            command.add(m_pixiEnvironmentName);
-            command.add("--no-progress");
-            command.add("python");
-            return new ProcessBuilder(command);
-        } catch (PixiBinaryLocationException ex) {
-            throw new IllegalStateException(
-                "Could not locate pixi binary. Please ensure the pixi bundle is properly installed.", ex);
-        }
-    }
+	@Override
+	public ProcessBuilder createProcessBuilder() {
+		try {
+			final String pixiBinaryPath = PixiBinary.getPixiBinaryPath();
+			final List<String> command = new ArrayList<>();
+			command.add(pixiBinaryPath);
+			command.add("run");
+			command.add("--manifest-path");
+			command.add(m_pixiTomlPath.toString());
+			command.add("--environment");
+			command.add(m_pixiEnvironmentName);
+			command.add("--no-progress");
+			command.add("python");
+			return new ProcessBuilder(command);
+		} catch (PixiBinaryLocationException ex) {
+			throw new IllegalStateException(
+					"Could not locate pixi binary. Please ensure the pixi bundle is properly installed.", ex);
+		}
+	}
 
-    @Override
-    public Path getPythonExecutablePath() {
-        // Resolve the actual Python executable path within the environment
-        // This is used for informational purposes only, not for execution
-        final Path projectDir = m_pixiTomlPath.getParent();
-        final Path envDir = projectDir.resolve(".pixi").resolve("envs").resolve(m_pixiEnvironmentName);
-        final boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
-        final Path pythonPath = isWindows 
-            ? envDir.resolve("python.exe") 
-            : envDir.resolve("bin").resolve("python");
-        
-        // Return the path even if it doesn't exist yet - the environment might not be installed
-        // The caller is responsible for checking existence if needed
-        return pythonPath;
-    }
+	@Override
+	public Path getPythonExecutablePath() {
+		// Resolve the actual Python executable path within the environment
+		// This is used for informational purposes only, not for execution
+		final Path projectDir = m_pixiTomlPath.getParent();
+		final Path envDir = projectDir.resolve(".pixi").resolve("envs").resolve(m_pixiEnvironmentName);
+		final boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+		final Path pythonPath = isWindows ? envDir.resolve("python.exe") : envDir.resolve("bin").resolve("python");
 
-    /**
-     * @return The path to the pixi.toml manifest file
-     */
-    protected Path getPixiTomlPath() {
-        return m_pixiTomlPath;
-    }
+		// Return the path even if it doesn't exist yet - the environment might not be
+		// installed
+		// The caller is responsible for checking existence if needed
+		return pythonPath;
+	}
 
-    /**
-     * @return The environment name
-     */
-    protected String getEnvironmentName() {
-        return m_pixiEnvironmentName;
-    }
+	/**
+	 * @return The path to the pixi.toml manifest file
+	 */
+	protected Path getPixiTomlPath() {
+		return m_pixiTomlPath;
+	}
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(m_pixiTomlPath, m_pixiEnvironmentName);
-    }
+	/**
+	 * @return The environment name
+	 */
+	protected String getEnvironmentName() {
+		return m_pixiEnvironmentName;
+	}
 
-    @Override
-    public boolean equals(final Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-        final AbstractPixiPythonCommand other = (AbstractPixiPythonCommand)obj;
-        return Objects.equals(m_pixiTomlPath, other.m_pixiTomlPath)
-            && Objects.equals(m_pixiEnvironmentName, other.m_pixiEnvironmentName);
-    }
+	@Override
+	public int hashCode() {
+		return Objects.hash(m_pixiTomlPath, m_pixiEnvironmentName);
+	}
 
-    @Override
-    public String toString() {
-        return "pixi run --manifest-path " + m_pixiTomlPath + " --environment " + m_pixiEnvironmentName 
-            + " --no-progress python";
-    }
+	@Override
+	public boolean equals(final Object obj) {
+		if (this == obj) {
+			return true;
+		}
+		if (obj == null || getClass() != obj.getClass()) {
+			return false;
+		}
+		final AbstractPixiPythonCommand other = (AbstractPixiPythonCommand) obj;
+		return Objects.equals(m_pixiTomlPath, other.m_pixiTomlPath)
+				&& Objects.equals(m_pixiEnvironmentName, other.m_pixiEnvironmentName);
+	}
+
+	@Override
+	public String toString() {
+		return "pixi run --manifest-path " + m_pixiTomlPath + " --environment " + m_pixiEnvironmentName
+				+ " --no-progress python";
+	}
 }

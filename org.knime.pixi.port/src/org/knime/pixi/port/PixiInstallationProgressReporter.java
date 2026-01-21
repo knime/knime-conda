@@ -52,72 +52,75 @@ import org.knime.core.node.CanceledExecutionException;
 
 /**
  * Interface for reporting progress during Pixi environment installation.
- * Implementations can direct progress to different targets (node execution monitor, console, etc.).
+ * Implementations can direct progress to different targets (node execution
+ * monitor, console, etc.).
  *
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
  * @since 5.10
  */
 public interface PixiInstallationProgressReporter {
 
-    /**
-     * Report installation progress.
-     *
-     * @param fraction Progress as fraction between 0.0 and 1.0
-     * @param message Progress message describing current operation
-     */
-    void setProgress(double fraction, String message);
+	/**
+	 * Report installation progress.
+	 *
+	 * @param fraction Progress as fraction between 0.0 and 1.0
+	 * @param message  Progress message describing current operation
+	 */
+	void setProgress(double fraction, String message);
 
-    /**
-     * Check if the operation has been canceled.
-     *
-     * @throws CanceledExecutionException if the operation was canceled
-     */
-    void checkCanceled() throws CanceledExecutionException;
+	/**
+	 * Check if the operation has been canceled.
+	 *
+	 * @throws CanceledExecutionException if the operation was canceled
+	 */
+	void checkCanceled() throws CanceledExecutionException;
 
-    /**
-     * No-op implementation that ignores all progress updates.
-     * Used when no progress reporting is needed.
-     */
-    public static final class NoOpProgressReporter implements PixiInstallationProgressReporter {
-        
-        /** Singleton instance. */
-        public static final NoOpProgressReporter INSTANCE = new NoOpProgressReporter();
+	/**
+	 * No-op implementation that ignores all progress updates. Used when no progress
+	 * reporting is needed.
+	 */
+	public static final class NoOpProgressReporter implements PixiInstallationProgressReporter {
 
-        private NoOpProgressReporter() {
-        }
+		/** Singleton instance. */
+		public static final NoOpProgressReporter INSTANCE = new NoOpProgressReporter();
 
-        @Override
-        public void setProgress(final double fraction, final String message) {
-            // No-op
-        }
+		private NoOpProgressReporter() {
+		}
 
-        @Override
-        public void checkCanceled() throws CanceledExecutionException {
-            // No-op - never canceled
-        }
-    }
+		@Override
+		public void setProgress(final double fraction, final String message) {
+			// No-op
+		}
 
-    /**
-     * Progress reporter that simulates progress from 10% to 100% over the installation.
-     * Since we don't yet capture pixi output, this provides visual feedback to users
-     * that something is happening during the potentially long installation.
-     *
-     * @param delegate The underlying progress reporter to forward simulated progress to
-     * @return A simulated progress reporter
-     */
-    static PixiInstallationProgressReporter createSimulated(final PixiInstallationProgressReporter delegate) {
-        return new PixiInstallationProgressReporter() {
-            @Override
-            public void setProgress(final double fraction, final String message) {
-                // Map 0.0-1.0 to 0.1-1.0 (start at 10%, end at 100%)
-                final double simulatedProgress = 0.1 + (fraction * 0.9);
-                delegate.setProgress(simulatedProgress, message);
-            }
+		@Override
+		public void checkCanceled() throws CanceledExecutionException {
+			// No-op - never canceled
+		}
+	}
 
-            @Override
-            public void checkCanceled() throws CanceledExecutionException {
-                delegate.checkCanceled();
-            }
-        };
-    }
+	/**
+	 * Progress reporter that simulates progress from 10% to 100% over the
+	 * installation. Since we don't yet capture pixi output, this provides visual
+	 * feedback to users that something is happening during the potentially long
+	 * installation.
+	 *
+	 * @param delegate The underlying progress reporter to forward simulated
+	 *                 progress to
+	 * @return A simulated progress reporter
+	 */
+	static PixiInstallationProgressReporter createSimulated(final PixiInstallationProgressReporter delegate) {
+		return new PixiInstallationProgressReporter() {
+			@Override
+			public void setProgress(final double fraction, final String message) {
+				// Map 0.0-1.0 to 0.1-1.0 (start at 10%, end at 100%)
+				final double simulatedProgress = 0.1 + (fraction * 0.9);
+				delegate.setProgress(simulatedProgress, message);
+			}
+
+			@Override
+			public void checkCanceled() throws CanceledExecutionException {
+				delegate.checkCanceled();
+			}
+		};
+	}
 }

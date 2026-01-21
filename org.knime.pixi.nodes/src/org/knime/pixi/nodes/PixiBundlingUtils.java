@@ -65,9 +65,9 @@ final class PixiBundlingUtils {
     }
 
     /**
-     * Get the bundling root path. Checks for KNIME_PYTHON_BUNDLING_PATH environment
-     * variable first, otherwise returns {installation_root}/bundling.
-     * This logic needs to be kept in sync with the one used in the CondaEnvironmentRegistry.
+     * Get the bundling root path. Checks for KNIME_PYTHON_BUNDLING_PATH environment variable first, otherwise returns
+     * {installation_root}/bundling. This logic needs to be kept in sync with the one used in the
+     * CondaEnvironmentRegistry.
      *
      * @return the bundling root path
      * @throws Exception if unable to resolve the path
@@ -92,10 +92,8 @@ final class PixiBundlingUtils {
      */
     static Path getInstallationRoot() throws Exception {
         var bundle = Platform.getBundle("org.knime.pixi.nodes");
-        String bundleLocationString = org.eclipse.core.runtime.FileLocator
-            .getBundleFileLocation(bundle)
-            .orElseThrow()
-            .getAbsolutePath();
+        String bundleLocationString =
+            org.eclipse.core.runtime.FileLocator.getBundleFileLocation(bundle).orElseThrow().getAbsolutePath();
         Path bundleLocationPath = Path.of(bundleLocationString);
         return bundleLocationPath.getParent().getParent();
     }

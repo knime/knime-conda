@@ -339,6 +339,19 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     interface PixiLockFileRef extends ParameterReference<String> {
     }
 
+    // Hidden field that tracks if platform validation shows warning/error
+    @ValueReference(PlatformValidationIsWarningRef.class)
+    @ValueProvider(PlatformValidationIsWarningProvider.class)
+    Boolean m_platformValidationIsWarning = false;
+
+    interface PlatformValidationIsWarningRef extends ParameterReference<Boolean> {
+    }
+
+    @TextMessage(PlatformValidationProvider.class)
+    @Layout(tomlEditorSection.class)
+    @Effect(predicate = PlatformValidationIsWarning.class, type = EffectType.SHOW)
+    Void m_platformValidationMessage;
+
     @TextMessage(ValidationMessageProvider.class)
     @Layout(lockFileSection.class)
     Void m_validationMessage;
@@ -664,6 +677,81 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             // If lock file exists and is not empty, it's valid
             return Optional.of(new TextMessage.Message("Environment validated",
                 "Environment validated successfully. Lock file generated.", MessageType.SUCCESS));
+        }
+    }
+
+    /**
+     * Predicate that returns true when platform validation message is a warning or error.
+     */
+    static final class PlatformValidationIsWarning implements EffectPredicateProvider {
+
+        @Override
+        public EffectPredicate init(final PredicateInitializer i) {
+            return i.getBoolean(PlatformValidationIsWarningRef.class).isTrue();
+        }
+    }
+
+    /**
+     * State provider that computes whether platform validation message is a warning or error.
+     */
+    static final class PlatformValidationIsWarningProvider implements StateProvider<Boolean> {
+
+        private Supplier<String> m_tomlContentSupplier;
+
+        private Supplier<MainInputSource> m_inputSourceSupplier;
+
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            initializer.computeOnValueChange(TomlContentRef.class);
+            initializer.computeOnValueChange(MainInputSourceRef.class);
+            initializer.computeAfterOpenDialog();
+            m_tomlContentSupplier = initializer.getValueSupplier(TomlContentRef.class);
+            m_inputSourceSupplier = initializer.getValueSupplier(MainInputSourceRef.class);
+        }
+
+        @Override
+        public Boolean computeState(final NodeParametersInput context) {
+            final MainInputSource inputSource = m_inputSourceSupplier.get();
+
+            // Only validate for TOML_EDITOR mode
+            if (inputSource != MainInputSource.TOML_EDITOR) {
+                return false;
+            }
+
+            final String tomlContent = m_tomlContentSupplier.get();
+            return PixiTomlValidator.validatePlatforms(tomlContent).isWarningOrError();
+        }
+    }
+
+    /**
+     * State provider for platform validation message.
+     */
+    static final class PlatformValidationProvider implements StateProvider<Optional<TextMessage.Message>> {
+
+        private Supplier<String> m_tomlContentSupplier;
+
+        private Supplier<MainInputSource> m_inputSourceSupplier;
+
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            initializer.computeOnValueChange(TomlContentRef.class);
+            initializer.computeOnValueChange(MainInputSourceRef.class);
+            initializer.computeAfterOpenDialog();
+            m_tomlContentSupplier = initializer.getValueSupplier(TomlContentRef.class);
+            m_inputSourceSupplier = initializer.getValueSupplier(MainInputSourceRef.class);
+        }
+
+        @Override
+        public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
+            final MainInputSource inputSource = m_inputSourceSupplier.get();
+
+            // Only validate for TOML_EDITOR mode
+            if (inputSource != MainInputSource.TOML_EDITOR) {
+                return Optional.empty();
+            }
+
+            final String tomlContent = m_tomlContentSupplier.get();
+            return PixiTomlValidator.toMessage(PixiTomlValidator.validatePlatforms(tomlContent));
         }
     }
 

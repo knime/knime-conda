@@ -54,9 +54,11 @@ import java.util.function.Supplier;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.webui.node.dialog.defaultdialog.internal.widget.WidgetInternal;
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
+import org.knime.node.parameters.migration.Migrate;
 import org.knime.node.parameters.persistence.NodeParametersPersistor;
 import org.knime.node.parameters.persistence.Persist;
 import org.knime.node.parameters.persistence.Persistor;
@@ -85,9 +87,9 @@ final class CondaEnvironmentPropagationNodeParameters implements NodeParameters 
     @TextMessage(InfoMessageProvider.class)
     Void m_infoMessage;
 
-    @Widget(title = "Conda Environment Name", //
+    @Widget(title = "Conda environment name", //
         description = """
-                    This is the name of the conda environment that will be created by conda in its default location,
+                This is the name of the conda environment that will be created by conda in its default location,
                 matching the name of the captured environment. If an environment with the same name exists, and
                 the environment validation is configured accordingly, an existing environment with matching name
                 will be used instead of creating a new environment.
@@ -97,14 +99,19 @@ final class CondaEnvironmentPropagationNodeParameters implements NodeParameters 
     @Persist(configKey = CondaEnvironmentPropagationNodeModel.CFG_KEY_CONDA_ENV)
     String m_environmentNameModel = "";
 
-    @Widget(title = "Package environment (Pixi TOML)", //
-        description = "This read-only field displays the included packages as a Pixi TOML configuration. "
-            + "To modify the environment, copy this TOML and paste it into the Pixi Environment Creator (TOML) node.")
+    @SuppressWarnings("restriction")
+    @WidgetInternal(readOnly = true)
+    @Widget(title = "Environment specification (Pixi TOML)", //
+        description = """
+                This read-only field displays the included packages as a Pixi TOML configuration.
+                To modify the environment, copy this TOML and paste it into the Python Environment
+                Provider node, under the "TOML" environment specification mode.
+                """)
     @TextAreaWidget(rows = 15)
     @Effect(predicate = AlwaysTrue.class, type = EffectType.DISABLE)
     @ValueProvider(PixiTomlDisplayProvider.class)
-    @Persistor(PixiTomlPersistor.class)
-    String m_pixiTomlDisplay = "";
+    @Migrate(loadDefaultIfAbsent = true)
+    String m_pixiTomlDisplay = null;
 
     @Widget(title = "Environment validation", //
         description = "Determines how the environment is validated during node execution.")
@@ -162,17 +169,15 @@ final class CondaEnvironmentPropagationNodeParameters implements NodeParameters 
         }
     }
 
-    /**
-     * Provider for the info message displayed at the top of the dialog.
-     */
     static final class InfoMessageProvider implements StateProvider<Optional<TextMessage.Message>> {
 
         @Override
         public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
-            return Optional.of(new TextMessage.Message("Read-only mode on Hub",
-                "To modify the environment, copy the Pixi TOML below and paste it into the "
-                    + "Pixi Environment Creator (TOML) node.",
-                MessageType.INFO));
+            return Optional.of(new TextMessage.Message("Read-only mode on Hub", """
+                    The environment specification captured by the Conda Environment Propagation node is
+                    read-only on the Hub. To modify the environment, copy this TOML and paste it into
+                    the Python Environment Provider node, in the "TOML" environment specification mode.
+                                """, MessageType.INFO));
         }
 
         @Override
@@ -193,8 +198,8 @@ final class CondaEnvironmentPropagationNodeParameters implements NodeParameters 
         @Override
         public String computeState(final NodeParametersInput context) {
             var packageConfig = m_condaPackagesConfigProvider.get();
-            return CondaPackageToTomlConverter.convertToPixiToml(
-                packageConfig.getIncludedPackages(), m_sourceOperatingSystemProvider.get());
+            return CondaPackageToTomlConverter.convertToPixiToml(packageConfig.getIncludedPackages(),
+                m_sourceOperatingSystemProvider.get());
         }
 
         @Override
@@ -205,9 +210,6 @@ final class CondaEnvironmentPropagationNodeParameters implements NodeParameters 
         }
     }
 
-    /**
-     * Custom persistor for validation method enum to string conversion.
-     */
     static final class ValidationMethodPersistor implements NodeParametersPersistor<ValidationMethod> {
         @Override
         public ValidationMethod load(final NodeSettingsRO settings) throws InvalidSettingsException {
@@ -238,9 +240,6 @@ final class CondaEnvironmentPropagationNodeParameters implements NodeParameters 
         }
     }
 
-    /**
-     * Custom persistor for CondaPackagesConfig.
-     */
     static final class CondaPackagesConfigPersistor implements NodeParametersPersistor<CondaPackagesConfig> {
         @Override
         public CondaPackagesConfig load(final NodeSettingsRO settings) throws InvalidSettingsException {
@@ -259,27 +258,4 @@ final class CondaEnvironmentPropagationNodeParameters implements NodeParameters 
             return new String[][]{{"included_packages"}, {"excluded_packages"}};
         }
     }
-
-    /**
-     * Custom persistor that doesn't load or save anything, for the TOML that is computed from other values.
-     */
-    static final class PixiTomlPersistor implements NodeParametersPersistor<String> {
-        private static final String CFG_KEY = "generated_pixi_toml";
-
-        @Override
-        public String load(final NodeSettingsRO settings) throws InvalidSettingsException {
-            return settings.getString(CFG_KEY, null);
-        }
-
-        @Override
-        public void save(final String obj, final NodeSettingsWO settings) {
-            settings.addString(CFG_KEY, obj);
-        }
-
-        @Override
-        public String[][] getConfigPaths() {
-            return new String[0][];
-        }
-    }
-
 }

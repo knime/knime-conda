@@ -25,6 +25,7 @@ import org.knime.core.node.port.PortType;
 import org.knime.core.node.port.PortTypeRegistry;
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
+import org.knime.python3.processprovider.PythonProcessProvider;
 
 /**
  * Port object containing information about a Python environment.
@@ -136,14 +137,14 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	}
 
 	/**
-	 * Get a PythonCommand that can be used to execute Python in this environment.
+	 * Get a PythonProcessProvider that can be used to execute Python in this environment.
 	 * This method ensures the environment is installed before returning the
 	 * command.
 	 *
 	 * @return a PixiPythonCommand for this environment
 	 * @throws IOException if the environment cannot be installed
 	 */
-	public PythonCommand getPythonCommand() throws IOException {
+	public PythonProcessProvider getPythonCommand() throws IOException {
 		try {
 			installPixiEnvironment(null, PixiInstallationProgressReporter.NoOpProgressReporter.INSTANCE);
 		} catch (CanceledExecutionException ex) {

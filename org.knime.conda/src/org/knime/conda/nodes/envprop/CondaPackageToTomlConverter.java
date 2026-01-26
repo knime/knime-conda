@@ -50,6 +50,7 @@ package org.knime.conda.nodes.envprop;
 
 import java.io.StringWriter;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -112,9 +113,8 @@ final class CondaPackageToTomlConverter {
                     if (pkg.getChannel() != null && !pkg.getChannel().isBlank()) {
                         packageSpec.set("channel", pkg.getChannel());
                     }
-                    // Use quoted key if package name contains dots to prevent it from being interpreted as nested path
-                    final String packageKey = pkg.getName().contains(".") ? "\"" + pkg.getName() + "\"" : pkg.getName();
-                    dependencies.set(packageKey, packageSpec);
+                    // Use singletonList to prevent nightconfig from interpreting dots as path separators
+                    dependencies.set(Collections.singletonList(pkg.getName()), packageSpec);
                 }
             }
         }
@@ -125,9 +125,8 @@ final class CondaPackageToTomlConverter {
             final CommentedConfig pypiDependencies = CommentedConfig.inMemory();
             for (final CondaPackageSpec pkg : packages) {
                 if (pkg.getName() != null && !pkg.getName().isBlank() && "pypi".equals(pkg.getChannel())) {
-                    // Use quoted key if package name contains dots to prevent it from being interpreted as nested path
-                    final String packageKey = pkg.getName().contains(".") ? "\"" + pkg.getName() + "\"" : pkg.getName();
-                    pypiDependencies.set(packageKey, formatVersionConstraint(pkg));
+                    // Use singletonList to prevent nightconfig from interpreting dots as path separators
+                    pypiDependencies.set(Collections.singletonList(pkg.getName()), formatVersionConstraint(pkg));
                 }
             }
             config.set("pypi-dependencies", pypiDependencies);

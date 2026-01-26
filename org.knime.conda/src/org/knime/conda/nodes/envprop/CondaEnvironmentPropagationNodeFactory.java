@@ -62,6 +62,7 @@ import org.knime.core.webui.node.dialog.defaultdialog.DefaultNodeDialog;
 
 /**
  * @author Marcel Wiedenmann, KNIME GmbH, Konstanz, Germany
+ * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  */
 public final class CondaEnvironmentPropagationNodeFactory extends NodeFactory<CondaEnvironmentPropagationNodeModel>
     implements NodeDialogFactory {
@@ -97,6 +98,14 @@ public final class CondaEnvironmentPropagationNodeFactory extends NodeFactory<Co
     @Override
     public CondaEnvironmentPropagationNodeModel createNodeModel() {
         return new CondaEnvironmentPropagationNodeModel();
+    }
+
+    /**
+     * @since 5.10
+     */
+    @Override
+    public boolean hasNodeDialog() {
+        return HAS_WEBUI_DIALOG;
     }
 
     @Override

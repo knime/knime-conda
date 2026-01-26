@@ -11,7 +11,8 @@
 			<p>
 				<b>Note:</b> When used on KNIME Hub, this node displays a read-only view of the
 				configured environment. To configure custom Python or R environments when editing workflows
-				on the KNIME Hub, use the <i>Python Environment Provider</i> or <i>R Environment Provider</i> nodes instead. 
+				on the KNIME Hub, use the hidden <i>Python Environment Provider</i> or, starting with
+				Analytics Platform 5.11, <i>R Environment Provider</i> nodes instead.
 			</p>
 			This node ensures the existence of a specific configurable Conda environment and propagates the environment to
 			Python, R, or other Conda-aware downstream nodes. This is useful to make workflows that

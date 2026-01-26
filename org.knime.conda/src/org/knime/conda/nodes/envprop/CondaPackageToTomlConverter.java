@@ -51,7 +51,7 @@ package org.knime.conda.nodes.envprop;
 import java.io.StringWriter;
 import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Locale;
 
 import org.knime.conda.CondaPackageSpec;
 
@@ -89,7 +89,7 @@ final class CondaPackageToTomlConverter {
             .map(CondaPackageSpec::getChannel)
             .filter(channel -> channel != null && !channel.isBlank())
             .distinct()
-            .collect(Collectors.toList());
+            .toList();
 
         // [workspace] section
         final CommentedConfig workspace = CommentedConfig.inMemory();
@@ -163,7 +163,7 @@ final class CondaPackageToTomlConverter {
         if (sourceOs == null || sourceOs.isBlank()) {
             return "unknown";
         }
-        switch (sourceOs.toLowerCase()) {
+        switch (sourceOs.toLowerCase(Locale.ROOT)) {
         case "linux":
             return "Linux";
         case "mac":
@@ -181,7 +181,7 @@ final class CondaPackageToTomlConverter {
      * @return A formatted macOS name with architecture (e.g., "macOS (Apple Silicon)" or "macOS (Intel)")
      */
     private static String formatMacOsName() {
-        final String arch = System.getProperty("os.arch", "").toLowerCase();
+        final String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
         if (arch.contains("aarch64") || arch.contains("arm64")) {
             return "macOS (Apple Silicon)";
         } else if (arch.contains("x86_64") || arch.contains("amd64")) {

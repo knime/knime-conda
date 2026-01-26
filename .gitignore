@@ -5,13 +5,12 @@ target/
 */.polyglot.build.properties
 **/.flattened-pom.xml
 **/CHANGELOG.md
+*.jar
 
 # Do not ignore pixi binaries
 !org.knime.conda.pixi.bin.linux.x86_64/bin/
 !org.knime.conda.pixi.bin.macosx.x86_64/bin/
 !org.knime.conda.pixi.bin.macosx.aarch64/bin/
 !org.knime.conda.pixi.bin.win32.x86_64/bin/
-org.knime.conda/lib/core-3.8.3-sources.jar
-org.knime.conda/lib/core-3.8.3.jar
-org.knime.conda/lib/toml-3.8.3-sources.jar
-org.knime.conda/lib/toml-3.8.3.jar
+
+

@@ -1,4 +1,4 @@
-The jars for org.knime.conda.envinstall need to be fetched from maven. This can be done with:
+The jars for org.knime.conda need to be fetched from maven. This can be done with:
 
 cd fetch_jars
 mvn clean package

@@ -1,0 +1,13 @@
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** 
+Please see below the General Public License (GPL), Version 3, 
+and the Additional Permissions according to Sec. 7 
+applying to the files in this folder:
+
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** 
+
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 3, 29 June 2007
+
+ Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.

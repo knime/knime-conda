@@ -50,8 +50,10 @@ package org.knime.pixi.port;
 
 import java.nio.file.Path;
 
+import org.knime.python3.processprovider.PythonProcessProvider;
+
 /**
- * Pixi-specific implementation of {@link PythonCommand}. Executes Python
+ * Pixi-specific implementation of {@link PythonProcessProvider}. Executes Python
  * processes via {@code pixi run python} to ensure proper environment activation
  * and variable setup.
  * <P>
@@ -64,7 +66,7 @@ import java.nio.file.Path;
 public final class PixiPythonCommand extends AbstractPixiPythonCommand {
 
 	/**
-	 * Constructs a {@link PythonCommand} that describes a Python process run via
+	 * Constructs a {@link PythonProcessProvider} that describes a Python process run via
 	 * pixi in the environment identified by the given pixi.toml manifest file.<br>
 	 * The validity of the given arguments is not tested.
 	 *
@@ -78,7 +80,7 @@ public final class PixiPythonCommand extends AbstractPixiPythonCommand {
 	}
 
 	/**
-	 * Constructs a {@link PythonCommand} that describes a Python process run via
+	 * Constructs a {@link PythonProcessProvider} that describes a Python process run via
 	 * pixi in the default environment identified by the given pixi.toml manifest
 	 * file.<br>
 	 * The validity of the given arguments is not tested.

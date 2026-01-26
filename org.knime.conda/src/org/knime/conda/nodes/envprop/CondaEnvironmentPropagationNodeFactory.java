@@ -68,7 +68,7 @@ public final class CondaEnvironmentPropagationNodeFactory extends NodeFactory<Co
     implements NodeDialogFactory {
 
     private static final boolean HAS_WEBUI_DIALOG = //
-        "js".equals(System.getProperty("org.knime.scripting.ui.mode")) // feature flag for new Scripting dialogs
+        "js".equals(System.getProperty("org.knime.conda.envprop.ui.mode")) // feature flag for Conda webUI dialog
             || Boolean.getBoolean("java.awt.headless"); // headless (remote workflow editing) -> we enforce webUI dialog
 
     /** Provides a function to select an default environment from a list of environments. */

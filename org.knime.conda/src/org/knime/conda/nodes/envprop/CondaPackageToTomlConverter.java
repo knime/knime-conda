@@ -112,7 +112,9 @@ final class CondaPackageToTomlConverter {
                     if (pkg.getChannel() != null && !pkg.getChannel().isBlank()) {
                         packageSpec.set("channel", pkg.getChannel());
                     }
-                    dependencies.set(pkg.getName(), packageSpec);
+                    // Use quoted key if package name contains dots to prevent it from being interpreted as nested path
+                    final String packageKey = pkg.getName().contains(".") ? "\"" + pkg.getName() + "\"" : pkg.getName();
+                    dependencies.set(packageKey, packageSpec);
                 }
             }
         }
@@ -123,7 +125,9 @@ final class CondaPackageToTomlConverter {
             final CommentedConfig pypiDependencies = CommentedConfig.inMemory();
             for (final CondaPackageSpec pkg : packages) {
                 if (pkg.getName() != null && !pkg.getName().isBlank() && "pypi".equals(pkg.getChannel())) {
-                    pypiDependencies.set(pkg.getName(), formatVersionConstraint(pkg));
+                    // Use quoted key if package name contains dots to prevent it from being interpreted as nested path
+                    final String packageKey = pkg.getName().contains(".") ? "\"" + pkg.getName() + "\"" : pkg.getName();
+                    pypiDependencies.set(packageKey, formatVersionConstraint(pkg));
                 }
             }
             config.set("pypi-dependencies", pypiDependencies);

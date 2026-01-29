@@ -103,9 +103,8 @@ final class CondaEnvironmentPropagationNodeParameters implements NodeParameters 
     @WidgetInternal(readOnly = true)
     @Widget(title = "Environment specification (Pixi TOML)", //
         description = """
-                This read-only field displays the included packages as a Pixi TOML configuration.
-                To modify the environment, copy this TOML and paste it into the Python Environment
-                Provider node, under the "TOML" environment specification mode.
+                This read-only field displays the included packages as a Pixi TOML configuration, because the
+                environment cannot be modified on the Hub.
                 """)
     @TextAreaWidget(rows = 15)
     @Effect(predicate = AlwaysTrue.class, type = EffectType.DISABLE)
@@ -175,8 +174,7 @@ final class CondaEnvironmentPropagationNodeParameters implements NodeParameters 
         public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
             return Optional.of(new TextMessage.Message("Read-only mode on Hub", """
                     The environment specification captured by the Conda Environment Propagation node is
-                    read-only on the Hub. To modify the environment, copy this TOML and paste it into
-                    the Python Environment Provider node, in the "TOML" environment specification mode.
+                    read-only on the Hub.
                                 """, MessageType.INFO));
         }
 

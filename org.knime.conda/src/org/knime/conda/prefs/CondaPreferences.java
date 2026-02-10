@@ -87,7 +87,7 @@ public final class CondaPreferences {
 
     static final String PIXI_ENV_PATH_KEY = "pixiEnvironmentBasePath";
 
-    private static Path pixiEnvsTempDir = null;
+    private static volatile Path pixiEnvsTempDir = null;
 
     private CondaPreferences() {
     }
@@ -268,34 +268,36 @@ public final class CondaPreferences {
     /**
      * @since 5.11
      * @return The base path where pixi environments are stored. If the preference to use temporary directories is set,
-     *         a temporary directory is created on first. Subsequent calls will return the same temporary directory.
+     *         a temporary directory is created on first call. Subsequent calls will return the same temporary directory.
      */
     public static Path getPixiEnvPath() {
         if (PREF_STORE.getBoolean(PIXI_ENVS_ARE_TEMPORARY_KEY)) {
-            if (pixiEnvsTempDir != null) {
+            synchronized (CondaPreferences.class) {
+                if (pixiEnvsTempDir == null) {
+                    try {
+                        pixiEnvsTempDir = PathUtils.createTempDir("pixi-envs-");
+                    } catch (IOException ex) {
+                        throw new IllegalStateException(
+                            "Unable to create temporary directory for pixi environments.", ex);
+                    }
+                }
                 return pixiEnvsTempDir;
-            }
-            try {
-                pixiEnvsTempDir = PathUtils.createTempDir("pixi-envs-");
-                return pixiEnvsTempDir;
-            } catch (IOException ex) {
-                throw new IllegalStateException("Unable to create temporary directory for pixi environments.", ex);
             }
         }
-        Path file_path;
+        Path filePath;
         String configuredPath = PREF_STORE.getString(PIXI_ENV_PATH_KEY);
         try {
-            file_path = Path.of(configuredPath);
+            filePath = Path.of(configuredPath);
         } catch (Exception e) {
             throw new InvalidPathException(configuredPath,
                 "The configured base directory for pixi environments '" + configuredPath + "' is not valid.");
         }
         try {
-            Files.createDirectories(file_path);
+            Files.createDirectories(filePath);
         } catch (IOException ex) {
             throw new IllegalStateException(
                 "Unable to create base directory for pixi environments at '" + configuredPath + "'.", ex);
         }
-        return file_path;
+        return filePath;
     }
 }

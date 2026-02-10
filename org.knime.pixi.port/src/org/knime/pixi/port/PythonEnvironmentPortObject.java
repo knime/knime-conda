@@ -17,9 +17,11 @@ import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeLogger;
+import org.knime.core.node.context.ports.PortsConfiguration;
 import org.knime.core.node.ModelContentRO;
 import org.knime.core.node.ModelContentWO;
 import org.knime.core.node.port.AbstractSimplePortObject;
+import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.port.PortType;
 import org.knime.core.node.port.PortTypeRegistry;
@@ -129,10 +131,10 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 				LOGGER.debug(
 						"Custom path not available (" + normalizedPath + "), falling back to hash-based directory");
 				// Don't cache this fallback path - use the hash-based one
-				return resolveProjectDirectory(m_pixiTomlContent, null);
+				return PixiUtils.resolveProjectDirectory(m_pixiTomlContent, null);
 			}
 		} else {
-			return resolveProjectDirectory(m_pixiTomlContent, null);
+			return PixiUtils.resolveProjectDirectory(m_pixiTomlContent, null);
 		}
 	}
 
@@ -157,6 +159,76 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 				+ Files.exists(tomlPath) + ", tomlAbsolute=" + tomlPath.toAbsolutePath().normalize());
 		return new PixiPythonCommand(tomlPath, "default");
 	}
+	
+	/**
+	 * Check if a PortObject is a PythonEnvironmentPortObject.
+	 *
+	 * @param portObject the port object to check
+	 * @return true if the port object is a PythonEnvironmentPortObject
+	 */
+	public static boolean isPythonEnvironmentPortObject(final PortObject portObject) {
+		return portObject instanceof PythonEnvironmentPortObject;
+	}
+
+	/**
+	 * Extract the Python command from a PythonEnvironmentPortObject.
+	 *
+	 * @param portObject the port object (may be null if optional port is not connected)
+	 * @return the Python command, or null if the port is not connected or not a PythonEnvironmentPortObject
+	 * @throws IOException if the Python command cannot be obtained from the environment
+	 */
+	public static PythonProcessProvider extractPythonCommand(final PortObject portObject) throws IOException {
+		if (portObject == null || !isPythonEnvironmentPortObject(portObject)) {
+			return null;
+		}
+		return ((PythonEnvironmentPortObject) portObject).getPythonCommand();
+	}
+
+	/**
+     * Install the Python environment port if present, with progress reporting.
+     * This should be called early in node execution to avoid installation timeout issues.
+     * Installation is thread-safe and will only happen once even if called multiple times.
+     *
+     * @param config the ports configuration
+     * @param inObjects the input port objects
+     * @param exec the execution monitor for progress reporting and cancellation
+     * @throws IOException if installation fails
+     * @throws CanceledExecutionException if the operation is canceled
+     */
+    public static void installPythonEnvironmentWithProgress(
+            final PortsConfiguration config, final PortObject[] inObjects, final ExecutionMonitor exec)
+            throws IOException, CanceledExecutionException {
+            // Find the Python environment port in the input objects
+            final PortType[] inTypes = config.getInputPorts();
+            PythonEnvironmentPortObject envPort = null;
+            for (int i = 0; i < inTypes.length && i < inObjects.length; i++) {
+                if (inObjects[i] instanceof PythonEnvironmentPortObject) {
+                    envPort = (PythonEnvironmentPortObject) inObjects[i];
+                    break;
+                }
+            }
+            
+            // If found, install the environment
+            if (envPort != null) {
+                exec.setMessage("Installing Python environment...");
+                // Create simulated progress reporter that maps internal progress to node progress
+                final PixiInstallationProgressReporter progressReporter = new PixiInstallationProgressReporter() {
+                    @Override
+                    public void setProgress(final double fraction, final String message) {
+                        exec.setProgress(fraction, message);
+                    }
+
+                    @Override
+                    public void checkCanceled() throws CanceledExecutionException {
+                        exec.checkCanceled();
+                    }
+                };
+                
+                // Use simulated progress since we don't yet capture pixi output
+                envPort.installPixiEnvironment(exec, 
+                    PixiInstallationProgressReporter.createSimulated(progressReporter));
+            }
+    }
 
 	/**
 	 * Install the Pixi environment represented by this port object if it is not
@@ -213,6 +285,9 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 					try {
 						LOGGER.debug("Thread " + Thread.currentThread().getName() + 
 							" starting installation to " + installDir);
+						// Respect cancellation before starting the actual installation
+						exec.checkCanceled();
+						progressReporter.checkCanceled();
 						performInstallation(progressReporter);
 						newGlobalFuture.complete(null);
 						newFuture.complete(null);
@@ -367,40 +442,18 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 		}
 	}
 
-	private static Path resolveProjectDirectory(final String manifestText, final Path tomlFilePath) throws IOException {
-		// If a file path is provided, use that file's parent directory
-		if (tomlFilePath != null) {
-			if (!Files.exists(tomlFilePath)) {
-				throw new IOException("Provided pixi.toml file does not exist: " + tomlFilePath);
-			}
-			if (!Files.isRegularFile(tomlFilePath)) {
-				throw new IOException("Provided pixi.toml path is not a file: " + tomlFilePath);
-			}
-			return tomlFilePath.getParent();
-		}
-
-		// Otherwise, use the preference-based directory
-		if (manifestText == null || manifestText.isBlank()) {
-			throw new IOException("Manifest content is empty");
-		}
-
-		final Path projectDir = PixiEnvMapping.resolvePixiEnvDirectory(manifestText);
-		Files.createDirectories(projectDir);
-
-		final Path manifestPath = projectDir.resolve("pixi.toml");
-		if (!Files.exists(manifestPath)) {
-			Files.writeString(manifestPath, manifestText, StandardCharsets.UTF_8);
-		}
-		return projectDir;
+	private static String getMessageFromCallResult(final PixiBinary.CallResult callResult) {
+		return PixiUtils.getMessageFromCallResult(callResult);
 	}
 
-	private static String getMessageFromCallResult(final PixiBinary.CallResult callResult) {
-		final String stdout = callResult.stdout() == null ? "" : callResult.stdout();
-		final String stderr = callResult.stderr() == null ? "" : callResult.stderr();
+	@Override
+	public PythonEnvironmentPortObjectSpec getSpec() {
+		return PythonEnvironmentPortObjectSpec.INSTANCE;
+	}
 
-		return "pixi install failed (exit code " + callResult.returnCode() + ").\n"
-				+ (stderr.isBlank() ? "" : "---- stderr ----\n" + stderr + "\n")
-				+ (stdout.isBlank() ? "" : "---- stdout ----\n" + stdout + "\n");
+	@Override
+	public JComponent[] getViews() {
+		return new JComponent[] {};
 	}
 
 	@Override
@@ -425,20 +478,11 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	@Override
 	public String getSummary() {
 		try {
-			return "Pixi Environment: " + getPixiEnvironmentPath();
+			final Path envPath = getPixiEnvironmentPath();
+			return "Pixi Environment: " + envPath.toString();
 		} catch (IOException e) {
 			return "Pixi Environment (path unavailable)";
 		}
-	}
-
-	@Override
-	public PythonEnvironmentPortObjectSpec getSpec() {
-		return PythonEnvironmentPortObjectSpec.INSTANCE;
-	}
-
-	@Override
-	public JComponent[] getViews() {
-		return new JComponent[] {};
 	}
 
 }

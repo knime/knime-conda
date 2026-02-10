@@ -296,7 +296,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
                 // List all subdirectories in bundling/ that contain pixi.toml
                 // Structure: bundling/<some_name>/pixi.toml
-                var environments = Files.list(bundlingRoot).filter(Files::isDirectory).filter(dir -> {
+                List<String> environments = Files.list(bundlingRoot).filter(Files::isDirectory).filter(dir -> {
                     Path tomlPath = dir.resolve("pixi.toml");
                     boolean hasToml = Files.exists(tomlPath);
                     LOGGER.debug("Checking " + dir.getFileName() + ": pixi.toml " + (hasToml ? "found" : "not found"));
@@ -487,13 +487,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         @Override
         protected boolean isMultiUse() {
             return true; // Allow re-locking
-        }
-
-        private static String getMessageFromCallResult(final CallResult callResult) {
-            final String stdout = callResult.stdout() == null ? "" : callResult.stdout();
-            final String stderr = callResult.stderr() == null ? "" : callResult.stderr();
-            return "Exit code " + callResult.returnCode() + "\n" + (stderr.isBlank() ? "" : "stderr:\n" + stderr + "\n")
-                + (stdout.isBlank() ? "" : "stdout:\n" + stdout);
         }
     }
 

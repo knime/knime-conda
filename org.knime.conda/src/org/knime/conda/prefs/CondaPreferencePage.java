@@ -144,7 +144,7 @@ public final class CondaPreferencePage extends FieldEditorPreferencePage impleme
         m_pixiBody.setLayout(new GridLayout(2, false));
 
         m_useTempPixiEnv = new BooleanFieldEditor(CondaPreferences.PIXI_ENVS_ARE_TEMPORARY_KEY,
-            "Store pixi environments temporary", m_pixiBody);
+            "Store pixi environments temporarily", m_pixiBody);
         addField(m_useTempPixiEnv);
 
         m_pixiEnvDir = new DirectoryFieldEditor(CondaPreferences.PIXI_ENV_PATH_KEY,

@@ -4,7 +4,7 @@
       <extension
             point="org.knime.core.PortType">
             <portObject
-                  color="#4CAF50"
+                  color="#FFDD99"
                   hidden="false"
                   name="Python Environment"
                   objectClass="org.knime.pixi.port.PythonEnvironmentPortObject"

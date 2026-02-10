@@ -7,9 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Map;
 
-import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
-import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 
 /**
  * Utilities for working with Pixi environments

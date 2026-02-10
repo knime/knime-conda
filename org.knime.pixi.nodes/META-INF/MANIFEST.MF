@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: KNIME Conda
 Bundle-SymbolicName: org.knime.pixi.nodes;singleton:=true
-Bundle-Version: 5.9.0.qualifier
+Bundle-Version: 5.11.0.qualifier
 Bundle-Vendor: KNIME AG, Zurich, Switzerland
 Require-Bundle: org.apache.commons.lang3;bundle-version="[3.9.0,4.0.0)",
  org.yaml.snakeyaml;bundle-version="[2.4.0,3.0.0)",
@@ -11,7 +11,7 @@ Require-Bundle: org.apache.commons.lang3;bundle-version="[3.9.0,4.0.0)",
  org.knime.conda.envinstall;bundle-version="5.10.0",
  org.knime.conda;bundle-version="5.9.0",
  org.knime.conda.envbundling;bundle-version="5.9.0",
- org.knime.pixi.port;bundle-version="5.10.0",
+ org.knime.pixi.port;bundle-version="5.11.0",
  org.apache.commons.commons-io,
  org.knime.filehandling.core;bundle-version="[5.10.0,6.0.0)"
 Bundle-ClassPath: lib/core-3.8.3.jar,

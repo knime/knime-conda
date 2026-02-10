@@ -266,7 +266,7 @@ public final class CondaPreferences {
     }
 
     /**
-     * @since 5.10
+     * @since 5.11
      * @return The base path where pixi environments are stored. If the preference to use temporary directories is set,
      *         a temporary directory is created on first. Subsequent calls will return the same temporary directory.
      */

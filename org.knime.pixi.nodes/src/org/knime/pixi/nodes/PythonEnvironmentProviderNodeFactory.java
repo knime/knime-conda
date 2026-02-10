@@ -80,7 +80,7 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
 
     private static DefaultNode buildNodeDefinition() {
         return DefaultNode.create().name("Python Environment Provider (Preview)") //
-            .icon("icon.png") //
+            .icon("python.png") //
             .shortDescription("Provides a Python environment to downstream nodes") //
             .fullDescription( //
                 """

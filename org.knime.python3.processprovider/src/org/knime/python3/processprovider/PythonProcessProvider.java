@@ -13,7 +13,7 @@ import java.nio.file.Path;
  * @author Christian Dietz, KNIME GmbH, Konstanz, Germany
  * @author Benjamin Wilhelm, KNIME GmbH, Konstanz, Germany
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
- * @since 5.10
+ * @since 5.11
  */
 public interface PythonProcessProvider {
 

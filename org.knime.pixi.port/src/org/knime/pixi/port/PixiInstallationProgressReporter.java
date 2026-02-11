@@ -56,7 +56,7 @@ import org.knime.core.node.CanceledExecutionException;
  * monitor, console, etc.).
  *
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
- * @since 5.10
+ * @since 5.11
  */
 public interface PixiInstallationProgressReporter {
 

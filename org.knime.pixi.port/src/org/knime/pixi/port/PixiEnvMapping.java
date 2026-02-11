@@ -63,6 +63,7 @@ import org.knime.core.node.NodeLogger;
 /**
  *
  * @author Marc Lehner
+ * @since 5.11
  */
 public class PixiEnvMapping {
 

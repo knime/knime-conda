@@ -56,7 +56,7 @@ import org.eclipse.core.runtime.Platform;
  * Utility class for resolving bundled Pixi environment paths.
  *
  * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
- * @since 5.10
+ * @since 5.11
  */
 final class PixiBundlingUtils {
 

@@ -66,6 +66,7 @@ import org.knime.python3.processprovider.PythonProcessProvider;
  * {@link #hashCode()}, {@link #equals(Object)}, and {@link #toString()}.
  *
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
+ * @since 5.11
  */
 abstract class AbstractPixiPythonCommand implements PythonProcessProvider {
 

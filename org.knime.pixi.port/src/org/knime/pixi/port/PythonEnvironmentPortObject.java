@@ -33,7 +33,7 @@ import org.knime.python3.processprovider.PythonProcessProvider;
  * Port object containing information about a Python environment.
  *
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
- * @since 5.10
+ * @since 5.11
  */
 public final class PythonEnvironmentPortObject extends AbstractSimplePortObject {
 

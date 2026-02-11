@@ -13,7 +13,9 @@ import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
  * Utilities for working with Pixi environments
  *
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
+ * @since 5.11
  */
+
 @SuppressWarnings("restriction")
 public final class PixiUtils {
     private PixiUtils() {

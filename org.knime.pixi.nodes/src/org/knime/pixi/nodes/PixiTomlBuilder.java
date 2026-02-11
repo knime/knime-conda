@@ -63,7 +63,7 @@ import com.electronwill.nightconfig.toml.TomlWriter;
  * Utility class for building pixi.toml manifest files from package specifications.
  *
  * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
- * @since 5.10
+ * @since 5.11
  */
 public final class PixiTomlBuilder {
 

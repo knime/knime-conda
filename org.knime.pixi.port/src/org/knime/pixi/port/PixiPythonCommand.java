@@ -62,6 +62,7 @@ import org.knime.python3.processprovider.PythonProcessProvider;
  * environment setup automatically.
  *
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
+ * @since 5.11
  */
 public final class PixiPythonCommand extends AbstractPixiPythonCommand {
 

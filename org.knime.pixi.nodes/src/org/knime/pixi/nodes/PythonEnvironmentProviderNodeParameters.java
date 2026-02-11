@@ -96,7 +96,7 @@ import org.knime.pixi.port.PixiUtils;
  * file reader approaches.
  *
  * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
- * @since 5.10
+ * @since 5.11
  */
 @SuppressWarnings("restriction")
 public class PythonEnvironmentProviderNodeParameters implements NodeParameters {

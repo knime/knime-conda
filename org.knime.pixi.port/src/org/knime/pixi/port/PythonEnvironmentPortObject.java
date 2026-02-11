@@ -46,7 +46,6 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 
 	private static final NodeLogger LOGGER = NodeLogger.getLogger(PythonEnvironmentPortObject.class);
 
-	private static final String CFG_PIXI_ENV_PATH = "pixi_environment_path";
 	private static final String CFG_PIXI_TOML_CONTENT = "pixi_toml_content";
 	private static final String CFG_PIXI_LOCK_CONTENT = "pixi_lock_content";
 
@@ -61,8 +60,6 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	private String m_pixiTomlContent;
 
 	private String m_pixiLockContent;
-
-	private Path m_pixiEnvironmentPath;
 
 	/**
 	 * Future tracking the installation operation for this specific port object
@@ -97,45 +94,13 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 		LOGGER.debug("Created PythonEnvironmentPortObject without predefined path.");
 	}
 
-	public PythonEnvironmentPortObject(String pixiTomlContent, String pixiLockContent, Path pixiEnvironmentPath) {
-		m_pixiTomlContent = pixiTomlContent;
-		m_pixiLockContent = pixiLockContent;
-		m_pixiEnvironmentPath = pixiEnvironmentPath;
-		LOGGER.debug("Created PythonEnvironmentPortObject with predefined path: " + pixiEnvironmentPath);
-	}
-
 	/**
 	 * @return the path to the pixi project directory on disk (containing pixi.toml
 	 *         and .pixi/)
 	 * @throws IOException if the path cannot be resolved
 	 */
 	public Path getPixiEnvironmentPath() throws IOException {
-		if (m_pixiEnvironmentPath != null) {
-			// Custom path provided - normalize it to remove .. segments
-			final Path normalizedPath = m_pixiEnvironmentPath.toAbsolutePath().normalize();
-
-			// Check if it exists and has installed environment
-			LOGGER.debug("Checking custom path: " + normalizedPath);
-			LOGGER.debug("Path exists: " + Files.exists(normalizedPath));
-
-			final Path envDir = normalizedPath.resolve(".pixi").resolve("envs").resolve("default");
-			LOGGER.debug("Expected env dir: " + envDir);
-			LOGGER.debug("Env dir exists: " + Files.exists(envDir));
-
-			if (Files.exists(normalizedPath) && Files.exists(envDir)) {
-				LOGGER.debug("Using custom environment path (exists and installed): " + normalizedPath);
-				return normalizedPath;
-			} else {
-				// Path doesn't exist or environment not installed - fall back to hash-based
-				// directory
-				LOGGER.debug(
-						"Custom path not available (" + normalizedPath + "), falling back to hash-based directory");
-				// Don't cache this fallback path - use the hash-based one
-				return PixiUtils.resolveProjectDirectory(m_pixiTomlContent, null);
-			}
-		} else {
-			return PixiUtils.resolveProjectDirectory(m_pixiTomlContent, null);
-		}
+		return PixiUtils.resolveProjectDirectory(m_pixiTomlContent, null);
 	}
 
 	/**
@@ -460,9 +425,6 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	protected void save(final ModelContentWO model, final ExecutionMonitor exec) throws CanceledExecutionException {
 		model.addString(CFG_PIXI_TOML_CONTENT, m_pixiTomlContent);
 		model.addString(CFG_PIXI_LOCK_CONTENT, m_pixiLockContent);
-		if (m_pixiEnvironmentPath != null) {
-			model.addString(CFG_PIXI_ENV_PATH, m_pixiEnvironmentPath.toString());
-		}
 	}
 
 	@Override
@@ -470,9 +432,6 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 			throws InvalidSettingsException, CanceledExecutionException {
 		m_pixiTomlContent = model.getString(CFG_PIXI_TOML_CONTENT);
 		m_pixiLockContent = model.getString(CFG_PIXI_LOCK_CONTENT);
-		if (model.containsKey(CFG_PIXI_ENV_PATH)) {
-			m_pixiEnvironmentPath = Path.of(model.getString(CFG_PIXI_ENV_PATH));
-		}
 	}
 
 	@Override

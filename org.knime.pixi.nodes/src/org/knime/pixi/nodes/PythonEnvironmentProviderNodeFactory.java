@@ -49,8 +49,6 @@
 package org.knime.pixi.nodes;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 import org.knime.core.node.NodeLogger;
 import org.knime.node.DefaultModel.ConfigureInput;
@@ -126,64 +124,6 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                         LOGGER.debug("No lock file - proceeding without lock (may fail on installation)");
                     }
                     portObject = new PythonEnvironmentPortObject(pixiTomlContent, lockToUse);
-                    break;
-
-                case TOML_FILE:
-                case BUNDLING_ENVIRONMENT:
-                    // For file-based or bundled input, determine the project directory (pixi root)
-                    final Path projectDir;
-
-                    if (params.m_mainInputSource == PythonEnvironmentProviderNodeParameters.MainInputSource.TOML_FILE) {
-                        // File-based: get parent directory of selected TOML file
-                        if (params.m_tomlFile == null || params.m_tomlFile.m_path == null) {
-                            throw new IllegalStateException("No TOML file selected.");
-                        }
-                        final Path tomlPath = Path.of(params.m_tomlFile.m_path.getPath());
-                        if (!Files.exists(tomlPath)) {
-                            throw new IllegalStateException("TOML file does not exist: " + tomlPath);
-                        }
-                        projectDir = tomlPath.getParent();
-                        if (projectDir == null) {
-                            throw new IllegalStateException(
-                                "Cannot determine parent directory of TOML file: " + tomlPath);
-                        }
-                    } else {
-                        // Bundled environment: get directory from bundling root
-                        if (params.m_bundledEnvironment == null || params.m_bundledEnvironment.isEmpty()) {
-                            throw new IllegalStateException("No bundled environment selected.");
-                        }
-                        try {
-                            projectDir = PixiBundlingUtils.getBundlingRootPath().resolve(params.m_bundledEnvironment)
-                                .toAbsolutePath().normalize();
-                            final Path bundledTomlPath = projectDir.resolve("pixi.toml");
-                            if (!Files.exists(bundledTomlPath)) {
-                                throw new IllegalStateException(
-                                    "pixi.toml not found in bundled environment: " + bundledTomlPath);
-                            }
-                            LOGGER.debug("Using bundled environment at: " + projectDir);
-                        } catch (Exception e) {
-                            throw new IllegalStateException("Failed to access bundled environment: " + e.getMessage(),
-                                e);
-                        }
-                    }
-
-                    // Get lock content from params (may be from disk or generated)
-                    String lockContent = params.getPixiLockFileContent();
-
-                    // If no lock in params, try reading from disk
-                    if (lockContent == null || lockContent.isBlank()) {
-                        final Path lockPath = projectDir.resolve("pixi.lock");
-                        if (Files.exists(lockPath)) {
-                            lockContent = Files.readString(lockPath);
-                            LOGGER.debug("Read existing lock file from disk (" + lockContent.length() + " bytes)");
-                        } else {
-                            lockContent = "";
-                            LOGGER.debug("No lock file found at " + lockPath);
-                        }
-                    }
-
-                    // Create port object with project directory - same for both file and bundled cases
-                    portObject = new PythonEnvironmentPortObject(pixiTomlContent, lockContent, projectDir);
                     break;
 
                 default:

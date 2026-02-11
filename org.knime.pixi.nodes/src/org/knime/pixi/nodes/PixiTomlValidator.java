@@ -65,7 +65,7 @@ import com.electronwill.nightconfig.toml.TomlParser;
  * Utility class for validating pixi.toml manifests, especially platform configuration.
  *
  * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
- * @since 5.10
+ * @since 5.11
  */
 final class PixiTomlValidator {
 

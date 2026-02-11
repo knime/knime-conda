@@ -63,7 +63,7 @@ import org.knime.pixi.port.PythonEnvironmentPortObjectSpec;
 /**
  *
  * @author Marc Lehner
- * @since 5.10
+ * @since 5.11.0
  */
 public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFactory {
 
@@ -84,7 +84,7 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                 """
                         Provides a Python environment to downstream nodes.
                         """) //
-            .sinceVersion(5, 10, 0).ports(p -> {
+            .sinceVersion(5, 11, 0).ports(p -> {
                 p.addOutputPort("Pixi Environment", "Pixi Python environment information",
                     PythonEnvironmentPortObject.TYPE);
             }).model(modelStage -> modelStage //

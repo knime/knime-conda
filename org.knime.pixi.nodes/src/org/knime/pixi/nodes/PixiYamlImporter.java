@@ -24,7 +24,7 @@ import com.electronwill.nightconfig.toml.TomlWriter;
  * Utility class to import conda environment.yaml files into pixi format
  *
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
- * @since 5.10
+ * @since 5.11
  */
 public final class PixiYamlImporter {
 

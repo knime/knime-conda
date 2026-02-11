@@ -23,7 +23,7 @@ import org.knime.pixi.port.PixiUtils;
  * Utility class for reducing code duplication in Pixi parameter classes.
  *
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
- * @since 5.10
+ * @since 5.11
  */
 @SuppressWarnings("restriction")
 final class PixiParameterUtils {

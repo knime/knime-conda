@@ -66,10 +66,6 @@ import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.ButtonWidget;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
-import org.knime.core.webui.node.dialog.defaultdialog.internal.file.FileReaderWidget;
-import org.knime.core.webui.node.dialog.defaultdialog.internal.file.FileSelection;
-import org.knime.core.webui.node.dialog.defaultdialog.internal.file.FileSelectionWidget;
-import org.knime.core.webui.node.dialog.defaultdialog.internal.file.SingleFileSelectionMode;
 import org.knime.core.webui.node.dialog.defaultdialog.widget.handler.WidgetHandlerException;
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.NodeParametersInput;
@@ -87,7 +83,6 @@ import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
-import org.knime.node.parameters.widget.choices.ChoicesProvider;
 import org.knime.node.parameters.widget.choices.Label;
 import org.knime.node.parameters.widget.choices.StringChoicesProvider;
 import org.knime.node.parameters.widget.choices.ValueSwitchWidget;
@@ -121,21 +116,11 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     }
 
     @After(mainInputSelectionSection.class)
-    static final class tomlFileSection {
-    }
-
-    @After(mainInputSelectionSection.class)
-    static final class bundledEnvironmentSection {
-    }
-
-    @After(mainInputSelectionSection.class)
     static final class yamlEditorSection {
     }
 
     @After(simpleInputSection.class)
     @After(tomlEditorSection.class)
-    @After(tomlFileSection.class)
-    @After(bundledEnvironmentSection.class)
     @After(yamlEditorSection.class)
     static final class lockFileSection {
     }
@@ -144,10 +129,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     enum MainInputSource {
             @Label("Packages")
             SIMPLE, @Label("TOML editor")
-            TOML_EDITOR, @Label("TOML file")
-            TOML_FILE, @Label("YAML editor")
-            YAML_EDITOR, @Label("Bundled environment")
-            BUNDLING_ENVIRONMENT
+            TOML_EDITOR, @Label("YAML editor")
+            YAML_EDITOR
     }
 
     @Widget(title = "Input source", description = "Choose how to define the Python environment")
@@ -206,37 +189,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         }
     }
 
-    // TOML file input
-    @Widget(title = "pixi.toml file",
-        description = "Select the pixi.toml file to read the environment specification from.")
-    @FileSelectionWidget(value = SingleFileSelectionMode.FILE)
-    @FileReaderWidget(fileExtensions = {"toml"})
-    @Layout(tomlFileSection.class)
-    @ValueReference(TomlFileRef.class)
-    @Effect(predicate = InputIsTomlFile.class, type = EffectType.SHOW)
-    FileSelection m_tomlFile = new FileSelection();
-
-    interface TomlFileRef extends ParameterReference<FileSelection> {
-    }
-
-    interface BundledEnvironmentRef extends ParameterReference<String> {
-    }
-
-    static final class InputIsTomlFile implements EffectPredicateProvider {
-        @Override
-        public EffectPredicate init(final PredicateInitializer i) {
-            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.TOML_FILE);
-        }
-    }
-
-    // Bundled environment input
-    @Widget(title = "Bundled environment",
-        description = "Select a pixi environment from the bundled environments directory.")
-    @ChoicesProvider(BundledPixiEnvironmentChoicesProvider.class)
-    @Layout(bundledEnvironmentSection.class)
-    @Effect(predicate = InputIsBundledEnvironment.class, type = EffectType.SHOW)
-    String m_bundledEnvironment;
-
     // YAML editor input
     @Widget(title = "Environment specification (conda environment.yaml)",
         description = """
@@ -268,12 +220,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         }
     }
 
-    static final class InputIsBundledEnvironment implements EffectPredicateProvider {
-        @Override
-        public EffectPredicate init(final PredicateInitializer i) {
-            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.BUNDLING_ENVIRONMENT);
-        }
-    }
 
     /**
      * Provider that lists all pixi environments from the bundling folder that contain a pixi.toml file.
@@ -387,8 +333,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     }
 
     String getPixiTomlFileContent() throws IOException {
-        return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent, m_tomlFile,
-            m_envYamlContent, m_bundledEnvironment, LOGGER);
+        return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent, m_envYamlContent,
+            LOGGER);
     }
 
     // Package specification
@@ -502,18 +448,13 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         @ValueReference(TomlContentRef.class)
         String m_pixiTomlContent;
 
-        @ValueReference(TomlFileRef.class)
-        FileSelection m_tomlFile;
-
         @ValueReference(YamlContentRef.class)
         String m_envYamlContent;
 
-        @ValueReference(BundledEnvironmentRef.class)
-        String m_bundledEnvironment;
 
         String getTomlContent() throws IOException {
-            return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent, m_tomlFile,
-                m_envYamlContent, m_bundledEnvironment, LOGGER);
+            return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent,
+                m_envYamlContent, LOGGER);
         }
     }
 

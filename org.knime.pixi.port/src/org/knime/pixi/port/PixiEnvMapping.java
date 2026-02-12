@@ -65,13 +65,16 @@ import org.knime.core.node.NodeLogger;
  * @author Marc Lehner
  * @since 5.11
  */
-public class PixiEnvMapping {
+final class PixiEnvMapping {
+	
+	private PixiEnvMapping() {
+	}
 
 	private static final NodeLogger LOGGER = NodeLogger.getLogger(PixiEnvMapping.class);
 
 	private static final String ENV_MAPPING_FILE = "knime_env_mapping.txt";
 
-	public static synchronized Path resolvePixiEnvDirectory(final String manifestText) {
+	static synchronized Path resolvePixiEnvDirectory(final String manifestText) {
 		final Path base = CondaPreferences.getPixiEnvPath();
 		Map<String, String> envMapping = new HashMap<>();
 		if (Files.exists(base.resolve(ENV_MAPPING_FILE))) {
@@ -111,7 +114,7 @@ public class PixiEnvMapping {
 		return base.resolve(envDirName);
 	}
 
-	static String sha256Hex(final String s) {
+	private static String sha256Hex(final String s) {
 		try {
 			final MessageDigest md = MessageDigest.getInstance("SHA-256");
 			final byte[] dig = md.digest(s.getBytes(StandardCharsets.UTF_8));

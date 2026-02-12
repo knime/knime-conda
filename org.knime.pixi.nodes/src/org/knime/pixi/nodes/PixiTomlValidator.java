@@ -96,6 +96,7 @@ final class PixiTomlValidator {
     /**
      * Result of platform validation containing the validation result and additional details.
      */
+    // TODO use a Record ;)
     static final class PlatformValidation {
         private final ValidationResult m_result;
         private final Set<String> m_missingPlatforms;

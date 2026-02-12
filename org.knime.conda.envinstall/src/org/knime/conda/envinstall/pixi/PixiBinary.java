@@ -248,6 +248,8 @@ public final class PixiBinary {
                         // Cancellation requested - terminate the process
                         process.destroyForcibly();
                         stdStreamsReadersExec.shutdownNow();
+                        // TODO check if the thread has to be interrupted or something else
+                        Thread.currentThread().interrupt();
                         throw new InterruptedException("Pixi process was cancelled");
                     }
 

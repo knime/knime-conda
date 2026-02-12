@@ -83,6 +83,8 @@ final class PixiManifestResolver {
                 logger.debug("Using TOML from editor (" + tomlContent.length() + " chars)");
                 return tomlContent;
             case YAML_EDITOR:
+                // TODO in case of the YAML editor, we should save the TOML as part of the resolved environment
+                // Right now, we only save the lockfile but re-generate the TOML access of the TOML file
                 logger.debug("Converting YAML from editor to TOML");
                 try {
                     String toml = PixiYamlImporter.convertYamlToToml(yamlContent);

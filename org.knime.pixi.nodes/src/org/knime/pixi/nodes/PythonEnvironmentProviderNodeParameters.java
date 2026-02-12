@@ -128,8 +128,12 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     // Input source selection
     enum MainInputSource {
             @Label("Packages")
-            SIMPLE, @Label("TOML editor")
-            TOML_EDITOR, @Label("YAML editor")
+            SIMPLE,
+
+            @Label("TOML editor")
+            TOML_EDITOR,
+
+            @Label("YAML editor")
             YAML_EDITOR
     }
 

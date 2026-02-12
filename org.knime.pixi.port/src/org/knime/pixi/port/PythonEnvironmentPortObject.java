@@ -25,9 +25,9 @@ import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.port.PortType;
 import org.knime.core.node.port.PortTypeRegistry;
+import org.knime.externalprocessprovider.ExternalProcessProvider;
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
-import org.knime.python3.processprovider.PythonProcessProvider;
 
 /**
  * Port object containing information about a Python environment.
@@ -111,7 +111,7 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	 * @return a PixiPythonCommand for this environment
 	 * @throws IOException if the environment cannot be installed
 	 */
-	public PythonProcessProvider getPythonCommand() throws IOException {
+	public ExternalProcessProvider getPythonCommand() throws IOException {
 		try {
 			installPixiEnvironment(null, PixiInstallationProgressReporter.NoOpProgressReporter.INSTANCE);
 		} catch (CanceledExecutionException ex) {
@@ -142,7 +142,7 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	 * @return the Python command, or null if the port is not connected or not a PythonEnvironmentPortObject
 	 * @throws IOException if the Python command cannot be obtained from the environment
 	 */
-	public static PythonProcessProvider extractPythonCommand(final PortObject portObject) throws IOException {
+	public static ExternalProcessProvider extractPythonCommand(final PortObject portObject) throws IOException {
 		if (portObject == null || !isPythonEnvironmentPortObject(portObject)) {
 			return null;
 		}

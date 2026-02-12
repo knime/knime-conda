@@ -55,7 +55,7 @@ import java.util.Objects;
 
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
-import org.knime.python3.processprovider.PythonProcessProvider;
+import org.knime.externalprocessprovider.ExternalProcessProvider;
 
 /**
  * Abstract base class for Python commands that use Pixi environments. Executes
@@ -68,7 +68,7 @@ import org.knime.python3.processprovider.PythonProcessProvider;
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
  * @since 5.11
  */
-abstract class AbstractPixiPythonCommand implements PythonProcessProvider {
+abstract class AbstractPixiPythonCommand implements ExternalProcessProvider {
 
 	private final Path m_pixiTomlPath;
 
@@ -114,7 +114,7 @@ abstract class AbstractPixiPythonCommand implements PythonProcessProvider {
 	}
 
 	@Override
-	public Path getPythonExecutablePath() {
+	public Path getExecutablePath() {
 		// Resolve the actual Python executable path within the environment
 		// This is used for informational purposes only, not for execution
 		final Path projectDir = m_pixiTomlPath.getParent();

@@ -50,7 +50,7 @@ package org.knime.pixi.nodes;
 
 import java.io.IOException;
 
-import org.knime.core.node.NodeLogger;
+import org.knime.core.node.InvalidSettingsException;
 import org.knime.node.DefaultModel.ConfigureInput;
 import org.knime.node.DefaultModel.ConfigureOutput;
 import org.knime.node.DefaultModel.ExecuteInput;
@@ -66,8 +66,6 @@ import org.knime.pixi.port.PythonEnvironmentPortObjectSpec;
  * @since 5.11.0
  */
 public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFactory {
-
-    private static final NodeLogger LOGGER = NodeLogger.getLogger(PythonEnvironmentProviderNodeFactory.class);
 
     /**
      * Constructor
@@ -94,42 +92,27 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
             .keywords("pixi", "python", "environment", "conda", "pip", "packages"); //
     }
 
-    private static void configure(final ConfigureInput in, final ConfigureOutput out) {
+    private static void configure(final ConfigureInput in, final ConfigureOutput out) throws InvalidSettingsException {
+        final PythonEnvironmentProviderNodeParameters params = in.getParameters();
+
+        var lockFile = params.getPixiLockFileContent();
+        if (lockFile == null || lockFile.isBlank()) {
+            throw new InvalidSettingsException("Python environment is not resolved. "
+                + "Press the \"Resolve Environment\" button to resolve the environment.");
+        }
+
         // Set the spec for the output port
         out.setOutSpecs(PythonEnvironmentPortObjectSpec.INSTANCE);
     }
 
     private static void execute(final ExecuteInput in, final ExecuteOutput out) {
         final PythonEnvironmentProviderNodeParameters params = in.getParameters();
-        final var execCtx = in.getExecutionContext();
 
         try {
-            final String pixiTomlContent = params.getPixiTomlFileContent();
-
-            // Validate that we have TOML content
-            if (pixiTomlContent == null || pixiTomlContent.isBlank()) {
-                throw new IllegalStateException("TOML content is empty. Please configure the environment.");
-            }
-
-            // Handle different input modes
-            final PythonEnvironmentPortObject portObject;
-            switch (params.m_mainInputSource) {
-                case SIMPLE:
-                case TOML_EDITOR:
-                case YAML_EDITOR:
-                    // For generated/edited TOML/YAML, get lock file (may be empty - that's ok)
-                    final String pixiLockContent = params.getPixiLockFileContent();
-                    final String lockToUse = (pixiLockContent != null) ? pixiLockContent : "";
-                    if (lockToUse.isBlank()) {
-                        LOGGER.debug("No lock file - proceeding without lock (may fail on installation)");
-                    }
-                    portObject = new PythonEnvironmentPortObject(pixiTomlContent, lockToUse);
-                    break;
-
-                default:
-                    throw new IllegalStateException("Unknown input source: " + params.m_mainInputSource);
-            }
-
+            final var portObject = new PythonEnvironmentPortObject( //
+                params.getPixiTomlFileContent(), //
+                params.getPixiLockFileContent() //
+            );
             out.setOutData(portObject);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read environment configuration: " + e.getMessage(), e);

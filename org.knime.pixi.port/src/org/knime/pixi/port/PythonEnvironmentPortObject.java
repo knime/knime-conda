@@ -13,21 +13,19 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.JComponent;
 
+import org.knime.conda.envinstall.pixi.PixiBinary;
+import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.NodeLogger;
-import org.knime.core.node.context.ports.PortsConfiguration;
 import org.knime.core.node.ModelContentRO;
 import org.knime.core.node.ModelContentWO;
+import org.knime.core.node.NodeLogger;
 import org.knime.core.node.port.AbstractSimplePortObject;
-import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.port.PortType;
 import org.knime.core.node.port.PortTypeRegistry;
 import org.knime.externalprocessprovider.ExternalProcessProvider;
-import org.knime.conda.envinstall.pixi.PixiBinary;
-import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 
 /**
  * Port object containing information about a Python environment.
@@ -62,15 +60,6 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	private String m_pixiLockContent;
 
 	/**
-	 * Future tracking the installation operation for this specific port object
-	 * instance. This ensures thread-safe, single installation even when multiple
-	 * threads call installPixiEnvironment() on the same port object concurrently. -
-	 * null: Installation not started - non-null: Installation in progress or
-	 * completed
-	 */
-	private final AtomicReference<CompletableFuture<Void>> m_installFuture = new AtomicReference<>();
-
-	/**
 	 * Serializer for {@link PythonEnvironmentPortObject}.
 	 */
 	public static final class Serializer extends AbstractSimplePortObjectSerializer<PythonEnvironmentPortObject> {
@@ -91,7 +80,6 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	public PythonEnvironmentPortObject(String pixiTomlContent, String pixiLockContent) {
 		m_pixiTomlContent = pixiTomlContent;
 		m_pixiLockContent = pixiLockContent;
-		LOGGER.debug("Created PythonEnvironmentPortObject without predefined path.");
 	}
 
 	/**
@@ -99,101 +87,27 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	 *         and .pixi/)
 	 * @throws IOException if the path cannot be resolved
 	 */
-	public Path getPixiEnvironmentPath() throws IOException {
-		return PixiUtils.resolveProjectDirectory(m_pixiTomlContent, null);
+	private Path getPixiEnvironmentPath() throws IOException {
+		return PixiUtils.resolveProjectDirectory(m_pixiTomlContent);
 	}
 
 	/**
-	 * Get a PythonProcessProvider that can be used to execute Python in this environment.
-	 * This method ensures the environment is installed before returning the
-	 * command.
+	 * Get a PythonProcessProvider that can be used to execute Python in this
+	 * environment. The returned provider will only work if the environment is
+	 * already installed. It does not trigger installation itself. Use
+	 * {@link #installPythonEnvironment} to ensure the environment is installed
+	 * before calling this method.
 	 *
 	 * @return a PixiPythonCommand for this environment
 	 * @throws IOException if the environment cannot be installed
 	 */
 	public ExternalProcessProvider getPythonCommand() throws IOException {
-		try {
-			installPixiEnvironment(null, PixiInstallationProgressReporter.NoOpProgressReporter.INSTANCE);
-		} catch (CanceledExecutionException ex) {
-			// Should not happen with null ExecutionMonitor, but handle gracefully
-			throw new IOException("Environment installation was canceled.", ex);
-		}
 		final Path envPath = getPixiEnvironmentPath();
 		final Path tomlPath = envPath.resolve("pixi.toml");
 		LOGGER.debug("Creating PixiPythonCommand: envPath=" + envPath + ", tomlPath=" + tomlPath + ", tomlExists="
 				+ Files.exists(tomlPath) + ", tomlAbsolute=" + tomlPath.toAbsolutePath().normalize());
-		return new PixiPythonCommand(tomlPath, "default");
+		return new PixiPythonCommand(tomlPath);
 	}
-	
-	/**
-	 * Check if a PortObject is a PythonEnvironmentPortObject.
-	 *
-	 * @param portObject the port object to check
-	 * @return true if the port object is a PythonEnvironmentPortObject
-	 */
-	public static boolean isPythonEnvironmentPortObject(final PortObject portObject) {
-		return portObject instanceof PythonEnvironmentPortObject;
-	}
-
-	/**
-	 * Extract the Python command from a PythonEnvironmentPortObject.
-	 *
-	 * @param portObject the port object (may be null if optional port is not connected)
-	 * @return the Python command, or null if the port is not connected or not a PythonEnvironmentPortObject
-	 * @throws IOException if the Python command cannot be obtained from the environment
-	 */
-	public static ExternalProcessProvider extractPythonCommand(final PortObject portObject) throws IOException {
-		if (portObject == null || !isPythonEnvironmentPortObject(portObject)) {
-			return null;
-		}
-		return ((PythonEnvironmentPortObject) portObject).getPythonCommand();
-	}
-
-	/**
-     * Install the Python environment port if present, with progress reporting.
-     * This should be called early in node execution to avoid installation timeout issues.
-     * Installation is thread-safe and will only happen once even if called multiple times.
-     *
-     * @param config the ports configuration
-     * @param inObjects the input port objects
-     * @param exec the execution monitor for progress reporting and cancellation
-     * @throws IOException if installation fails
-     * @throws CanceledExecutionException if the operation is canceled
-     */
-    public static void installPythonEnvironmentWithProgress(
-            final PortsConfiguration config, final PortObject[] inObjects, final ExecutionMonitor exec)
-            throws IOException, CanceledExecutionException {
-            // Find the Python environment port in the input objects
-            final PortType[] inTypes = config.getInputPorts();
-            PythonEnvironmentPortObject envPort = null;
-            for (int i = 0; i < inTypes.length && i < inObjects.length; i++) {
-                if (inObjects[i] instanceof PythonEnvironmentPortObject) {
-                    envPort = (PythonEnvironmentPortObject) inObjects[i];
-                    break;
-                }
-            }
-            
-            // If found, install the environment
-            if (envPort != null) {
-                exec.setMessage("Installing Python environment...");
-                // Create simulated progress reporter that maps internal progress to node progress
-                final PixiInstallationProgressReporter progressReporter = new PixiInstallationProgressReporter() {
-                    @Override
-                    public void setProgress(final double fraction, final String message) {
-                        exec.setProgress(fraction, message);
-                    }
-
-                    @Override
-                    public void checkCanceled() throws CanceledExecutionException {
-                        exec.checkCanceled();
-                    }
-                };
-                
-                // Use simulated progress since we don't yet capture pixi output
-                envPort.installPixiEnvironment(exec, 
-                    PixiInstallationProgressReporter.createSimulated(progressReporter));
-            }
-    }
 
 	/**
 	 * Install the Pixi environment represented by this port object if it is not
@@ -203,92 +117,33 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	 * perform the installation while others wait for it to complete. All threads
 	 * will receive the same result (success or exception).
 	 * 
-	 * @param exec             Optional execution monitor for cancellation support.
-	 *                         Pass null if cancellation is not needed (e.g., when
-	 *                         called from non-node context).
-	 * @param progressReporter Progress reporter for installation feedback. Pass
-	 *                         NoOpProgressReporter.INSTANCE if progress reporting
-	 *                         is not needed.
+	 * @param exec execution monitor for cancellation support.
 	 * @throws IOException                if installation fails
 	 * @throws CanceledExecutionException if the operation is canceled via the
 	 *                                    execution monitor
 	 */
-	public void installPixiEnvironment(final ExecutionMonitor exec,
-			final PixiInstallationProgressReporter progressReporter) throws IOException, CanceledExecutionException {
-
-		// Fast path: Check if this port object's installation is already complete
-		CompletableFuture<Void> future = m_installFuture.get();
-		if (future != null && future.isDone() && !future.isCompletedExceptionally()) {
-			// Installation already completed successfully for this port object
-			return;
-		}
+	public void installPythonEnvironment(final ExecutionMonitor exec) throws IOException, CanceledExecutionException {
 
 		// Get the installation directory - this is the global synchronization point
 		final Path installDir = getPixiEnvironmentPath();
 
-		// Check global installation state for this directory
-		CompletableFuture<Void> globalFuture = GLOBAL_INSTALL_FUTURES.get(installDir);
-		if (globalFuture != null && globalFuture.isDone() && !globalFuture.isCompletedExceptionally()) {
-			// Installation already completed successfully in another port object
-			// Mark this port object as installed too
-			m_installFuture.compareAndSet(null, globalFuture);
-			return;
-		}
-
-		// Attempt to start installation for this port object
+		var future = GLOBAL_INSTALL_FUTURES.putIfAbsent(installDir, new CompletableFuture<>());
 		if (future == null) {
-			final CompletableFuture<Void> newFuture = new CompletableFuture<>();
-			if (m_installFuture.compareAndSet(null, newFuture)) {
-				// This thread won the race for THIS port object
-				// Now try to win the global race for the installation directory
-				final CompletableFuture<Void> newGlobalFuture = new CompletableFuture<>();
-				final CompletableFuture<Void> existingGlobalFuture = 
-					GLOBAL_INSTALL_FUTURES.putIfAbsent(installDir, newGlobalFuture);
-
-				if (existingGlobalFuture == null) {
-					// This thread won both races - perform the installation
-					try {
-						LOGGER.debug("Thread " + Thread.currentThread().getName() + 
-							" starting installation to " + installDir);
-						// Respect cancellation before starting the actual installation
-						exec.checkCanceled();
-						progressReporter.checkCanceled();
-						performInstallation(progressReporter);
-						newGlobalFuture.complete(null);
-						newFuture.complete(null);
-						LOGGER.debug("Installation completed successfully by thread: " + 
-							Thread.currentThread().getName());
-					} catch (Exception ex) {
-						newGlobalFuture.completeExceptionally(ex);
-						newFuture.completeExceptionally(ex);
-						// Remove from global map on failure so retry is possible
-						GLOBAL_INSTALL_FUTURES.remove(installDir, newGlobalFuture);
-						LOGGER.error("Installation failed in thread: " + 
-							Thread.currentThread().getName(), ex);
-						// Re-throw so this thread sees the exception immediately
-						if (ex instanceof IOException) {
-							throw (IOException) ex;
-						} else {
-							throw new IOException("Pixi installation failed.", ex);
-						}
-					}
-					return;
-				} else {
-					// Another thread is installing to the same directory - wait for them
-					LOGGER.debug("Thread " + Thread.currentThread().getName() + 
-						" waiting for global installation to " + installDir);
-					future = existingGlobalFuture;
-					// Update this port object's future to point to the global one
-					m_installFuture.set(existingGlobalFuture);
-				}
-			} else {
-				// Another thread won the race for this port object - get their future
-				future = m_installFuture.get();
+			// There was no future with this key -> we need to perform the installation
+			future = GLOBAL_INSTALL_FUTURES.get(installDir);
+			try {
+				performInstallation(exec, installDir);
+				future.complete(null);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				future.cancel(false);
+				throw new CanceledExecutionException("Python environment installation was canceled.");
+			} catch (Exception e) {
+				future.completeExceptionally(e);
 			}
+		} else {
+			future.join();
 		}
-
-		// Wait for the installation to complete with cancellation support
-		waitForInstallation(future, exec);
 	}
 
 	/**
@@ -296,28 +151,30 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	 * by one thread.
 	 * 
 	 * @param progressReporter Progress reporter for installation feedback
-	 * @throws IOException if installation fails
+	 * @throws IOException          if installation fails
+	 * @throws InterruptedException
 	 */
-	private void performInstallation(final PixiInstallationProgressReporter progressReporter) throws IOException {
-		final Path installDir = getPixiEnvironmentPath();
+	// TODO make this static and pass in all needed data as parameters
+	private void performInstallation(final ExecutionMonitor exec, Path installDir)
+			throws IOException, InterruptedException {
 
 		// Double-check if environment is already installed (could happen with existing
 		// path)
 		final Path envDir = installDir.resolve(".pixi").resolve("envs").resolve("default");
 		if (Files.exists(envDir)) {
 			LOGGER.debug("Pixi environment already installed at: " + envDir);
-			progressReporter.setProgress(1.0, "Environment already installed");
+			exec.setProgress(1.0, "Environment already installed");
 			return;
 		}
 
 		LOGGER.info("Installing Pixi environment at: " + installDir);
-		progressReporter.setProgress(0.0, "Preparing environment installation...");
+		exec.setProgress(0.0, "Preparing environment installation...");
 
 		// Create project directory if needed
 		Files.createDirectories(installDir);
 
 		// Write pixi.toml
-		progressReporter.setProgress(0.1, "Writing environment configuration...");
+		exec.setProgress(0.1, "Writing environment configuration...");
 		final Path pixiTomlPath = installDir.resolve("pixi.toml");
 		Files.writeString(pixiTomlPath, m_pixiTomlContent, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
 				StandardOpenOption.TRUNCATE_EXISTING);
@@ -328,87 +185,32 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 				StandardOpenOption.TRUNCATE_EXISTING);
 
 		// Run pixi install to create the environment
-		progressReporter.setProgress(0.2, "Installing Python environment (this may take a minute)...");
+		exec.setProgress(0.2, "Installing Python environment (this may take a minute)...");
 		try {
 			final Path pixiHome = installDir.resolve(".pixi-home");
 			Files.createDirectories(pixiHome);
 			final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());
 			final String[] pixiArgs = { "install", "--color", "never", "--no-progress" };
 
-			final var callResult = PixiBinary.callPixi(installDir, extraEnv, pixiArgs);
+			// TODO update the PixiBinary API to make a cancelable execution simpler here
+			final var callResult = PixiBinary.callPixiWithCancellation(installDir, extraEnv, () -> {
+				try {
+					exec.checkCanceled();
+					return false;
+				} catch (CanceledExecutionException e) {
+					return true;
+				}
+			}, pixiArgs);
 
 			if (callResult.returnCode() != 0) {
-				final String errorDetails = getMessageFromCallResult(callResult);
+				final String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
 				throw new IOException("Pixi install failed: " + errorDetails);
 			}
 
-			progressReporter.setProgress(1.0, "Environment installation complete");
+			exec.setProgress(1.0, "Environment installation complete");
 		} catch (PixiBinaryLocationException ex) {
 			throw new IOException("Could not locate Pixi binary to install environment.", ex);
-		} catch (InterruptedException ex) {
-			Thread.currentThread().interrupt();
-			throw new IOException("Pixi installation was interrupted.", ex);
 		}
-	}
-
-	/**
-	 * Waits for the installation future to complete, with support for cancellation.
-	 * 
-	 * @param future The future representing the installation operation
-	 * @param exec   Optional execution monitor for cancellation checks
-	 * @throws IOException                if installation failed
-	 * @throws CanceledExecutionException if canceled via execution monitor
-	 */
-	private void waitForInstallation(final CompletableFuture<Void> future, final ExecutionMonitor exec)
-			throws IOException, CanceledExecutionException {
-
-		if (future == null) {
-			return; // No installation in progress
-		}
-
-		LOGGER.debug("Thread " + Thread.currentThread().getName() + " waiting for installation to complete");
-
-		// Poll the future with periodic cancellation checks
-		while (!future.isDone()) {
-			// Check for cancellation if execution monitor provided
-			if (exec != null) {
-				try {
-					exec.checkCanceled();
-				} catch (CanceledExecutionException ex) {
-					LOGGER.info("Installation wait canceled for thread: " + Thread.currentThread().getName());
-					throw ex;
-				}
-			}
-
-			// Sleep briefly before checking again
-			try {
-				Thread.sleep(100); // Check every 100ms
-			} catch (InterruptedException ex) {
-				Thread.currentThread().interrupt();
-				throw new IOException("Wait for installation was interrupted.", ex);
-			}
-		}
-
-		// Installation completed - check if it succeeded or failed
-		try {
-			future.get(); // This will throw if installation failed
-			LOGGER.debug("Thread " + Thread.currentThread().getName() + " finished waiting - installation succeeded");
-		} catch (ExecutionException ex) {
-			// Installation failed - propagate the exception
-			final Throwable cause = ex.getCause();
-			if (cause instanceof IOException) {
-				throw (IOException) cause;
-			} else {
-				throw new IOException("Pixi installation failed.", cause);
-			}
-		} catch (InterruptedException ex) {
-			Thread.currentThread().interrupt();
-			throw new IOException("Wait for installation was interrupted.", ex);
-		}
-	}
-
-	private static String getMessageFromCallResult(final PixiBinary.CallResult callResult) {
-		return PixiUtils.getMessageFromCallResult(callResult);
 	}
 
 	@Override

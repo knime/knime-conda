@@ -51,11 +51,9 @@ package org.knime.pixi.nodes;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
@@ -84,7 +82,6 @@ import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
 import org.knime.node.parameters.widget.choices.Label;
-import org.knime.node.parameters.widget.choices.StringChoicesProvider;
 import org.knime.node.parameters.widget.choices.ValueSwitchWidget;
 import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
@@ -224,44 +221,11 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         }
     }
 
-
-    /**
-     * Provider that lists all pixi environments from the bundling folder that contain a pixi.toml file.
-     */
-    static final class BundledPixiEnvironmentChoicesProvider implements StringChoicesProvider {
-
-        private static final NodeLogger LOGGER = NodeLogger.getLogger(BundledPixiEnvironmentChoicesProvider.class);
-
-        @Override
-        public List<String> choices(final NodeParametersInput context) {
-            try {
-                // Get the bundling root directory (same logic as BundlingRoot)
-                Path bundlingRoot = PixiBundlingUtils.getBundlingRootPath();
-                LOGGER.debug("Scanning bundling root: " + bundlingRoot);
-
-                if (!Files.exists(bundlingRoot)) {
-                    LOGGER.debug("Bundling root does not exist");
-                    return List.of();
-                }
-
-                // List all subdirectories in bundling/ that contain pixi.toml
-                // Structure: bundling/<some_name>/pixi.toml
-                List<String> environments = Files.list(bundlingRoot).filter(Files::isDirectory).filter(dir -> {
-                    Path tomlPath = dir.resolve("pixi.toml");
-                    boolean hasToml = Files.exists(tomlPath);
-                    LOGGER.debug("Checking " + dir.getFileName() + ": pixi.toml " + (hasToml ? "found" : "not found"));
-                    return hasToml;
-                }).map(dir -> dir.getFileName().toString()).sorted().collect(Collectors.toList());
-
-                LOGGER.debug("Found " + environments.size() + " environments");
-                return environments;
-
-            } catch (Exception e) {
-                LOGGER.error("Failed to list bundled pixi environments: " + e.getMessage(), e);
-                return List.of();
-            }
-        }
-    }
+    // TODO
+    // We should have only one button:
+    // - Show "Resolve Dependencies" if no lock file exists yet for the current inputs
+    // - Show "Update Dependencies" if a lock file already exists, to update resolved package versions
+    // - Show "Cancel" while action is running
 
     // Lock file generation
     @Widget(title = "Check compatibility",
@@ -392,8 +356,11 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             }
 
             try {
-                final Path projectDir = PixiUtils.resolveProjectDirectory(tomlContent, null);
-                final Path pixiHome = projectDir.resolve(".pixi-home");
+                // TODO we currently use the same directory as for the final installations of the port objects
+                // However, we should use a temporary directory just for the lock file generation that is deleted afterwards,
+                // otherwise we collect a lot of lock files of potentially intermediate states (in the worst case not even in a temporary directory).
+                final Path projectDir = PixiUtils.resolveProjectDirectory(tomlContent);
+                final Path pixiHome = projectDir.resolve(".pixi-home"); // TODO what's about the PIXI_HOME???
                 Files.createDirectories(pixiHome);
 
                 final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());

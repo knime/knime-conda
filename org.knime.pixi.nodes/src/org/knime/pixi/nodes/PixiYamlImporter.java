@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Map;
+
 import org.apache.commons.io.FileUtils;
 import org.knime.conda.envinstall.pixi.PixiBinary;
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
@@ -50,6 +51,7 @@ public final class PixiYamlImporter {
             Files.writeString(envFile, yamlContent);
 
             // Run pixi init --import environment.yml
+            // TODO add all platforms with the -p option to replace the later modification via ensureAllPlatforms
             final String[] pixiArgs = {"init", "--import", envFile.toString()};
             final CallResult callResult = PixiBinary.callPixi(tempDir, Map.of(), pixiArgs);
 

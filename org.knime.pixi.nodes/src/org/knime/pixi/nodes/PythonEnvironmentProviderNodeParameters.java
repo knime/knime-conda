@@ -92,7 +92,7 @@ import org.knime.pixi.port.PixiUtils;
  * Node Parameters for the Python Environment Provider node. Combines input methods from array-based, TOML-based, and
  * file reader approaches.
  *
- * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
+ * @author Marc Lehner, KNIME AG, Zurich, Switzerland
  * @since 5.11
  */
 @SuppressWarnings("restriction")

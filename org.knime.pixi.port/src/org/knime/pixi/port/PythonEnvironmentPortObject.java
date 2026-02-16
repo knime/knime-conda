@@ -8,8 +8,6 @@ import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.JComponent;
 
@@ -73,11 +71,11 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 
 	/**
 	 * Constructor.
-	 * 
+	 *
 	 * @param pixiTomlContent the content of the pixi.toml file
 	 * @param pixiLockContent the content of the pixi.lock file
 	 */
-	public PythonEnvironmentPortObject(String pixiTomlContent, String pixiLockContent) {
+	public PythonEnvironmentPortObject(final String pixiTomlContent, final String pixiLockContent) {
 		m_pixiTomlContent = pixiTomlContent;
 		m_pixiLockContent = pixiLockContent;
 	}
@@ -88,7 +86,7 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	 * @throws IOException if the path cannot be resolved
 	 */
 	private Path getPixiEnvironmentPath() throws IOException {
-		return PixiUtils.resolveProjectDirectory(m_pixiTomlContent);
+        return PixiUtils.resolveProjectDirectory(m_pixiLockContent);
 	}
 
 	/**
@@ -116,7 +114,7 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	 * different port object instances targeting the same directory), only one will
 	 * perform the installation while others wait for it to complete. All threads
 	 * will receive the same result (success or exception).
-	 * 
+	 *
 	 * @param exec execution monitor for cancellation support.
 	 * @throws IOException                if installation fails
 	 * @throws CanceledExecutionException if the operation is canceled via the
@@ -149,13 +147,13 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 	/**
 	 * Performs the actual Pixi environment installation. This method is only called
 	 * by one thread.
-	 * 
+	 *
 	 * @param progressReporter Progress reporter for installation feedback
 	 * @throws IOException          if installation fails
 	 * @throws InterruptedException
 	 */
 	// TODO make this static and pass in all needed data as parameters
-	private void performInstallation(final ExecutionMonitor exec, Path installDir)
+	private void performInstallation(final ExecutionMonitor exec, final Path installDir)
 			throws IOException, InterruptedException {
 
 		// Double-check if environment is already installed (could happen with existing

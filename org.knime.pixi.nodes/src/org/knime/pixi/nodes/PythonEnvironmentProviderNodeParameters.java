@@ -49,29 +49,18 @@
 package org.knime.pixi.nodes;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
-import org.knime.conda.envinstall.pixi.PixiBinary;
-import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
-import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
-import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeLogger;
-import org.knime.core.node.NodeSettingsRO;
-import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.ButtonWidget;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
-import org.knime.core.webui.node.dialog.defaultdialog.widget.handler.WidgetHandlerException;
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
 import org.knime.node.parameters.array.ArrayWidget;
 import org.knime.node.parameters.layout.After;
 import org.knime.node.parameters.layout.Layout;
-import org.knime.node.parameters.persistence.NodeParametersPersistor;
 import org.knime.node.parameters.persistence.Persistor;
 import org.knime.node.parameters.updates.Effect;
 import org.knime.node.parameters.updates.Effect.EffectType;
@@ -86,7 +75,6 @@ import org.knime.node.parameters.widget.choices.ValueSwitchWidget;
 import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
-import org.knime.pixi.port.PixiUtils;
 
 /**
  * Node Parameters for the Python Environment Provider node. Combines input methods from array-based, TOML-based, and
@@ -235,12 +223,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @ValueReference(ButtonFieldRef.class)
     String m_pixiLockButton;
 
-    @Widget(title = "Update dependencies",
-        description = "Click to update all dependencies to their latest compatible versions and update the lock file")
-    @Layout(lockFileSection.class)
-    @ButtonWidget(actionHandler = PixiUpdateActionHandler.class, updateHandler = PixiUpdateUpdateHandler.class)
-    @ValueReference(ButtonFieldRef.class)
-    String m_pixiUpdateButton;
 
     interface ButtonFieldRef extends ParameterReference<String> {
     }
@@ -275,7 +257,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         advanced = true)
     @Layout(lockFileSection.class)
     @TextAreaWidget(rows = 10)
-    @Persistor(DoNotPersist.class)
+    @Persistor(PixiParameterUtils.DoNotPersist.class)
     @ValueProvider(LockContentDisplayProvider.class)
     String m_lockFileDisplay = "";
 
@@ -337,79 +319,19 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     }
 
     // Button action handler for lock file generation
-    static final class PixiLockActionHandler extends CancelableActionHandler<String, TomlContentGetter> {
+    static final class PixiLockActionHandler extends PixiParameterUtils.AbstractPixiLockActionHandler<TomlContentGetter> {
 
-        private static final NodeLogger LOGGER = NodeLogger.getLogger(PixiLockActionHandler.class);
-
-        @Override
-        protected String invoke(final TomlContentGetter deps, final NodeParametersInput context)
-            throws WidgetHandlerException {
-            final String tomlContent;
-            try {
-                tomlContent = deps.getTomlContent();
-            } catch (IOException e) {
-                throw new WidgetHandlerException("Failed to get TOML content: " + e.getMessage());
-            }
-            LOGGER.debug("Button clicked - running pixi lock...");
-            if (tomlContent == null || tomlContent.isBlank()) {
-                throw new WidgetHandlerException("No manifest content provided");
-            }
-
-            try {
-                // TODO we currently use the same directory as for the final installations of the port objects
-                // However, we should use a temporary directory just for the lock file generation that is deleted afterwards,
-                // otherwise we collect a lot of lock files of potentially intermediate states (in the worst case not even in a temporary directory).
-                final Path projectDir = PixiUtils.resolveProjectDirectory(tomlContent);
-                final Path pixiHome = projectDir.resolve(".pixi-home"); // TODO what's about the PIXI_HOME???
-                Files.createDirectories(pixiHome);
-
-                final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());
-                final String[] pixiArgs = {"--color", "never", "--no-progress", "lock"};
-
-                LOGGER.debug("Running pixi lock in: " + projectDir);
-                final CallResult callResult = PixiBinary.callPixi(projectDir, extraEnv, pixiArgs);
-
-                if (callResult.returnCode() != 0) {
-                    String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
-                    LOGGER.warn("Pixi lock failed: " + errorDetails);
-                    throw new WidgetHandlerException("Pixi lock failed:\n" + errorDetails);
-                }
-
-                // Read the generated lock file
-                final Path lockFilePath = projectDir.resolve("pixi.lock");
-                if (Files.exists(lockFilePath)) {
-                    final String lockContent = Files.readString(lockFilePath);
-                    LOGGER.debug("Lock file generated (" + lockContent.length() + " bytes)");
-                    return lockContent;
-                } else {
-                    throw new WidgetHandlerException("Lock file was not generated at: " + lockFilePath);
-                }
-            } catch (IOException | PixiBinaryLocationException e) {
-                throw new WidgetHandlerException("Failed to generate lock file: " + e.getMessage());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new WidgetHandlerException("Lock generation was interrupted: " + e.getMessage());
-            }
+        public PixiLockActionHandler() {
+            super();
         }
 
         @Override
-        protected String getButtonText(final States state) {
-            return switch (state) {
-                case READY -> "Lock Environment";
-                case CANCEL -> "Cancel";
-                case DONE -> "Lock Environment";
-            };
-        }
-
-        @Override
-        protected boolean isMultiUse() {
-            return true; // Allow re-locking
+        protected String getManifestContent(final TomlContentGetter contentGetter) throws Exception {
+            return contentGetter.getTomlContent();
         }
     }
 
     static final class TomlContentGetter {
-        private static final NodeLogger LOGGER = NodeLogger.getLogger(TomlContentGetter.class);
-
         @ValueReference(MainInputSourceRef.class)
         MainInputSource m_mainInputSource;
 
@@ -432,39 +354,10 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     static final class PixiLockUpdateHandler extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
     }
 
-    static final class PixiUpdateActionHandler
-        extends PixiParameterUtils.AbstractPixiUpdateActionHandler<TomlContentGetter> {
-
-        public PixiUpdateActionHandler() {
-            super("[PythonEnvironmentProviderNode]");
-        }
-
-        @Override
-        protected String getManifestContent(final TomlContentGetter contentGetter) {
-            try {
-                return contentGetter.getTomlContent();
-            } catch (IOException e) {
-                throw new RuntimeException("Failed to get TOML content: " + e.getMessage(), e);
-            }
-        }
-
-        @Override
-        protected String prepareManifestContent(final String content) throws Exception {
-            // Content is already TOML, no conversion needed
-            return content;
-        }
-    }
-
-    static final class PixiUpdateUpdateHandler
-        extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
-    }
-
     /**
      * Resets lock file to empty when any input content changes.
      */
     static final class ResetLockFileProvider implements StateProvider<String> {
-
-        private static final NodeLogger LOGGER = NodeLogger.getLogger(ResetLockFileProvider.class);
 
         private Supplier<MainInputSource> m_inputSourceSupplier;
 
@@ -555,8 +448,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
     // Validation message provider
     static final class ValidationMessageProvider implements StateProvider<Optional<TextMessage.Message>> {
-
-        private static final NodeLogger LOGGER = NodeLogger.getLogger(ValidationMessageProvider.class);
 
         private Supplier<String> m_lockContentSupplier;
 
@@ -657,26 +548,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
             final String tomlContent = m_tomlContentSupplier.get();
             return PixiTomlValidator.toMessage(PixiTomlValidator.validatePlatforms(tomlContent));
-        }
-    }
-
-    /**
-     * Custom persistor that doesn't persist the field - used for computed/display-only fields.
-     */
-    static final class DoNotPersist implements NodeParametersPersistor<String> {
-        @Override
-        public String load(final NodeSettingsRO settings) throws InvalidSettingsException {
-            return null;
-        }
-
-        @Override
-        public void save(final String obj, final NodeSettingsWO settings) {
-            // Don't persist - this is a computed field
-        }
-
-        @Override
-        public String[][] getConfigPaths() {
-            return new String[0][];
         }
     }
 }

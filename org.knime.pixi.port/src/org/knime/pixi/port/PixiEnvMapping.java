@@ -74,7 +74,7 @@ final class PixiEnvMapping {
 
 	private static final String ENV_MAPPING_FILE = "knime_env_mapping.txt";
 
-	static synchronized Path resolvePixiEnvDirectory(final String manifestText) {
+	static synchronized Path resolvePixiEnvDirectory(final String lockFileContent) {
 		final Path base = CondaPreferences.getPixiEnvPath();
 		Map<String, String> envMapping = new HashMap<>();
 		if (Files.exists(base.resolve(ENV_MAPPING_FILE))) {
@@ -94,7 +94,7 @@ final class PixiEnvMapping {
 		}
 		int numEnvs = envMapping.size();
 
-		final String hash = sha256Hex(manifestText);
+		final String hash = sha256Hex(lockFileContent);
 
 		if (envMapping.containsKey(hash)) {
 			return base.resolve(envMapping.get(hash));

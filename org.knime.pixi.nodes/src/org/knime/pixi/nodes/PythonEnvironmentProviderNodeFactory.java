@@ -142,7 +142,7 @@ knime-python-base = "*"</pre>
         var lockFile = params.getPixiLockFileContent();
         if (lockFile == null || lockFile.isBlank()) {
             throw new InvalidSettingsException("Python environment is not resolved. "
-                + "Press the \"Resolve Environment\" button to resolve the environment.");
+                + "Press the \"Resolve Dependencies\" button to resolve the environment.");
         }
 
         // Set the spec for the output port

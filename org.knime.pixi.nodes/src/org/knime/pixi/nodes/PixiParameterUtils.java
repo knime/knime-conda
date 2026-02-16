@@ -2,121 +2,150 @@ package org.knime.pixi.nodes;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 
 import org.knime.conda.envinstall.pixi.PixiBinary;
-import org.knime.core.node.NodeLogger;
+import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.NodeSettingsRO;
+import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.util.PathUtils;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
 import org.knime.core.webui.node.dialog.defaultdialog.widget.handler.WidgetHandlerException;
 import org.knime.node.parameters.NodeParametersInput;
+import org.knime.node.parameters.persistence.NodeParametersPersistor;
 import org.knime.pixi.port.PixiUtils;
 
 /**
- * Utility class for reducing code duplication in Pixi parameter classes.
+ * Utility class for reducing code duplication in Pixi parameter classes. Provides base classes for common button
+ * action handlers and shared persistors.
  *
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
+ * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
  * @since 5.11
  */
 @SuppressWarnings("restriction")
 final class PixiParameterUtils {
 
-    private static final NodeLogger LOGGER = NodeLogger.getLogger(PixiParameterUtils.class);
+    //private static final NodeLogger LOGGER = NodeLogger.getLogger(PixiParameterUtils.class);
 
     private PixiParameterUtils() {
         // Utility class
     }
 
-    // TODO join with implementation in PythonEnvironmentNodeParameters
     /**
-     * Base class for button action handlers that update packages using pixi update.
-     * Updates all dependencies and generates a new lock file.
+     * Base class for button action handlers that run pixi lock to generate a lock file. Validates the manifest by
+     * generating a lock file with resolved dependencies.
      *
      * @param <ContentGetter> a functional interface that extracts the manifest content from dependencies
      */
-    static abstract class AbstractPixiUpdateActionHandler<ContentGetter>
+    static abstract class AbstractPixiLockActionHandler<ContentGetter>
         extends CancelableActionHandler<String, ContentGetter> {
 
-        private final String m_logPrefix;
+        private volatile boolean m_cancelled = false;
 
         /**
          * Constructor.
-         *
-         * @param logPrefix prefix for console logging (e.g., "[PixiToml]" or "[PixiYaml]")
          */
-        protected AbstractPixiUpdateActionHandler(final String logPrefix) {
-            m_logPrefix = logPrefix;
+        protected AbstractPixiLockActionHandler() {
         }
 
         /**
          * Extract the manifest content from the dependency object.
          */
-        protected abstract String getManifestContent(ContentGetter contentGetter);
+        protected abstract String getManifestContent(ContentGetter contentGetter) throws Exception;
 
-        /**
-         * Prepare the manifest content for pixi update. For TOML, this is a no-op. For YAML/packages, convert to TOML.
-         *
-         * @param content the raw content
-         * @return the TOML manifest content ready for pixi
-         * @throws Exception if conversion/preparation fails
-         */
-        protected abstract String prepareManifestContent(String content) throws Exception;
+        protected void onCancel() {
+            // Called when user clicks the Cancel button
+            m_cancelled = true;
+        }
 
         @Override
         protected String invoke(final ContentGetter settings, final NodeParametersInput context)
             throws WidgetHandlerException {
-            LOGGER.debug(m_logPrefix + " Button clicked - running pixi update...");
 
+            // Reset cancellation flag at start of each invocation
+            m_cancelled = false;
+
+            Path projectDir = null;
             try {
-                final String rawContent = getManifestContent(settings);
-                if (rawContent == null || rawContent.isBlank()) {
+                final String tomlContent = getManifestContent(settings);
+                if (tomlContent == null || tomlContent.isBlank()) {
                     throw new WidgetHandlerException("No manifest content provided");
                 }
 
-                final String manifestContent = prepareManifestContent(rawContent);
-                final Path projectDir = PixiUtils.resolveProjectDirectory(manifestContent);
-                final Path pixiHome = projectDir.resolve(".pixi-home");
-                Files.createDirectories(pixiHome);
+                // Always use a fresh temp directory during configuration
+                projectDir = PathUtils.createTempDir("pixi-envs-config");
 
-                final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());
-                final String[] pixiArgs = {"--color", "never", "--no-progress", "update"};
+                // Write the TOML manifest to the temp directory
+                final Path tomlFilePath = projectDir.resolve("pixi.toml");
+                Files.writeString(tomlFilePath, tomlContent);
 
-                final var callResult = PixiBinary.callPixi(projectDir, extraEnv, pixiArgs);
+                // Run pixi lock to resolve dependencies and generate lock file
+                final String[] pixiArgs = {"--color", "never", "--no-progress", "lock"};
+                final var callResult = PixiBinary.callPixiWithCancellation(projectDir, null, () -> m_cancelled, pixiArgs);
 
                 if (callResult.returnCode() != 0) {
                     String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
-                    LOGGER.warn(m_logPrefix + " Pixi update failed: " + errorDetails);
-                    throw new WidgetHandlerException("Pixi update failed:\n" + errorDetails);
+                    throw new WidgetHandlerException("Pixi lock failed:\n" + errorDetails);
                 }
 
-                // Read the updated lock file
+                // Read the generated lock file
                 final Path lockFilePath = projectDir.resolve("pixi.lock");
                 if (Files.exists(lockFilePath)) {
                     final String lockContent = Files.readString(lockFilePath);
-                    LOGGER.debug(m_logPrefix + " Lock file updated (" + lockContent.length() + " bytes)");
                     return lockContent;
                 } else {
-                    throw new WidgetHandlerException("Lock file was not found after update at: " + lockFilePath);
+                    throw new WidgetHandlerException("Lock file was not generated at: " + lockFilePath);
                 }
             } catch (WidgetHandlerException e) {
                 throw e;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new WidgetHandlerException("Lock generation was cancelled");
             } catch (Exception ex) {
-                LOGGER.error(m_logPrefix + " Failed to update environment: " + ex.getMessage(), ex);
-                throw new WidgetHandlerException("Failed to update environment: " + ex.getMessage());
+                throw new WidgetHandlerException("Failed to generate lock file: " + ex.getMessage());
+            } finally {
+                // Clean up temp directory
+                try {
+                    PathUtils.deleteDirectoryIfExists(projectDir);
+                } catch (Exception e) {
+                    // Best effort cleanup - log but don't fail
+                }
             }
         }
 
         @Override
         protected String getButtonText(final States state) {
             return switch (state) {
-                case READY -> "Update Dependencies";
+                case READY -> "Resolve Dependencies";
                 case CANCEL -> "Cancel";
-                case DONE -> "Update Again";
+                case DONE -> "Resolve Dependencies";
             };
         }
 
         @Override
         protected boolean isMultiUse() {
-            return true; // Allow re-updating
+            return true; // Allow multiple clicks to update the lock file
+        }
+    }
+
+    /**
+     * Custom persistor that doesn't persist the field - used for computed/display-only fields. This is useful for
+     * fields that are calculated or derived from other fields and should not be saved to settings.
+     */
+    static final class DoNotPersist implements NodeParametersPersistor<String> {
+        @Override
+        public String load(final NodeSettingsRO settings) throws InvalidSettingsException {
+            return null;
+        }
+
+        @Override
+        public void save(final String obj, final NodeSettingsWO settings) {
+            // Don't persist - this is a computed field
+        }
+
+        @Override
+        public String[][] getConfigPaths() {
+            return new String[0][];
         }
     }
 }

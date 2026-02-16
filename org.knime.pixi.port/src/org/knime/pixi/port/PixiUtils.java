@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 
 import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 
@@ -19,42 +18,62 @@ public final class PixiUtils {
 	}
 
 	/**
-	 * Resolves the project directory for a Pixi environment based on the provided
-	 * manifest text. If the manifest text is empty or null, an
-	 * IllegalArgumentException is thrown. If the manifest text is valid, the method
-	 * creates the necessary directories and writes the manifest content to a
-	 * "pixi.toml" file within the resolved project directory.
-	 * 
-	 * @param manifestText the content of the pixi.toml manifest file
+	 * Resolves the project directory for a Pixi environment based on the provided lock file content. If a hash
+	 * collision occurs (same hash but different content), appends a numeric suffix to find a free directory.
+	 *
+	 * @param lockFileContent the content of the pixi.lock file
 	 * @return the path to the resolved project directory
-	 * @throws IOException if an I/O error occurs while creating directories or
-	 *                     writing the manifest file
+	 * @throws IOException if an I/O error occurs while creating directories or reading files
+	 * @throws IllegalArgumentException if lockFileContent is null or blank
 	 */
-	public static Path resolveProjectDirectory(final String manifestText) throws IOException {
-		// Otherwise, use the preference-based directory and write manifest
-		if (manifestText == null || manifestText.isBlank()) {
-			throw new IllegalArgumentException("pixi.toml manifest text is empty.");
+	public static Path resolveProjectDirectory(final String lockFileContent) throws IOException {
+		if (lockFileContent == null || lockFileContent.isBlank()) {
+			throw new IllegalArgumentException("pixi.lock content is empty.");
 		}
 
-		final Path projectDir = PixiEnvMapping.resolvePixiEnvDirectory(manifestText);
-		Files.createDirectories(projectDir);
-
-		final Path manifestPath = projectDir.resolve("pixi.toml");
-		// Only write if file doesn't exist, or overwrite with the provided content
-		if (!Files.exists(manifestPath)) {
-			Files.writeString(manifestPath, manifestText, StandardCharsets.UTF_8, StandardOpenOption.CREATE);
-		} else {
-			// TODO a toml with the hash already exists. We should check if the content is
-			// the same.
-			// If not, we need to create a new directory.
-		}
-		return projectDir;
+		final Path baseProjectDir = PixiEnvMapping.resolvePixiEnvDirectory(lockFileContent);
+		return resolveWithCollisionHandling(baseProjectDir, lockFileContent);
 	}
+
+	/**
+	 * Resolves a project directory, handling potential hash collisions by appending suffixes.
+	 *
+	 * @param baseDir the base directory path derived from the lock file hash
+	 * @param lockFileContent the expected lock file content
+	 * @return a directory path that either doesn't exist yet or contains matching content
+	 * @throws IOException if an I/O error occurs
+	 */
+	private static Path resolveWithCollisionHandling(final Path baseDir, final String lockFileContent)
+		throws IOException {
+		Path candidateDir = baseDir;
+		int suffix = 0;
+
+		while (suffix < 10) { // Arbitrary limit to prevent infinite loops. We should never have more than a few collisions in practice.
+			Files.createDirectories(candidateDir);
+			final Path lockFilePath = candidateDir.resolve("pixi.lock");
+
+			// Directory is free to use if no lock file exists yet
+			if (!Files.exists(lockFilePath)) {
+				return candidateDir;
+			}
+
+			// Check if existing lock file matches (no collision)
+			final String existingContent = Files.readString(lockFilePath, StandardCharsets.UTF_8);
+			if (existingContent.equals(lockFileContent)) {
+				return candidateDir;
+			}
+
+			// Hash collision detected - try with numeric suffix
+			candidateDir = baseDir.resolveSibling(baseDir.getFileName() + "_" + suffix);
+			suffix++;
+		}
+		throw new IOException("Failed to resolve a unique project directory after 10 attempts.");
+    }
 
 	/**
 	 * Formats a message from the given CallResult, including the exit code, stdout,
 	 * and stderr.
-	 * 
+	 *
 	 * @param callResult the result of a call to the Pixi binary, containing the
 	 *                   exit code, stdout,
 	 * @return a formatted message summarizing the call result, including the exit

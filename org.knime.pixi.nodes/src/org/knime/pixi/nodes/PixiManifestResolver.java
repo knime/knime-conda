@@ -57,7 +57,7 @@ import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.PackageSpec;
 /**
  * Utility class for resolving pixi.toml manifest content from various input sources.
  *
- * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
+ * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
  * @since 5.11
  */
 final class PixiManifestResolver {

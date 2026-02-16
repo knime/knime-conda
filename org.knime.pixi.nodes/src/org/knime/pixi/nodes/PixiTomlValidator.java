@@ -64,7 +64,8 @@ import com.electronwill.nightconfig.toml.TomlParser;
 /**
  * Utility class for validating pixi.toml manifests, especially platform configuration.
  *
- * @author Marc Lehner, KNIME GmbH, Konstanz, Germany
+ * @author Carsten Haubolt, KNIME GmbH, Konstanz, Germany
+ * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
  * @since 5.11
  */
 final class PixiTomlValidator {
@@ -238,7 +239,7 @@ final class PixiTomlValidator {
 
             case NO_PLATFORMS_FIELD:
                 return Optional.of(new TextMessage.Message("Platform configuration",
-                    "No 'platforms' field found in workspace section. Environment will only be checked for the current platform.",
+                    "No 'platforms' field found in workspace section. Environment will only be checked for the current platform. Consider adding \" platforms = [\"win-64\", \"linux-64\", \"osx-64\", \"osx-arm64\"]\" to the workspace part of your TOML.",
                     MessageType.WARNING));
 
             case UNKNOWN_PLATFORMS:
@@ -252,9 +253,13 @@ final class PixiTomlValidator {
                 String missingOs = validation.getMissingPlatforms().stream()
                     .map(PixiTomlValidator::platformDisplayName)
                     .collect(Collectors.joining(", "));
+                String missingOSsStringToAdd =
+                    validation.getMissingPlatforms().stream().map(os -> "\"" + os + "\"")
+                        .collect(Collectors.joining(", "));
                 return Optional.of(new TextMessage.Message("Platform configuration",
                     "Missing platform(s): " + missingOs
-                        + ". Environment may not work on all operating systems.",
+                        + ". Environment may not work on all operating systems. Consider adding "
+                        + missingOSsStringToAdd + " to the platforms field in the workspace part of your TOML.",
                     MessageType.WARNING));
 
             case PARSE_ERROR:

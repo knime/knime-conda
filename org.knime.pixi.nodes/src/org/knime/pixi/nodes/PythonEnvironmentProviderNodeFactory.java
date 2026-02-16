@@ -48,8 +48,6 @@
  */
 package org.knime.pixi.nodes;
 
-import java.io.IOException;
-
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.node.DefaultModel.ConfigureInput;
 import org.knime.node.DefaultModel.ConfigureOutput;
@@ -152,15 +150,11 @@ knime-python-base = "*"</pre>
     private static void execute(final ExecuteInput in, final ExecuteOutput out) {
         final PythonEnvironmentProviderNodeParameters params = in.getParameters();
 
-        try {
-            final var portObject = new PythonEnvironmentPortObject( //
-                params.getPixiTomlFileContent(), //
-                params.getPixiLockFileContent() //
-            );
-            out.setOutData(portObject);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read environment configuration: " + e.getMessage(), e);
-        }
+        final var portObject = new PythonEnvironmentPortObject( //
+            params.getPixiTomlFileContent(), //
+            params.getPixiLockFileContent() //
+        );
+        out.setOutData(portObject);
     }
 
 }

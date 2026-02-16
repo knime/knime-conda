@@ -48,8 +48,6 @@
  */
 package org.knime.pixi.nodes;
 
-import java.io.IOException;
-
 import org.knime.core.node.NodeLogger;
 import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.MainInputSource;
 import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.PackageSpec;
@@ -67,11 +65,12 @@ final class PixiManifestResolver {
     }
 
     /**
-     * Retrieves TOML manifest content from various input sources. Throws exceptions for all error cases to provide
-     * clear error messages.
+     * Retrieves TOML manifest content from various input sources.
+     *
+     * @throws IllegalStateException if the input source is unknown
      */
     static String getTomlContent(final MainInputSource inputSource, final PackageSpec[] packages,
-        final String tomlContent, final String yamlContent, final NodeLogger logger) throws IOException {
+        final String tomlContent, final String yamlContentAsTOML, final NodeLogger logger) {
         logger.debug("Getting TOML content for: " + inputSource);
         switch (inputSource) {
             case SIMPLE:
@@ -83,19 +82,13 @@ final class PixiManifestResolver {
                 logger.debug("Using TOML from editor (" + tomlContent.length() + " chars)");
                 return tomlContent;
             case YAML_EDITOR:
-                // TODO in case of the YAML editor, we should save the TOML as part of the resolved environment
-                // Right now, we only save the lockfile but re-generate the TOML access of the TOML file
                 logger.debug("Converting YAML from editor to TOML");
-                try {
-                    String toml = PixiYamlImporter.convertYamlToToml(yamlContent);
-                    logger.debug("Converted TOML (" + toml.length() + " chars)");
-                    return toml;
-                } catch (Exception e) {
-                    throw new IOException("Failed to convert YAML to TOML: " + e.getMessage(), e);
-                }
+                //String toml = PixiYamlImporter.convertYamlToToml(yamlContent);
+                //logger.debug("Converted TOML (" + toml.length() + " chars)");
+                return yamlContentAsTOML;
             default:
                 logger.error("Unknown input source: " + inputSource);
-                throw new IOException("Unknown input source: " + inputSource);
+                throw new IllegalStateException("Unknown input source: " + inputSource);
         }
     }
 }

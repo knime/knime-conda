@@ -48,13 +48,13 @@
  */
 package org.knime.pixi.nodes;
 
-import java.io.IOException;
 import java.util.Optional;
 import java.util.function.Supplier;
 
 import org.knime.core.node.NodeLogger;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.ButtonWidget;
 import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
+import org.knime.core.webui.node.dialog.defaultdialog.widget.handler.WidgetHandlerException;
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
@@ -86,7 +86,7 @@ import org.knime.node.parameters.widget.text.TextAreaWidget;
 @SuppressWarnings("restriction")
 public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
-    private static final NodeLogger LOGGER = NodeLogger.getLogger(PythonEnvironmentProviderNodeParameters.class);
+    private static final NodeLogger LOGGER = NodeLogger.getLogger("PythonEnvironmentProviderNodeParameters");
 
     // Layout sections
     static final class mainInputSelectionSection {
@@ -202,6 +202,38 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     interface YamlContentRef extends ParameterReference<String> {
     }
 
+    // hidden field to store TOML content converted from YAML
+    @ValueReference(ConvertedTomlFromYamlRef.class)
+    String m_convertedTomlFromYaml = "";
+
+    // Instance-level cache to avoid repeated conversions (not persisted)
+    private transient String m_cachedYamlForConversion = null;
+    private transient String m_cachedConvertedToml = null;
+
+    String getConvertedTomlFromYaml() {
+        // Only convert if in YAML mode and not already cached for this YAML content
+        if (m_mainInputSource == MainInputSource.YAML_EDITOR
+            && m_envYamlContent != null && !m_envYamlContent.isEmpty()) {
+            
+            // Check if we need to convert (YAML content changed)
+            if (m_cachedConvertedToml == null || !m_envYamlContent.equals(m_cachedYamlForConversion)) {
+                try {
+                    m_cachedConvertedToml = PixiYamlImporter.convertYamlToToml(m_envYamlContent);
+                    m_cachedYamlForConversion = m_envYamlContent;
+                } catch (Exception e) {
+                    LOGGER.error("Failed to convert YAML to TOML: " + e.getMessage(), e);
+                    return "";
+                }
+            }
+            return m_cachedConvertedToml;
+        }
+        return "";
+    }
+
+    interface ConvertedTomlFromYamlRef extends ParameterReference<String> {
+    }
+
+
     static final class InputIsYaml implements EffectPredicateProvider {
         @Override
         public EffectPredicate init(final PredicateInitializer i) {
@@ -282,8 +314,9 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         return m_pixiLockFileContent;
     }
 
-    String getPixiTomlFileContent() throws IOException {
-        return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent, m_envYamlContent,
+    String getPixiTomlFileContent() {
+        return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent,
+            getConvertedTomlFromYaml(),
             LOGGER);
     }
 
@@ -329,6 +362,12 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         protected String getManifestContent(final TomlContentGetter contentGetter) throws Exception {
             return contentGetter.getTomlContent();
         }
+
+        @Override
+        protected String invoke(final TomlContentGetter settings, final NodeParametersInput context)
+            throws WidgetHandlerException {
+            return super.invoke(settings, context);
+        }
     }
 
     static final class TomlContentGetter {
@@ -344,15 +383,31 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         @ValueReference(YamlContentRef.class)
         String m_envYamlContent;
 
+        @ValueReference(ConvertedTomlFromYamlRef.class)
+        String m_convertedTomlFromYaml;
 
-        String getTomlContent() throws IOException {
+        String getTomlContent() {
+            // For YAML input, convert on-the-fly if not already converted
+            final String yamlAsTOML;
+            if (m_mainInputSource == MainInputSource.YAML_EDITOR) {
+                if (m_convertedTomlFromYaml != null && !m_convertedTomlFromYaml.isEmpty()) {
+                    yamlAsTOML = m_convertedTomlFromYaml;
+                } else {
+                    yamlAsTOML = PixiYamlImporter.convertYamlToToml(m_envYamlContent);
+                }
+            } else {
+                yamlAsTOML = m_convertedTomlFromYaml;
+            }
+
             return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent,
-                m_envYamlContent, LOGGER);
+                yamlAsTOML, LOGGER);
         }
     }
 
     static final class PixiLockUpdateHandler extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
     }
+
+
 
     /**
      * Resets lock file to empty when any input content changes.
@@ -405,30 +460,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             LOGGER.debug("Button value: " + (buttonValue != null ? buttonValue.length() + " chars" : "null"));
 
             // Check if any relevant content changed
-            boolean contentChanged = false;
-
-            if (m_lastInputSource != null && currentInputSource != m_lastInputSource) {
-                LOGGER.debug("Input source changed: " + m_lastInputSource + " -> " + currentInputSource);
-                contentChanged = true;
-            }
-
-            if (currentInputSource == MainInputSource.SIMPLE && m_lastPackages != null
-                && !java.util.Arrays.equals(m_lastPackages, currentPackages)) {
-                LOGGER.debug("Packages changed");
-                contentChanged = true;
-            }
-
-            if (currentInputSource == MainInputSource.TOML_EDITOR && m_lastTomlContent != null
-                && !m_lastTomlContent.equals(currentTomlContent)) {
-                LOGGER.debug("TOML content changed");
-                contentChanged = true;
-            }
-
-            if (currentInputSource == MainInputSource.YAML_EDITOR && m_lastYamlContent != null
-                && !m_lastYamlContent.equals(currentYamlContent)) {
-                LOGGER.debug("YAML content changed");
-                contentChanged = true;
-            }
+            boolean contentChanged = hasContentChanged(currentInputSource, currentPackages, currentTomlContent,
+                currentYamlContent);
 
             // Update last values
             m_lastInputSource = currentInputSource;
@@ -443,6 +476,34 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             }
             LOGGER.debug("Content unchanged - keeping lock file");
             return buttonValue != null ? buttonValue : "";
+        }
+
+        private boolean hasContentChanged(final MainInputSource currentInputSource,
+            final PackageSpec[] currentPackages, final String currentTomlContent, final String currentYamlContent) {
+            if (m_lastInputSource != null && currentInputSource != m_lastInputSource) {
+                LOGGER.debug("Input source changed: " + m_lastInputSource + " -> " + currentInputSource);
+                return true;
+            }
+
+            if (currentInputSource == MainInputSource.SIMPLE && m_lastPackages != null
+                && !java.util.Arrays.equals(m_lastPackages, currentPackages)) {
+                LOGGER.debug("Packages changed");
+                return true;
+            }
+
+            if (currentInputSource == MainInputSource.TOML_EDITOR && m_lastTomlContent != null
+                && !m_lastTomlContent.equals(currentTomlContent)) {
+                LOGGER.debug("TOML content changed");
+                return true;
+            }
+
+            if (currentInputSource == MainInputSource.YAML_EDITOR && m_lastYamlContent != null
+                && !m_lastYamlContent.equals(currentYamlContent)) {
+                LOGGER.debug("YAML content changed");
+                return true;
+            }
+
+            return false;
         }
     }
 

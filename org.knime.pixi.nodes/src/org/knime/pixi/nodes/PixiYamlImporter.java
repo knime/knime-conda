@@ -1,11 +1,8 @@
 package org.knime.pixi.nodes;
 
 import java.io.IOException;
-import java.io.StringReader;
-import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
@@ -14,12 +11,6 @@ import org.knime.conda.envinstall.pixi.PixiBinary.CallResult;
 import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 import org.knime.core.node.KNIMEException;
 import org.knime.pixi.port.PixiUtils;
-
-import com.electronwill.nightconfig.core.CommentedConfig;
-import com.electronwill.nightconfig.core.Config;
-import com.electronwill.nightconfig.core.io.IndentStyle;
-import com.electronwill.nightconfig.toml.TomlParser;
-import com.electronwill.nightconfig.toml.TomlWriter;
 
 /**
  * Utility class to import conda environment.yaml files into pixi format
@@ -50,9 +41,8 @@ public final class PixiYamlImporter {
             // Write yaml content to file
             Files.writeString(envFile, yamlContent);
 
-            // Run pixi init --import environment.yml
-            // TODO add all platforms with the -p option to replace the later modification via ensureAllPlatforms
-            final String[] pixiArgs = {"init", "--import", envFile.toString()};
+            final String[] pixiArgs = {"init", "--import", envFile.toString(), "-p", "win-64", "-p", "linux-64", "-p",
+                "osx-64", "-p", "osx-arm64"};
             final CallResult callResult = PixiBinary.callPixi(tempDir, Map.of(), pixiArgs);
 
             if (callResult.returnCode() != 0) {
@@ -69,7 +59,7 @@ public final class PixiYamlImporter {
             String tomlContent = Files.readString(tomlFile);
 
             // Parse the TOML, override platforms, and write back
-            return ensureAllPlatforms(tomlContent);
+            return tomlContent;
 
         } catch (IOException e) {
             throw new KNIMEException("Could not import conda environment.yaml", e).toUnchecked();
@@ -90,34 +80,4 @@ public final class PixiYamlImporter {
         }
     }
 
-    /**
-     * Parse the TOML, ensure all platforms are listed, and return as string
-     */
-    private static String ensureAllPlatforms(final String tomlContent) {
-        try {
-            TomlParser parser = new TomlParser();
-            Config config = parser.parse(new StringReader(tomlContent));
-
-            // Get or create workspace section
-            Config workspace = config.get("workspace");
-            if (workspace == null) {
-                workspace = CommentedConfig.inMemory();
-                config.set("workspace", workspace);
-            }
-
-            // Override platforms to include all major platforms
-            workspace.set("platforms", Arrays.asList("win-64", "linux-64", "osx-64", "osx-arm64"));
-
-            // Write back to string
-            StringWriter writer = new StringWriter();
-            TomlWriter tomlWriter = new TomlWriter();
-            tomlWriter.setIndent(IndentStyle.SPACES_2);
-            tomlWriter.setWriteTableInlinePredicate(path -> false); // Never write tables inline
-            tomlWriter.write(config, writer);
-            return writer.toString();
-
-        } catch (Exception e) {
-            throw new KNIMEException("Could not parse and modify pixi.toml", e).toUnchecked();
-        }
-    }
 }

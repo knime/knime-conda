@@ -33,216 +33,203 @@ import org.knime.externalprocessprovider.ExternalProcessProvider;
  */
 public final class PythonEnvironmentPortObject extends AbstractSimplePortObject {
 
-	/** The port type for Python environment port objects. */
-	public static final PortType TYPE = PortTypeRegistry.getInstance().getPortType(PythonEnvironmentPortObject.class);
+    /** The port type for Python environment port objects. */
+    public static final PortType TYPE = PortTypeRegistry.getInstance().getPortType(PythonEnvironmentPortObject.class);
 
-	/** The port type for optional Python environment port objects. */
-	public static final PortType TYPE_OPTIONAL = PortTypeRegistry.getInstance()
-			.getPortType(PythonEnvironmentPortObject.class, true);
+    /** The port type for optional Python environment port objects. */
+    public static final PortType TYPE_OPTIONAL =
+        PortTypeRegistry.getInstance().getPortType(PythonEnvironmentPortObject.class, true);
 
-	private static final NodeLogger LOGGER = NodeLogger.getLogger(PythonEnvironmentPortObject.class);
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(PythonEnvironmentPortObject.class);
 
-	private static final String CFG_PIXI_TOML_CONTENT = "pixi_toml_content";
-	private static final String CFG_PIXI_LOCK_CONTENT = "pixi_lock_content";
+    private static final String CFG_PIXI_TOML_CONTENT = "pixi_toml_content";
 
-	/**
-	 * Global map of installation futures keyed by installation directory path. This
-	 * ensures that concurrent installations to the same directory are serialized,
-	 * as Pixi does not support multiple concurrent installations to the same
-	 * location.
-	 */
-	private static final ConcurrentHashMap<Path, CompletableFuture<Void>> GLOBAL_INSTALL_FUTURES = new ConcurrentHashMap<>();
+    private static final String CFG_PIXI_LOCK_CONTENT = "pixi_lock_content";
 
-	private String m_pixiTomlContent;
+    /**
+     * Global map of installation futures keyed by installation directory path. This ensures that concurrent
+     * installations to the same directory are serialized, as Pixi does not support multiple concurrent installations to
+     * the same location.
+     */
+    private static final ConcurrentHashMap<Path, CompletableFuture<Void>> GLOBAL_INSTALL_FUTURES =
+        new ConcurrentHashMap<>();
 
-	private String m_pixiLockContent;
+    private String m_pixiTomlContent;
 
-	/**
-	 * Serializer for {@link PythonEnvironmentPortObject}.
-	 */
-	public static final class Serializer extends AbstractSimplePortObjectSerializer<PythonEnvironmentPortObject> {
-	}
+    private String m_pixiLockContent;
 
-	/**
-	 * Public no-arg constructor for deserialization.
-	 */
-	public PythonEnvironmentPortObject() {
-	}
+    /**
+     * Serializer for {@link PythonEnvironmentPortObject}.
+     */
+    public static final class Serializer extends AbstractSimplePortObjectSerializer<PythonEnvironmentPortObject> {
+    }
 
-	/**
-	 * Constructor.
-	 *
-	 * @param pixiTomlContent the content of the pixi.toml file
-	 * @param pixiLockContent the content of the pixi.lock file
-	 */
-	public PythonEnvironmentPortObject(final String pixiTomlContent, final String pixiLockContent) {
-		m_pixiTomlContent = pixiTomlContent;
-		m_pixiLockContent = pixiLockContent;
-	}
+    /**
+     * Public no-arg constructor for deserialization.
+     */
+    public PythonEnvironmentPortObject() {
+    }
 
-	/**
-	 * @return the path to the pixi project directory on disk (containing pixi.toml
-	 *         and .pixi/)
-	 * @throws IOException if the path cannot be resolved
-	 */
-	private Path getPixiEnvironmentPath() throws IOException {
+    /**
+     * Constructor.
+     *
+     * @param pixiTomlContent the content of the pixi.toml file
+     * @param pixiLockContent the content of the pixi.lock file
+     */
+    public PythonEnvironmentPortObject(final String pixiTomlContent, final String pixiLockContent) {
+        m_pixiTomlContent = pixiTomlContent;
+        m_pixiLockContent = pixiLockContent;
+    }
+
+    /**
+     * @return the path to the pixi project directory on disk (containing pixi.toml and .pixi/)
+     * @throws IOException if the path cannot be resolved
+     */
+    private Path getPixiEnvironmentPath() throws IOException {
         return PixiUtils.resolveProjectDirectory(m_pixiLockContent);
-	}
+    }
 
-	/**
-	 * Get a PythonProcessProvider that can be used to execute Python in this
-	 * environment. The returned provider will only work if the environment is
-	 * already installed. It does not trigger installation itself. Use
-	 * {@link #installPythonEnvironment} to ensure the environment is installed
-	 * before calling this method.
-	 *
-	 * @return a PixiPythonCommand for this environment
-	 * @throws IOException if the environment cannot be installed
-	 */
-	public ExternalProcessProvider getPythonCommand() throws IOException {
-		final Path envPath = getPixiEnvironmentPath();
-		final Path tomlPath = envPath.resolve("pixi.toml");
-		LOGGER.debug("Creating PixiPythonCommand: envPath=" + envPath + ", tomlPath=" + tomlPath + ", tomlExists="
-				+ Files.exists(tomlPath) + ", tomlAbsolute=" + tomlPath.toAbsolutePath().normalize());
-		return new PixiPythonCommand(tomlPath);
-	}
+    /**
+     * Get a PythonProcessProvider that can be used to execute Python in this environment. The returned provider will
+     * only work if the environment is already installed. It does not trigger installation itself. Use
+     * {@link #installPythonEnvironment} to ensure the environment is installed before calling this method.
+     *
+     * @return a PixiPythonCommand for this environment
+     * @throws IOException if the environment cannot be installed
+     */
+    public ExternalProcessProvider getPythonCommand() throws IOException {
+        final Path envPath = getPixiEnvironmentPath();
+        final Path tomlPath = envPath.resolve("pixi.toml");
+        LOGGER.debug("Creating PixiPythonCommand: envPath=" + envPath + ", tomlPath=" + tomlPath + ", tomlExists="
+            + Files.exists(tomlPath) + ", tomlAbsolute=" + tomlPath.toAbsolutePath().normalize());
+        return new PixiPythonCommand(tomlPath);
+    }
 
-	/**
-	 * Install the Pixi environment represented by this port object if it is not
-	 * already installed, with progress reporting. This method is thread-safe and
-	 * cancelable. If multiple threads call this method concurrently (even across
-	 * different port object instances targeting the same directory), only one will
-	 * perform the installation while others wait for it to complete. All threads
-	 * will receive the same result (success or exception).
-	 *
-	 * @param exec execution monitor for cancellation support.
-	 * @throws IOException                if installation fails
-	 * @throws CanceledExecutionException if the operation is canceled via the
-	 *                                    execution monitor
-	 */
-	public void installPythonEnvironment(final ExecutionMonitor exec) throws IOException, CanceledExecutionException {
+    /**
+     * Install the Pixi environment represented by this port object if it is not already installed, with progress
+     * reporting. This method is thread-safe and cancelable. If multiple threads call this method concurrently (even
+     * across different port object instances targeting the same directory), only one will perform the installation
+     * while others wait for it to complete. All threads will receive the same result (success or exception).
+     *
+     * @param exec execution monitor for cancellation support.
+     * @throws IOException if installation fails
+     * @throws CanceledExecutionException if the operation is canceled via the execution monitor
+     */
+    public void installPythonEnvironment(final ExecutionMonitor exec) throws IOException, CanceledExecutionException {
 
-		// Get the installation directory - this is the global synchronization point
-		final Path installDir = getPixiEnvironmentPath();
+        // Get the installation directory - this is the global synchronization point
+        final Path installDir = getPixiEnvironmentPath();
 
-		var future = GLOBAL_INSTALL_FUTURES.putIfAbsent(installDir, new CompletableFuture<>());
-		if (future == null) {
-			// There was no future with this key -> we need to perform the installation
-			future = GLOBAL_INSTALL_FUTURES.get(installDir);
-			try {
-				performInstallation(exec, installDir);
-				future.complete(null);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				future.cancel(false);
-				throw new CanceledExecutionException("Python environment installation was canceled.");
-			} catch (Exception e) {
-				future.completeExceptionally(e);
-			}
-		} else {
-			future.join();
-		}
-	}
+        var future = GLOBAL_INSTALL_FUTURES.putIfAbsent(installDir, new CompletableFuture<>());
+        if (future == null) {
+            // There was no future with this key -> we need to perform the installation
+            future = GLOBAL_INSTALL_FUTURES.get(installDir);
+            try {
+                performInstallation(exec, installDir);
+                future.complete(null);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                future.cancel(false);
+                throw new CanceledExecutionException("Python environment installation was canceled.");
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            }
+        } else {
+            future.join();
+        }
+    }
 
-	/**
-	 * Performs the actual Pixi environment installation. This method is only called
-	 * by one thread.
-	 *
-	 * @param progressReporter Progress reporter for installation feedback
-	 * @throws IOException          if installation fails
-	 * @throws InterruptedException
-	 */
-	// TODO make this static and pass in all needed data as parameters
-	private void performInstallation(final ExecutionMonitor exec, final Path installDir)
-			throws IOException, InterruptedException {
+    /**
+     * Performs the actual Pixi environment installation. This method is only called by one thread.
+     *
+     * @param progressReporter Progress reporter for installation feedback
+     * @throws IOException if installation fails
+     * @throws InterruptedException
+     */
+    // TODO make this static and pass in all needed data as parameters
+    private void performInstallation(final ExecutionMonitor exec, final Path installDir)
+        throws IOException, InterruptedException {
 
-		// Double-check if environment is already installed (could happen with existing
-		// path)
-		final Path envDir = installDir.resolve(".pixi").resolve("envs").resolve("default");
-		if (Files.exists(envDir)) {
-			LOGGER.debug("Pixi environment already installed at: " + envDir);
-			exec.setProgress(1.0, "Environment already installed");
-			return;
-		}
+        // Double-check if environment is already installed (could happen with existing
+        // path)
+        final Path envDir = installDir.resolve(".pixi").resolve("envs").resolve("default");
+        if (Files.exists(envDir)) {
+            LOGGER.debug("Pixi environment already installed at: " + envDir);
+            exec.setProgress(1.0, "Environment already installed");
+            return;
+        }
 
-		LOGGER.info("Installing Pixi environment at: " + installDir);
-		exec.setProgress(0.0, "Preparing environment installation...");
+        LOGGER.info("Installing Pixi environment at: " + installDir);
+        exec.setProgress(0.0, "Preparing environment installation...");
 
-		// Create project directory if needed
-		Files.createDirectories(installDir);
+        // Create project directory if needed
+        Files.createDirectories(installDir);
 
-		// Write pixi.toml
-		exec.setProgress(0.1, "Writing environment configuration...");
-		final Path pixiTomlPath = installDir.resolve("pixi.toml");
-		Files.writeString(pixiTomlPath, m_pixiTomlContent, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
-				StandardOpenOption.TRUNCATE_EXISTING);
+        // Write pixi.toml
+        exec.setProgress(0.1, "Writing environment configuration...");
+        final Path pixiTomlPath = installDir.resolve("pixi.toml");
+        Files.writeString(pixiTomlPath, m_pixiTomlContent, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
+            StandardOpenOption.TRUNCATE_EXISTING);
 
-		// Write pixi.lock
-		final Path pixiLockPath = installDir.resolve("pixi.lock");
-		Files.writeString(pixiLockPath, m_pixiLockContent, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
-				StandardOpenOption.TRUNCATE_EXISTING);
+        // Write pixi.lock
+        final Path pixiLockPath = installDir.resolve("pixi.lock");
+        Files.writeString(pixiLockPath, m_pixiLockContent, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
+            StandardOpenOption.TRUNCATE_EXISTING);
 
-		// Run pixi install to create the environment
-		exec.setProgress(0.2, "Installing Python environment (this may take a minute)...");
-		try {
-			final Path pixiHome = installDir.resolve(".pixi-home");
-			Files.createDirectories(pixiHome);
-			final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());
-			final String[] pixiArgs = { "install", "--color", "never", "--no-progress" };
+        // Run pixi install to create the environment
+        exec.setProgress(0.2, "Installing Python environment (this may take a minute)...");
+        try {
+            final Path pixiHome = installDir.resolve(".pixi-home");
+            Files.createDirectories(pixiHome);
+            final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());
+            final String[] pixiArgs = {"install", "--color", "never", "--no-progress"};
 
-			// TODO update the PixiBinary API to make a cancelable execution simpler here
-			final var callResult = PixiBinary.callPixiWithCancellation(installDir, extraEnv, () -> {
-				try {
-					exec.checkCanceled();
-					return false;
-				} catch (CanceledExecutionException e) {
-					return true;
-				}
-			}, pixiArgs);
+            // TODO update the PixiBinary API to make a cancelable execution simpler here
+            final var callResult = PixiBinary.callPixiWithExecutionMonitor(installDir, extraEnv, exec, pixiArgs);
 
-			if (callResult.returnCode() != 0) {
-				final String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
-				throw new IOException("Pixi install failed: " + errorDetails);
-			}
+            if (callResult.returnCode() != 0) {
+                final String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
+                throw new IOException("Pixi install failed: " + errorDetails);
+            }
 
-			exec.setProgress(1.0, "Environment installation complete");
-		} catch (PixiBinaryLocationException ex) {
-			throw new IOException("Could not locate Pixi binary to install environment.", ex);
-		}
-	}
+            exec.setProgress(1.0, "Environment installation complete");
+        } catch (PixiBinaryLocationException ex) {
+            throw new IOException("Could not locate Pixi binary to install environment.", ex);
+        }
+    }
 
-	@Override
-	public PythonEnvironmentPortObjectSpec getSpec() {
-		return PythonEnvironmentPortObjectSpec.INSTANCE;
-	}
+    @Override
+    public PythonEnvironmentPortObjectSpec getSpec() {
+        return PythonEnvironmentPortObjectSpec.INSTANCE;
+    }
 
-	@Override
-	public JComponent[] getViews() {
-		return new JComponent[] {};
-	}
+    @Override
+    public JComponent[] getViews() {
+        return new JComponent[]{};
+    }
 
-	@Override
-	protected void save(final ModelContentWO model, final ExecutionMonitor exec) throws CanceledExecutionException {
-		model.addString(CFG_PIXI_TOML_CONTENT, m_pixiTomlContent);
-		model.addString(CFG_PIXI_LOCK_CONTENT, m_pixiLockContent);
-	}
+    @Override
+    protected void save(final ModelContentWO model, final ExecutionMonitor exec) throws CanceledExecutionException {
+        model.addString(CFG_PIXI_TOML_CONTENT, m_pixiTomlContent);
+        model.addString(CFG_PIXI_LOCK_CONTENT, m_pixiLockContent);
+    }
 
-	@Override
-	protected void load(final ModelContentRO model, final PortObjectSpec spec, final ExecutionMonitor exec)
-			throws InvalidSettingsException, CanceledExecutionException {
-		m_pixiTomlContent = model.getString(CFG_PIXI_TOML_CONTENT);
-		m_pixiLockContent = model.getString(CFG_PIXI_LOCK_CONTENT);
-	}
+    @Override
+    protected void load(final ModelContentRO model, final PortObjectSpec spec, final ExecutionMonitor exec)
+        throws InvalidSettingsException, CanceledExecutionException {
+        m_pixiTomlContent = model.getString(CFG_PIXI_TOML_CONTENT);
+        m_pixiLockContent = model.getString(CFG_PIXI_LOCK_CONTENT);
+    }
 
-	@Override
-	public String getSummary() {
-		try {
-			final Path envPath = getPixiEnvironmentPath();
-			return "Pixi Environment: " + envPath.toString();
-		} catch (IOException e) {
-			return "Pixi Environment (path unavailable)";
-		}
-	}
+    @Override
+    public String getSummary() {
+        try {
+            final Path envPath = getPixiEnvironmentPath();
+            return "Pixi Environment: " + envPath.toString();
+        } catch (IOException e) {
+            return "Pixi Environment (path unavailable)";
+        }
+    }
 
     /**
      * Checks if the Pixi environment represented by this port object is already installed on disk.
@@ -257,8 +244,8 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
         } catch (IOException ex) {
             return false;
         }
-    Path envDir = installDir.resolve(".pixi").resolve("envs").resolve("default");
-    return Files.exists(envDir);
-  }
+        Path envDir = installDir.resolve(".pixi").resolve("envs").resolve("default");
+        return Files.exists(envDir);
+    }
 
 }

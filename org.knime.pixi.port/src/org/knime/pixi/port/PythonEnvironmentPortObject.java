@@ -125,7 +125,7 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
             // There was no future with this key -> we need to perform the installation
             future = GLOBAL_INSTALL_FUTURES.get(installDir);
             try {
-                performInstallation(exec, installDir);
+                performInstallation(exec, installDir, m_pixiTomlContent, m_pixiLockContent);
                 future.complete(null);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -142,13 +142,15 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
     /**
      * Performs the actual Pixi environment installation. This method is only called by one thread.
      *
-     * @param progressReporter Progress reporter for installation feedback
+     * @param exec execution monitor for progress reporting and cancellation
+     * @param installDir the directory where the Pixi environment will be installed
+     * @param pixiTomlContent the content of the pixi.toml file
+     * @param pixiLockContent the content of the pixi.lock file
      * @throws IOException if installation fails
-     * @throws InterruptedException
+     * @throws InterruptedException if the installation is interrupted
      */
-    // TODO make this static and pass in all needed data as parameters
-    private void performInstallation(final ExecutionMonitor exec, final Path installDir)
-        throws IOException, InterruptedException {
+    private static void performInstallation(final ExecutionMonitor exec, final Path installDir,
+        final String pixiTomlContent, final String pixiLockContent) throws IOException, InterruptedException {
 
         // Double-check if environment is already installed (could happen with existing
         // path)
@@ -168,12 +170,12 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
         // Write pixi.toml
         exec.setProgress(0.1, "Writing environment configuration...");
         final Path pixiTomlPath = installDir.resolve("pixi.toml");
-        Files.writeString(pixiTomlPath, m_pixiTomlContent, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
+        Files.writeString(pixiTomlPath, pixiTomlContent, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
             StandardOpenOption.TRUNCATE_EXISTING);
 
         // Write pixi.lock
         final Path pixiLockPath = installDir.resolve("pixi.lock");
-        Files.writeString(pixiLockPath, m_pixiLockContent, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
+        Files.writeString(pixiLockPath, pixiLockContent, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
             StandardOpenOption.TRUNCATE_EXISTING);
 
         // Run pixi install to create the environment

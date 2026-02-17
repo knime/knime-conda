@@ -97,20 +97,12 @@ final class PixiTomlValidator {
     /**
      * Result of platform validation containing the validation result and additional details.
      */
-    // TODO use a Record ;)
-    static final class PlatformValidation {
-        private final ValidationResult m_result;
-        private final Set<String> m_missingPlatforms;
-        private final Set<String> m_unknownPlatforms;
-        private final String m_errorMessage;
-
-        private PlatformValidation(final ValidationResult result, final Set<String> missingPlatforms,
-            final Set<String> unknownPlatforms, final String errorMessage) {
-            m_result = result;
-            m_missingPlatforms = missingPlatforms;
-            m_unknownPlatforms = unknownPlatforms;
-            m_errorMessage = errorMessage;
-        }
+    record PlatformValidation(
+        ValidationResult result,
+        Set<String> missingPlatforms,
+        Set<String> unknownPlatforms,
+        String errorMessage
+    ) {
 
         static PlatformValidation allPlatformsPresent() {
             return new PlatformValidation(ValidationResult.ALL_PLATFORMS_PRESENT, Set.of(), Set.of(), null);
@@ -136,27 +128,11 @@ final class PixiTomlValidator {
             return new PlatformValidation(ValidationResult.PARSE_ERROR, Set.of(), Set.of(), errorMessage);
         }
 
-        ValidationResult getResult() {
-            return m_result;
-        }
-
-        Set<String> getMissingPlatforms() {
-            return m_missingPlatforms;
-        }
-
-        Set<String> getUnknownPlatforms() {
-            return m_unknownPlatforms;
-        }
-
-        String getErrorMessage() {
-            return m_errorMessage;
-        }
-
         /**
          * Returns true if this validation result represents a warning or error condition.
          */
         boolean isWarningOrError() {
-            return m_result != ValidationResult.ALL_PLATFORMS_PRESENT;
+            return result != ValidationResult.ALL_PLATFORMS_PRESENT;
         }
     }
 
@@ -227,7 +203,7 @@ final class PixiTomlValidator {
      * @return the text message, or empty if validation passed
      */
     static Optional<TextMessage.Message> toMessage(final PlatformValidation validation) {
-        switch (validation.getResult()) {
+        switch (validation.result()) {
             case ALL_PLATFORMS_PRESENT:
                 return Optional.of(new TextMessage.Message("Platform configuration",
                     "Pixi TOML is prepared for all operating systems.", MessageType.INFO));
@@ -243,18 +219,18 @@ final class PixiTomlValidator {
                     MessageType.WARNING));
 
             case UNKNOWN_PLATFORMS:
-                String unknownOSes = validation.getUnknownPlatforms().stream().collect(Collectors.joining(", "));
+                String unknownOSes = validation.unknownPlatforms().stream().collect(Collectors.joining(", "));
                 String knownOSes = ALL_PLATFORMS.stream().collect(Collectors.joining(", "));
                 return Optional.of(new TextMessage.Message("Platform configuration",
                     "Unknown platform(s): " + unknownOSes + ". Platforms should be one of: " + knownOSes + ".",
                     MessageType.WARNING));
 
             case MISSING_PLATFORMS:
-                String missingOs = validation.getMissingPlatforms().stream()
+                String missingOs = validation.missingPlatforms().stream()
                     .map(PixiTomlValidator::platformDisplayName)
                     .collect(Collectors.joining(", "));
                 String missingOSsStringToAdd =
-                    validation.getMissingPlatforms().stream().map(os -> "\"" + os + "\"")
+                    validation.missingPlatforms().stream().map(os -> "\"" + os + "\"")
                         .collect(Collectors.joining(", "));
                 return Optional.of(new TextMessage.Message("Platform configuration",
                     "Missing platform(s): " + missingOs
@@ -264,7 +240,7 @@ final class PixiTomlValidator {
 
             case PARSE_ERROR:
                 return Optional.of(new TextMessage.Message("TOML Parse Error",
-                    "Could not parse TOML content: " + validation.getErrorMessage(), MessageType.ERROR));
+                    "Could not parse TOML content: " + validation.errorMessage(), MessageType.ERROR));
 
             default:
                 return Optional.empty();

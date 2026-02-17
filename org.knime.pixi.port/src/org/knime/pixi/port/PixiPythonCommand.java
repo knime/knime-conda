@@ -58,107 +58,100 @@ import org.knime.conda.envinstall.pixi.PixiBinary.PixiBinaryLocationException;
 import org.knime.externalprocessprovider.ExternalProcessProvider;
 
 /**
- * Pixi-specific implementation of {@link ExternalProcessProvider}. Executes
- * Python processes via {@code pixi run python} to ensure proper environment
- * activation and variable setup.
+ * Pixi-specific implementation of {@link ExternalProcessProvider}. Executes Python processes via
+ * {@code pixi run python} to ensure proper environment activation and variable setup.
  * <P>
- * This command resolves the pixi binary and constructs a command line that
- * invokes Python through pixi's environment runner, which handles all necessary
- * environment setup automatically.
+ * This command resolves the pixi binary and constructs a command line that invokes Python through pixi's environment
+ * runner, which handles all necessary environment setup automatically.
  *
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
  * @since 5.11
  */
 public final class PixiPythonCommand implements ExternalProcessProvider {
 
-	private final Path m_pixiTomlPath;
+    private final Path m_pixiTomlPath;
 
-	private final String m_pixiEnvironmentName;
+    private final String m_pixiEnvironmentName;
 
-	/**
-	 * Constructs a {@link ExternalProcessProvider} that describes a Python process
-	 * run via pixi in the environment identified by the given pixi.toml manifest
-	 * file.<br>
-	 * The validity of the given arguments is not tested.
-	 *
-	 * @param pixiTomlPath    The path to the pixi.toml manifest file that describes
-	 *                        the environment.
-	 * @param environmentName The name of the environment within the pixi project
-	 *                        (e.g., "default").
-	 */
-	private PixiPythonCommand(final Path pixiTomlPath, final String environmentName) {
-		m_pixiTomlPath = Objects.requireNonNull(pixiTomlPath, "pixiTomlPath must not be null");
-		m_pixiEnvironmentName = Objects.requireNonNull(environmentName, "environmentName must not be null");
-	}
+    /**
+     * Constructs a {@link ExternalProcessProvider} that describes a Python process run via pixi in the environment
+     * identified by the given pixi.toml manifest file.<br>
+     * The validity of the given arguments is not tested.
+     *
+     * @param pixiTomlPath The path to the pixi.toml manifest file that describes the environment.
+     * @param environmentName The name of the environment within the pixi project (e.g., "default").
+     */
+    private PixiPythonCommand(final Path pixiTomlPath, final String environmentName) {
+        m_pixiTomlPath = Objects.requireNonNull(pixiTomlPath, "pixiTomlPath must not be null");
+        m_pixiEnvironmentName = Objects.requireNonNull(environmentName, "environmentName must not be null");
+    }
 
-	/**
-	 * Constructs a {@link ExternalProcessProvider} that describes a Python process
-	 * run via pixi in the default environment identified by the given pixi.toml
-	 * manifest file.<br>
-	 * The validity of the given arguments is not tested.
-	 *
-	 * @param pixiTomlPath The path to the pixi.toml manifest file that describes
-	 *                     the environment.
-	 */
-	PixiPythonCommand(final Path pixiTomlPath) {
-		this(pixiTomlPath, "default");
-	}
+    /**
+     * Constructs a {@link ExternalProcessProvider} that describes a Python process run via pixi in the default
+     * environment identified by the given pixi.toml manifest file.<br>
+     * The validity of the given arguments is not tested.
+     *
+     * @param pixiTomlPath The path to the pixi.toml manifest file that describes the environment.
+     */
+    PixiPythonCommand(final Path pixiTomlPath) {
+        this(pixiTomlPath, "default");
+    }
 
-	@Override
-	public ProcessBuilder createProcessBuilder() {
-		try {
-			final String pixiBinaryPath = PixiBinary.getPixiBinaryPath();
-			final List<String> command = new ArrayList<>();
-			command.add(pixiBinaryPath);
-			command.add("run");
-			command.add("--as-is"); // --no-install + --frozen -> fail if env not ready, but don't try to install it
-			command.add("--manifest-path");
-			command.add(m_pixiTomlPath.toString());
-			command.add("--environment");
-			command.add(m_pixiEnvironmentName);
-			command.add("--no-progress");
-			command.add("python");
-			return new ProcessBuilder(command);
-		} catch (PixiBinaryLocationException ex) {
-			throw new IllegalStateException(
-					"Could not locate pixi binary. Please ensure the pixi bundle is properly installed.", ex);
-		}
-	}
+    @Override
+    public ProcessBuilder createProcessBuilder() {
+        try {
+            final String pixiBinaryPath = PixiBinary.getPixiBinaryPath();
+            final List<String> command = new ArrayList<>();
+            command.add(pixiBinaryPath);
+            command.add("run");
+            command.add("--as-is"); // --no-install + --frozen -> fail if env not ready, but don't try to install it
+            command.add("--manifest-path");
+            command.add(m_pixiTomlPath.toString());
+            command.add("--environment");
+            command.add(m_pixiEnvironmentName);
+            command.add("--no-progress");
+            command.add("python");
+            return new ProcessBuilder(command);
+        } catch (PixiBinaryLocationException ex) {
+            throw new IllegalStateException(
+                "Could not locate pixi binary. Please ensure the pixi bundle is properly installed.", ex);
+        }
+    }
 
-	@Override
-	public Path getExecutablePath() {
-		// Resolve the actual Python executable path within the environment
-		// This is used for informational purposes only, not for execution
-		final Path projectDir = m_pixiTomlPath.getParent();
-		final Path envDir = projectDir.resolve(".pixi").resolve("envs").resolve(m_pixiEnvironmentName);
-		final boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+    @Override
+    public Path getExecutablePath() {
+        // Resolve the actual Python executable path within the environment
+        // This is used for informational purposes only, not for execution
+        final Path projectDir = m_pixiTomlPath.getParent();
+        final Path envDir = projectDir.resolve(".pixi").resolve("envs").resolve(m_pixiEnvironmentName);
+        final boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
 
-		// Return the path even if it doesn't exist yet - the environment might not be
-		// installed
-		return isWindows ? envDir.resolve("python.exe") : envDir.resolve("bin").resolve("python");
-	}
+        // Return the path even if it doesn't exist yet - the environment might not be
+        // installed
+        return isWindows ? envDir.resolve("python.exe") : envDir.resolve("bin").resolve("python");
+    }
 
-	@Override
-	public int hashCode() {
-		return Objects.hash(m_pixiTomlPath, m_pixiEnvironmentName);
-	}
+    @Override
+    public int hashCode() {
+        return Objects.hash(m_pixiTomlPath, m_pixiEnvironmentName);
+    }
 
-	@Override
-	public boolean equals(final Object obj) {
-		if (this == obj) {
-			return true;
-		}
-		if (obj == null || getClass() != obj.getClass()) {
-			return false;
-		}
-		final PixiPythonCommand other = (PixiPythonCommand) obj;
-		return Objects.equals(m_pixiTomlPath, other.m_pixiTomlPath)
-				&& Objects.equals(m_pixiEnvironmentName, other.m_pixiEnvironmentName);
-	}
+    @Override
+    public boolean equals(final Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        final PixiPythonCommand other = (PixiPythonCommand)obj;
+        return Objects.equals(m_pixiTomlPath, other.m_pixiTomlPath)
+            && Objects.equals(m_pixiEnvironmentName, other.m_pixiEnvironmentName);
+    }
 
-	@Override
-	public String toString() {
-		return "pixi run --manifest-path " + m_pixiTomlPath + " --environment " + m_pixiEnvironmentName
-				+ " --no-progress python";
-	}
+    @Override
+    public String toString() {
+        return "pixi run --manifest-path " + m_pixiTomlPath + " --environment " + m_pixiEnvironmentName
+            + " --no-progress python";
+    }
 }

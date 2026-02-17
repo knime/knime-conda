@@ -15,34 +15,34 @@ import org.knime.core.node.port.AbstractSimplePortObjectSpec;
  */
 public final class PythonEnvironmentPortObjectSpec extends AbstractSimplePortObjectSpec {
 
-	/** Empty spec instance used during configuration. */
-	public static final PythonEnvironmentPortObjectSpec INSTANCE = new PythonEnvironmentPortObjectSpec();
+    /** Empty spec instance used during configuration. */
+    public static final PythonEnvironmentPortObjectSpec INSTANCE = new PythonEnvironmentPortObjectSpec();
 
-	/**
-	 * Serializer for {@link PythonEnvironmentPortObjectSpec}.
-	 */
-	public static final class Serializer
-			extends AbstractSimplePortObjectSpecSerializer<PythonEnvironmentPortObjectSpec> {
-	}
+    /**
+     * Serializer for {@link PythonEnvironmentPortObjectSpec}.
+     */
+    public static final class Serializer
+        extends AbstractSimplePortObjectSpecSerializer<PythonEnvironmentPortObjectSpec> {
+    }
 
-	/**
-	 * Public no-arg constructor for deserialization.
-	 */
-	public PythonEnvironmentPortObjectSpec() {
-	}
+    /**
+     * Public no-arg constructor for deserialization.
+     */
+    public PythonEnvironmentPortObjectSpec() {
+    }
 
-	@Override
-	protected void save(final ModelContentWO model) {
-		// No additional data to save in the spec
-	}
+    @Override
+    protected void save(final ModelContentWO model) {
+        // No additional data to save in the spec
+    }
 
-	@Override
-	protected void load(final ModelContentRO model) throws InvalidSettingsException {
-		// No additional data to load in the spec
-	}
+    @Override
+    protected void load(final ModelContentRO model) throws InvalidSettingsException {
+        // No additional data to load in the spec
+    }
 
-	@Override
-	public JComponent[] getViews() {
-		return new JComponent[] {};
-	}
+    @Override
+    public JComponent[] getViews() {
+        return new JComponent[]{};
+    }
 }

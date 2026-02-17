@@ -15,8 +15,8 @@ import org.knime.node.parameters.persistence.NodeParametersPersistor;
 import org.knime.pixi.port.PixiUtils;
 
 /**
- * Utility class for reducing code duplication in Pixi parameter classes. Provides base classes for common button
- * action handlers and shared persistors.
+ * Utility class for reducing code duplication in Pixi parameter classes. Provides base classes for common button action
+ * handlers and shared persistors.
  *
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
@@ -81,7 +81,8 @@ final class PixiParameterUtils {
 
                 // Run pixi lock to resolve dependencies and generate lock file
                 final String[] pixiArgs = {"--color", "never", "--no-progress", "lock"};
-                final var callResult = PixiBinary.callPixiWithCancellation(projectDir, null, () -> m_cancelled, pixiArgs);
+                final var callResult =
+                    PixiBinary.callPixiWithCancellation(projectDir, null, () -> m_cancelled, pixiArgs);
 
                 if (callResult.returnCode() != 0) {
                     String errorDetails = PixiUtils.getMessageFromCallResult(callResult);

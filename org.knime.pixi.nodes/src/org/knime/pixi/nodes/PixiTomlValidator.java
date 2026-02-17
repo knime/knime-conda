@@ -80,29 +80,25 @@ final class PixiTomlValidator {
      * Validation result for TOML platform configuration.
      */
     enum ValidationResult {
-        /** All platforms are correctly configured */
-        ALL_PLATFORMS_PRESENT,
-        /** No workspace section found */
-        NO_WORKSPACE_SECTION,
-        /** No platforms field found */
-        NO_PLATFORMS_FIELD,
-        /** Unknown platforms specified */
-        UNKNOWN_PLATFORMS,
-        /** Some platforms are missing */
-        MISSING_PLATFORMS,
-        /** TOML parsing error */
-        PARSE_ERROR
+            /** All platforms are correctly configured */
+            ALL_PLATFORMS_PRESENT,
+            /** No workspace section found */
+            NO_WORKSPACE_SECTION,
+            /** No platforms field found */
+            NO_PLATFORMS_FIELD,
+            /** Unknown platforms specified */
+            UNKNOWN_PLATFORMS,
+            /** Some platforms are missing */
+            MISSING_PLATFORMS,
+            /** TOML parsing error */
+            PARSE_ERROR
     }
 
     /**
      * Result of platform validation containing the validation result and additional details.
      */
-    record PlatformValidation(
-        ValidationResult result,
-        Set<String> missingPlatforms,
-        Set<String> unknownPlatforms,
-        String errorMessage
-    ) {
+    record PlatformValidation(ValidationResult result, Set<String> missingPlatforms, Set<String> unknownPlatforms,
+        String errorMessage) {
 
         static PlatformValidation allPlatformsPresent() {
             return new PlatformValidation(ValidationResult.ALL_PLATFORMS_PRESENT, Set.of(), Set.of(), null);
@@ -164,9 +160,7 @@ final class PixiTomlValidator {
             }
 
             // Convert to set of strings
-            Set<String> platforms = platformsList.stream()
-                .map(Object::toString)
-                .collect(Collectors.toSet());
+            Set<String> platforms = platformsList.stream().map(Object::toString).collect(Collectors.toSet());
 
             // Check if all platforms are present
             if (platforms.equals(ALL_PLATFORMS)) {
@@ -226,12 +220,10 @@ final class PixiTomlValidator {
                     MessageType.WARNING));
 
             case MISSING_PLATFORMS:
-                String missingOs = validation.missingPlatforms().stream()
-                    .map(PixiTomlValidator::platformDisplayName)
+                String missingOs = validation.missingPlatforms().stream().map(PixiTomlValidator::platformDisplayName)
                     .collect(Collectors.joining(", "));
-                String missingOSsStringToAdd =
-                    validation.missingPlatforms().stream().map(os -> "\"" + os + "\"")
-                        .collect(Collectors.joining(", "));
+                String missingOSsStringToAdd = validation.missingPlatforms().stream().map(os -> "\"" + os + "\"")
+                    .collect(Collectors.joining(", "));
                 return Optional.of(new TextMessage.Message("Platform configuration",
                     "Missing platform(s): " + missingOs
                         + ". Environment may not work on all operating systems. Consider adding "

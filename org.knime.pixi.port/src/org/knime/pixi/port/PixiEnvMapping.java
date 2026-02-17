@@ -66,61 +66,61 @@ import org.knime.core.node.NodeLogger;
  * @since 5.11
  */
 final class PixiEnvMapping {
-	
-	private PixiEnvMapping() {
-	}
 
-	private static final NodeLogger LOGGER = NodeLogger.getLogger(PixiEnvMapping.class);
+    private PixiEnvMapping() {
+    }
 
-	private static final String ENV_MAPPING_FILE = "knime_env_mapping.txt";
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(PixiEnvMapping.class);
 
-	static synchronized Path resolvePixiEnvDirectory(final String lockFileContent) {
-		final Path base = CondaPreferences.getPixiEnvPath();
-		Map<String, String> envMapping = new HashMap<>();
-		if (Files.exists(base.resolve(ENV_MAPPING_FILE))) {
-			try {
-				Files.readAllLines(base.resolve(ENV_MAPPING_FILE)).stream().map(line -> line.split("=", 2))
-						.filter(parts -> parts.length == 2).forEach(parts -> {
-							envMapping.put(parts[0].trim(), parts[1].trim());
-						});
-			} catch (IOException ex) {
-				// if reading fails, we just ignore the mapping, and delete the file
-				try {
-					Files.delete(base.resolve(ENV_MAPPING_FILE));
-				} catch (IOException e) {
-					LOGGER.warn("Failed to delete corrupted " + ENV_MAPPING_FILE + " file: " + e.getMessage());
-				}
-			}
-		}
-		int numEnvs = envMapping.size();
+    private static final String ENV_MAPPING_FILE = "knime_env_mapping.txt";
 
-		final String hash = sha256Hex(lockFileContent);
+    static synchronized Path resolvePixiEnvDirectory(final String lockFileContent) {
+        final Path base = CondaPreferences.getPixiEnvPath();
+        Map<String, String> envMapping = new HashMap<>();
+        if (Files.exists(base.resolve(ENV_MAPPING_FILE))) {
+            try {
+                Files.readAllLines(base.resolve(ENV_MAPPING_FILE)).stream().map(line -> line.split("=", 2))
+                    .filter(parts -> parts.length == 2).forEach(parts -> {
+                        envMapping.put(parts[0].trim(), parts[1].trim());
+                    });
+            } catch (IOException ex) {
+                // if reading fails, we just ignore the mapping, and delete the file
+                try {
+                    Files.delete(base.resolve(ENV_MAPPING_FILE));
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to delete corrupted " + ENV_MAPPING_FILE + " file: " + e.getMessage());
+                }
+            }
+        }
+        int numEnvs = envMapping.size();
 
-		if (envMapping.containsKey(hash)) {
-			return base.resolve(envMapping.get(hash));
-		}
-		String envDirName = "" + numEnvs;
-		envMapping.put(hash, envDirName);
-		// write back updated mapping
-		try {
-			StringBuilder sb = new StringBuilder();
-			for (Map.Entry<String, String> entry : envMapping.entrySet()) {
-				sb.append(entry.getKey()).append("=").append(entry.getValue()).append("\n");
-			}
-			Files.writeString(base.resolve(ENV_MAPPING_FILE), sb.toString());
-		} catch (IOException e) {
-			LOGGER.warn("Failed to update " + ENV_MAPPING_FILE + " file: " + e.getMessage());
-		}
-		return base.resolve(envDirName);
-	}
+        final String hash = sha256Hex(lockFileContent);
 
-	private static String sha256Hex(final String s) {
-		try {
-			final MessageDigest md = MessageDigest.getInstance("SHA-256");
-			final byte[] dig = md.digest(s.getBytes(StandardCharsets.UTF_8));
-			return HexFormat.of().formatHex(dig);
-		} catch (Exception e) {
-			throw new IllegalStateException("Unable to compute SHA-256 hash.", e);
-		}
-	}
+        if (envMapping.containsKey(hash)) {
+            return base.resolve(envMapping.get(hash));
+        }
+        String envDirName = "" + numEnvs;
+        envMapping.put(hash, envDirName);
+        // write back updated mapping
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (Map.Entry<String, String> entry : envMapping.entrySet()) {
+                sb.append(entry.getKey()).append("=").append(entry.getValue()).append("\n");
+            }
+            Files.writeString(base.resolve(ENV_MAPPING_FILE), sb.toString());
+        } catch (IOException e) {
+            LOGGER.warn("Failed to update " + ENV_MAPPING_FILE + " file: " + e.getMessage());
+        }
+        return base.resolve(envDirName);
+    }
+
+    private static String sha256Hex(final String s) {
+        try {
+            final MessageDigest md = MessageDigest.getInstance("SHA-256");
+            final byte[] dig = md.digest(s.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(dig);
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to compute SHA-256 hash.", e);
+        }
+    }
 }

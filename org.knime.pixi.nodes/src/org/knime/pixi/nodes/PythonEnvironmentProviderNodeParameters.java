@@ -208,13 +208,14 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
     // Instance-level cache to avoid repeated conversions (not persisted)
     private transient String m_cachedYamlForConversion = null;
+
     private transient String m_cachedConvertedToml = null;
 
     String getConvertedTomlFromYaml() {
         // Only convert if in YAML mode and not already cached for this YAML content
-        if (m_mainInputSource == MainInputSource.YAML_EDITOR
-            && m_envYamlContent != null && !m_envYamlContent.isEmpty()) {
-            
+        if (m_mainInputSource == MainInputSource.YAML_EDITOR && m_envYamlContent != null
+            && !m_envYamlContent.isEmpty()) {
+
             // Check if we need to convert (YAML content changed)
             if (m_cachedConvertedToml == null || !m_envYamlContent.equals(m_cachedYamlForConversion)) {
                 try {
@@ -233,19 +234,12 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     interface ConvertedTomlFromYamlRef extends ParameterReference<String> {
     }
 
-
     static final class InputIsYaml implements EffectPredicateProvider {
         @Override
         public EffectPredicate init(final PredicateInitializer i) {
             return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.YAML_EDITOR);
         }
     }
-
-    // TODO
-    // We should have only one button:
-    // - Show "Resolve Dependencies" if no lock file exists yet for the current inputs
-    // - Show "Update Dependencies" if a lock file already exists, to update resolved package versions
-    // - Show "Cancel" while action is running
 
     // Lock file generation
     @Widget(title = "Check compatibility",
@@ -254,7 +248,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @ButtonWidget(actionHandler = PixiLockActionHandler.class, updateHandler = PixiLockUpdateHandler.class)
     @ValueReference(ButtonFieldRef.class)
     String m_pixiLockButton;
-
 
     interface ButtonFieldRef extends ParameterReference<String> {
     }
@@ -316,8 +309,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
     String getPixiTomlFileContent() {
         return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent,
-            getConvertedTomlFromYaml(),
-            LOGGER);
+            getConvertedTomlFromYaml(), LOGGER);
     }
 
     // Package specification
@@ -352,7 +344,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     }
 
     // Button action handler for lock file generation
-    static final class PixiLockActionHandler extends PixiParameterUtils.AbstractPixiLockActionHandler<TomlContentGetter> {
+    static final class PixiLockActionHandler
+        extends PixiParameterUtils.AbstractPixiLockActionHandler<TomlContentGetter> {
 
         public PixiLockActionHandler() {
             super();
@@ -399,15 +392,13 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                 yamlAsTOML = m_convertedTomlFromYaml;
             }
 
-            return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent,
-                yamlAsTOML, LOGGER);
+            return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent, yamlAsTOML,
+                LOGGER);
         }
     }
 
     static final class PixiLockUpdateHandler extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
     }
-
-
 
     /**
      * Resets lock file to empty when any input content changes.
@@ -460,8 +451,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             LOGGER.debug("Button value: " + (buttonValue != null ? buttonValue.length() + " chars" : "null"));
 
             // Check if any relevant content changed
-            boolean contentChanged = hasContentChanged(currentInputSource, currentPackages, currentTomlContent,
-                currentYamlContent);
+            boolean contentChanged =
+                hasContentChanged(currentInputSource, currentPackages, currentTomlContent, currentYamlContent);
 
             // Update last values
             m_lastInputSource = currentInputSource;
@@ -478,8 +469,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             return buttonValue != null ? buttonValue : "";
         }
 
-        private boolean hasContentChanged(final MainInputSource currentInputSource,
-            final PackageSpec[] currentPackages, final String currentTomlContent, final String currentYamlContent) {
+        private boolean hasContentChanged(final MainInputSource currentInputSource, final PackageSpec[] currentPackages,
+            final String currentTomlContent, final String currentYamlContent) {
             if (m_lastInputSource != null && currentInputSource != m_lastInputSource) {
                 LOGGER.debug("Input source changed: " + m_lastInputSource + " -> " + currentInputSource);
                 return true;

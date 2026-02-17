@@ -184,7 +184,6 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
             final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());
             final String[] pixiArgs = {"install", "--color", "never", "--no-progress"};
 
-            // TODO update the PixiBinary API to make a cancelable execution simpler here
             final var callResult = PixiBinary.callPixiWithExecutionMonitor(installDir, extraEnv, exec, pixiArgs);
 
             if (callResult.returnCode() != 0) {

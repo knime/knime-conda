@@ -244,4 +244,21 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
 		}
 	}
 
+    /**
+     * Checks if the Pixi environment represented by this port object is already installed on disk.
+     *
+     * @return true if the Pixi environment represented by this port object is already installed on disk, false
+     *         otherwise.
+     */
+    public boolean isEnvironmentInstalled() {
+        Path installDir;
+        try {
+            installDir = getPixiEnvironmentPath();
+        } catch (IOException ex) {
+            return false;
+        }
+    Path envDir = installDir.resolve(".pixi").resolve("envs").resolve("default");
+    return Files.exists(envDir);
+  }
+
 }

@@ -1,6 +1,6 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
-Bundle-Name: KNIME Python3 Process Provider
+Bundle-Name: KNIME External Process Provider
 Bundle-SymbolicName: org.knime.externalprocessprovider;singleton:=true
 Bundle-Version: 5.11.0.qualifier
 Bundle-Vendor: KNIME AG, Zurich, Switzerland

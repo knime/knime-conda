@@ -61,11 +61,18 @@ import org.knime.conda.prefs.CondaPreferences;
 import org.knime.core.node.NodeLogger;
 
 /**
+ * Utility class to manage the mapping between Pixi lock file content and environment directories. It uses a hash of the
+ * lock file content to determine the environment directory, and handles potential hash collisions by appending numeric
+ * suffixes to the directory name. The mapping is stored in a text file within the base Pixi environment directory,
+ * allowing for consistent resolution of environment directories.
  *
  * @author Marc Lehner
  * @since 5.11
  */
 final class PixiEnvMapping {
+
+    /** Arbitrary limit to prevent infinite loops. We should never have more than a few collisions in practice. */
+    private static final int MAX_HASH_ENV_COLLISION_SUFFIX = 10;
 
     private PixiEnvMapping() {
     }
@@ -74,8 +81,19 @@ final class PixiEnvMapping {
 
     private static final String ENV_MAPPING_FILE = "knime_env_mapping.txt";
 
-    static synchronized Path resolvePixiEnvDirectory(final String lockFileContent) {
+    /**
+     * Resolves the Pixi environment directory based on the provided lock file content. It uses a mapping file to store
+     * the association between lock file hashes and environment directories. In case of hash collisions, it appends
+     * numeric suffixes to find a unique directory.
+     *
+     * @param lockFileContent the content of the pixi.lock file to hash and use for mapping
+     * @return the path to the resolved Pixi environment directory
+     * @throws IOException if an I/O error occurs while reading or writing the mapping file, or while creating
+     *             directories
+     */
+    static synchronized Path resolvePixiEnvDirectory(final String lockFileContent) throws IOException {
         final Path base = CondaPreferences.getPixiEnvPath();
+
         Map<String, String> envMapping = new HashMap<>();
         if (Files.exists(base.resolve(ENV_MAPPING_FILE))) {
             try {
@@ -101,17 +119,51 @@ final class PixiEnvMapping {
         }
         String envDirName = "" + numEnvs;
         envMapping.put(hash, envDirName);
+
         // write back updated mapping
-        try {
-            StringBuilder sb = new StringBuilder();
-            for (Map.Entry<String, String> entry : envMapping.entrySet()) {
-                sb.append(entry.getKey()).append("=").append(entry.getValue()).append("\n");
-            }
-            Files.writeString(base.resolve(ENV_MAPPING_FILE), sb.toString());
-        } catch (IOException e) {
-            LOGGER.warn("Failed to update " + ENV_MAPPING_FILE + " file: " + e.getMessage());
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> entry : envMapping.entrySet()) {
+            sb.append(entry.getKey()).append("=").append(entry.getValue()).append("\n");
         }
-        return base.resolve(envDirName);
+        Files.writeString(base.resolve(ENV_MAPPING_FILE), sb.toString());
+
+        var resolvedFromHash = base.resolve(envDirName);
+        return resolveWithCollisionHandling(resolvedFromHash, lockFileContent);
+    }
+
+    /**
+     * Resolves a project directory, handling potential hash collisions by appending suffixes.
+     *
+     * @param baseDir the base directory path derived from the lock file hash
+     * @param lockFileContent the expected lock file content
+     * @return a directory path that either doesn't exist yet or contains matching content
+     * @throws IOException if an I/O error occurs
+     */
+    private static Path resolveWithCollisionHandling(final Path baseDir, final String lockFileContent)
+        throws IOException {
+        Path candidateDir = baseDir;
+        int suffix = 0;
+
+        while (suffix < MAX_HASH_ENV_COLLISION_SUFFIX) {
+            Files.createDirectories(candidateDir);
+            final Path lockFilePath = candidateDir.resolve("pixi.lock");
+
+            // Directory is free to use if no lock file exists yet
+            if (!Files.exists(lockFilePath)) {
+                return candidateDir;
+            }
+
+            // Check if existing lock file matches (no collision)
+            final String existingContent = Files.readString(lockFilePath, StandardCharsets.UTF_8);
+            if (existingContent.equals(lockFileContent)) {
+                return candidateDir;
+            }
+
+            // Hash collision detected - try with numeric suffix
+            candidateDir = baseDir.resolveSibling(baseDir.getFileName() + "_" + suffix);
+            suffix++;
+        }
+        throw new IOException("Failed to resolve a unique project directory after 10 attempts.");
     }
 
     private static String sha256Hex(final String s) {

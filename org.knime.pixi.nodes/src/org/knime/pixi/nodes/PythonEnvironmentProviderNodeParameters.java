@@ -48,20 +48,32 @@
  */
 package org.knime.pixi.nodes;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import org.knime.conda.envinstall.pixi.PixiBinary;
+import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeLogger;
-import org.knime.core.webui.node.dialog.defaultdialog.internal.button.ButtonWidget;
-import org.knime.core.webui.node.dialog.defaultdialog.internal.button.CancelableActionHandler;
+import org.knime.core.node.NodeSettingsRO;
+import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.util.PathUtils;
+import org.knime.core.webui.node.dialog.defaultdialog.internal.button.SimpleButtonWidget;
+import org.knime.core.webui.node.dialog.defaultdialog.internal.dirty.DirtyTracker;
+import org.knime.core.webui.node.dialog.defaultdialog.util.updates.StateComputationFailureException;
 import org.knime.core.webui.node.dialog.defaultdialog.widget.handler.WidgetHandlerException;
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
+import org.knime.node.parameters.WidgetGroup;
 import org.knime.node.parameters.array.ArrayWidget;
 import org.knime.node.parameters.layout.After;
 import org.knime.node.parameters.layout.Layout;
+import org.knime.node.parameters.persistence.NodeParametersPersistor;
 import org.knime.node.parameters.persistence.Persistor;
+import org.knime.node.parameters.updates.ButtonReference;
 import org.knime.node.parameters.updates.Effect;
 import org.knime.node.parameters.updates.Effect.EffectType;
 import org.knime.node.parameters.updates.EffectPredicate;
@@ -73,8 +85,20 @@ import org.knime.node.parameters.updates.ValueReference;
 import org.knime.node.parameters.widget.choices.Label;
 import org.knime.node.parameters.widget.choices.ValueSwitchWidget;
 import org.knime.node.parameters.widget.message.TextMessage;
+import org.knime.node.parameters.widget.message.TextMessage.Message;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
+import org.knime.pixi.nodes.PixiPackageSpec.PackageSource;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.PackagesArray.InputIsPackagesArray;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.PackagesArray.PackageArrayRef;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.PixiLockFileSettings.IsCurrentLockUpToDateWithOtherSettingsRef;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.TomlEditor.InputIsTomlEditor;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.TomlEditor.TomlContentIsValidRef;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.TomlEditor.TomlContentRef;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.YamlEditor.InputIsYamlEditor;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.YamlEditor.TomlFromYamlRef;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.YamlEditor.YamlContentIsValidRef;
+import org.knime.pixi.port.PixiUtils;
 
 /**
  * Node Parameters for the Python Environment Provider node. Combines input methods from array-based, TOML-based, and
@@ -88,29 +112,35 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
     private static final NodeLogger LOGGER = NodeLogger.getLogger("PythonEnvironmentProviderNodeParameters");
 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Layout sections
-    static final class mainInputSelectionSection {
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    static final class MainInputSelectionSection {
     }
 
-    @After(mainInputSelectionSection.class)
-    static final class simpleInputSection {
+    @After(MainInputSelectionSection.class)
+    static final class SimpleInputSection {
     }
 
-    @After(mainInputSelectionSection.class)
-    static final class tomlEditorSection {
+    @After(MainInputSelectionSection.class)
+    static final class TomlEditorSection {
     }
 
-    @After(mainInputSelectionSection.class)
-    static final class yamlEditorSection {
+    @After(MainInputSelectionSection.class)
+    static final class YamlEditorSection {
     }
 
-    @After(simpleInputSection.class)
-    @After(tomlEditorSection.class)
-    @After(yamlEditorSection.class)
-    static final class lockFileSection {
+    @After(SimpleInputSection.class)
+    @After(TomlEditorSection.class)
+    @After(YamlEditorSection.class)
+    static final class LockFileSection {
     }
 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Input source selection
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     enum MainInputSource {
             @Label("Packages")
             SIMPLE,
@@ -123,7 +153,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     }
 
     @Widget(title = "Input source", description = "Choose how to define the Python environment")
-    @Layout(mainInputSelectionSection.class)
+    @Layout(MainInputSelectionSection.class)
     @ValueReference(MainInputSourceRef.class)
     @ValueSwitchWidget
     MainInputSource m_mainInputSource = MainInputSource.SIMPLE;
@@ -131,390 +161,524 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     interface MainInputSourceRef extends ParameterReference<MainInputSource> {
     }
 
-    // Simple/Packages input
-    @Widget(title = "Packages", description = "Specify the packages to include in the environment")
-    @Layout(simpleInputSection.class)
-    @ArrayWidget(elementLayout = ArrayWidget.ElementLayout.HORIZONTAL_SINGLE_LINE, addButtonText = "Add package")
-    @ValueReference(PackageArrayRef.class)
-    @Effect(predicate = InputIsSimple.class, type = EffectType.SHOW)
-    PackageSpec[] m_packages = new PackageSpec[]{new PackageSpec("python", PackageSource.CONDA, "3.14", "3.14"),
-        new PackageSpec("knime-python-base", PackageSource.CONDA, "5.9", "5.9")};
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // PackagesArray input
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    interface PackageArrayRef extends ParameterReference<PackageSpec[]> {
-    }
+    @Layout(SimpleInputSection.class)
+    @Effect(predicate = InputIsPackagesArray.class, type = EffectType.SHOW)
+    PackagesArray m_packagesArray = new PackagesArray();
 
-    static final class InputIsSimple implements EffectPredicateProvider {
-        @Override
-        public EffectPredicate init(final PredicateInitializer i) {
-            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.SIMPLE);
+    static class PackagesArray implements NodeParameters {
+
+        // Predicate to show/hide simple (array based) package input
+        static final class InputIsPackagesArray implements EffectPredicateProvider {
+            @Override
+            public EffectPredicate init(final PredicateInitializer i) {
+                return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.SIMPLE);
+            }
+        }
+
+        // Simple/Packages input
+        @Widget(title = "Packages", description = "Specify the packages to include in the environment")
+        @ArrayWidget(elementLayout = ArrayWidget.ElementLayout.HORIZONTAL_SINGLE_LINE, addButtonText = "Add package")
+        @ValueReference(PackageArrayRef.class)
+        PixiPackageSpec[] m_packages = new PixiPackageSpec[]{ //
+            new PixiPackageSpec("python", PackageSource.CONDA, "3.14", "3.14"), //
+            new PixiPackageSpec("knime-python-base", PackageSource.CONDA, "5.9", "5.9") //
+        };
+
+        interface PackageArrayRef extends ParameterReference<PixiPackageSpec[]> {
         }
     }
 
-    // TOML editor input
-    @Widget(title = "Environment specification (pixi.toml)", description = """
-            Content of the pixi.toml manifest file that describes the environment.
-            """)
-    @Layout(tomlEditorSection.class)
-    @TextAreaWidget(rows = 20)
-    @ValueReference(TomlContentRef.class)
-    @Effect(predicate = InputIsToml.class, type = EffectType.SHOW)
-    String m_pixiTomlContent = """
-            [workspace]
-            channels = ["knime", "conda-forge"]
-            platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // TOML Editor input
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            [dependencies]
-            python = "3.14.*"
-            knime-python-base = "5.9.*"
-            """;
+    @Layout(TomlEditorSection.class)
+    @Effect(predicate = InputIsTomlEditor.class, type = EffectType.SHOW)
+    TomlEditor m_tomlEditor = new TomlEditor();
 
-    interface TomlContentRef extends ParameterReference<String> {
-    }
+    static class TomlEditor implements NodeParameters {
 
-    static final class InputIsToml implements EffectPredicateProvider {
-        @Override
-        public EffectPredicate init(final PredicateInitializer i) {
-            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.TOML_EDITOR);
+        // Predicate to show/hide TOML editor input
+        static final class InputIsTomlEditor implements EffectPredicateProvider {
+            @Override
+            public EffectPredicate init(final PredicateInitializer i) {
+                return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.TOML_EDITOR);
+            }
         }
-    }
 
-    // YAML editor input
-    @Widget(title = "Environment specification (conda environment.yaml)",
-        description = """
-                Content of the conda environment.yaml file that describes the environment.
-                This will be imported into pixi using `pixi init --import` and converted to a pixi.toml manifest.
-                The environment will automatically be configured to work on all major platforms (win-64, linux-64, osx-64, osx-arm64).
+        // TOML editor input
+
+        @Widget(title = "Environment specification (pixi.toml)", description = """
+                Content of the pixi.toml manifest file that describes the environment.
                 """)
-    @Layout(yamlEditorSection.class)
-    @TextAreaWidget(rows = 20)
-    @ValueReference(YamlContentRef.class)
-    @Effect(predicate = InputIsYaml.class, type = EffectType.SHOW)
-    String m_envYamlContent = """
-            name: myenv
-            channels:
-              - knime
-              - conda-forge
-            dependencies:
-              - python=3.14.*
-              - knime-python-base=5.9.*
-            """;
+        @TextAreaWidget(rows = 20)
+        @ValueReference(TomlContentRef.class)
+        String m_pixiTomlContent = """
+                [workspace]
+                channels = ["knime", "conda-forge"]
+                platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 
-    interface YamlContentRef extends ParameterReference<String> {
+                [dependencies]
+                python = "3.14.*"
+                knime-python-base = "5.9.*"
+                """;
+
+        interface TomlContentRef extends ParameterReference<String> {
+        }
+
+        // Validation message for TOML content (error if parsing fails, warning if platforms are not valid)
+
+        @TextMessage(TomlParseValidationProvider.class)
+        Void m_tomlParseValidationMessage;
+
+        /**
+         * State provider for platform validation message.
+         */
+        static final class TomlParseValidationProvider implements StateProvider<Optional<Message>> {
+
+            private Supplier<String> m_tomlContentSupplier;
+
+            @Override
+            public void init(final StateProviderInitializer initializer) {
+                initializer.computeOnValueChange(TomlContentRef.class);
+                initializer.computeAfterOpenDialog();
+                m_tomlContentSupplier = initializer.getValueSupplier(TomlContentRef.class);
+            }
+
+            @Override
+            public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
+                final String tomlContent = m_tomlContentSupplier.get();
+                return PixiTomlValidator.toMessage(PixiTomlValidator.validatePlatforms(tomlContent));
+            }
+        }
+
+        // Reference to store whether the TOML content is valid (no errors, platforms valid).
+        // This is used to enable/disable the resolve button and show messages.
+
+        // TODO do not persist?
+        @ValueReference(TomlContentIsValidRef.class)
+        @ValueProvider(TomlContentIsValidProvider.class)
+        boolean m_isTomlContentValid = true;
+
+        interface TomlContentIsValidRef extends ParameterReference<Boolean> {
+        }
+
+        /**
+         * State provider that computes whether the TOML validation message contains an error. This is used to determine
+         * if the "Resolve dependencies" button should be enabled.
+         */
+        static final class TomlContentIsValidProvider implements StateProvider<Boolean> {
+
+            private Supplier<Optional<Message>> m_validationMessage;
+
+            @Override
+            public void init(final StateProviderInitializer initializer) {
+                m_validationMessage = initializer.computeFromProvidedState(TomlParseValidationProvider.class);
+            }
+
+            @Override
+            public Boolean computeState(final NodeParametersInput context) {
+                return m_validationMessage.get().map(m -> m.type() != MessageType.ERROR).orElse(true);
+            }
+        }
     }
 
-    // hidden field to store TOML content converted from YAML
-    @ValueReference(ConvertedTomlFromYamlRef.class)
-    String m_convertedTomlFromYaml = "";
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // YAML Editor input
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Instance-level cache to avoid repeated conversions (not persisted)
-    private transient String m_cachedYamlForConversion = null;
+    @Layout(YamlEditorSection.class)
+    @Effect(predicate = InputIsYamlEditor.class, type = EffectType.SHOW)
+    YamlEditor m_yamlEditor = new YamlEditor();
 
-    private transient String m_cachedConvertedToml = null;
+    static class YamlEditor implements NodeParameters {
 
-    String getConvertedTomlFromYaml() {
-        // Only convert if in YAML mode and not already cached for this YAML content
-        if (m_mainInputSource == MainInputSource.YAML_EDITOR && m_envYamlContent != null
-            && !m_envYamlContent.isEmpty()) {
+        // Predicate to show/hide YAML editor input
+        static final class InputIsYamlEditor implements EffectPredicateProvider {
+            @Override
+            public EffectPredicate init(final PredicateInitializer i) {
+                return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.YAML_EDITOR);
+            }
+        }
 
-            // Check if we need to convert (YAML content changed)
-            if (m_cachedConvertedToml == null || !m_envYamlContent.equals(m_cachedYamlForConversion)) {
+        @Widget(title = "Environment specification (conda environment.yaml)",
+            description = """
+                    Content of the conda environment.yaml file that describes the environment.
+                    This will be imported into pixi using `pixi init --import` and converted to a pixi.toml manifest.
+                    The environment will automatically be configured to work on all major platforms (win-64, linux-64, osx-64, osx-arm64).
+                    """)
+        @TextAreaWidget(rows = 20)
+        @ValueReference(YamlContentRef.class)
+        @Effect(predicate = InputIsYamlEditor.class, type = EffectType.SHOW)
+        String m_envYamlContent = """
+                name: myenv
+                channels:
+                  - knime
+                  - conda-forge
+                dependencies:
+                  - python=3.14.*
+                  - knime-python-base=5.9.*
+                """;
+
+        interface YamlContentRef extends ParameterReference<String> {
+        }
+
+        @ValueProvider(TomlFromYamlProvider.class)
+        @ValueReference(TomlFromYamlRef.class)
+        String m_tomlFromYaml = "ERROR";
+
+        interface TomlFromYamlRef extends ParameterReference<String> {
+        }
+
+        static class TomlFromYamlProvider implements StateProvider<String> {
+
+            private Supplier<String> m_yamlContentSupplier;
+
+            @Override
+            public void init(final StateProviderInitializer initializer) {
+                m_yamlContentSupplier = initializer.computeFromValueSupplier(YamlContentRef.class);
+            }
+
+            @Override
+            public String computeState(final NodeParametersInput context) {
                 try {
-                    m_cachedConvertedToml = PixiYamlImporter.convertYamlToToml(m_envYamlContent);
-                    m_cachedYamlForConversion = m_envYamlContent;
+                    return PixiYamlImporter.convertYamlToToml(m_yamlContentSupplier.get());
                 } catch (Exception e) {
                     LOGGER.error("Failed to convert YAML to TOML: " + e.getMessage(), e);
-                    return "";
+                    return "ERROR";
                 }
             }
-            return m_cachedConvertedToml;
         }
-        return "";
+
+        @TextMessage(YamlParseValidationProvider.class)
+        Void m_yamlParseValidationMessage;
+
+        static final class YamlParseValidationProvider implements StateProvider<Optional<Message>> {
+
+            private Supplier<String> m_tomlFromYamlSupplier;
+
+            @Override
+            public void init(final StateProviderInitializer initializer) {
+                m_tomlFromYamlSupplier = initializer.computeFromValueSupplier(TomlFromYamlRef.class);
+            }
+
+            @Override
+            public Optional<Message> computeState(final NodeParametersInput context) {
+                if (m_tomlFromYamlSupplier.get() == null || m_tomlFromYamlSupplier.get().isBlank()
+                    || m_tomlFromYamlSupplier.get().equals("ERROR")) {
+                    return Optional
+                        .of(new Message("YAML Parse Error", "Could not parse YAML content.", MessageType.ERROR));
+                }
+                return Optional.empty();
+            }
+        }
+
+        // TODO do not persist?
+        @ValueReference(YamlContentIsValidRef.class)
+        @ValueProvider(YamlContentIsValidProvider.class)
+        boolean m_isYamlContentValid = true;
+
+        interface YamlContentIsValidRef extends ParameterReference<Boolean> {
+        }
+
+        /** State provider that computes whether the YAML validation message shows an error. */
+        static final class YamlContentIsValidProvider implements StateProvider<Boolean> {
+
+            private Supplier<Optional<Message>> m_validationMessage;
+
+            @Override
+            public void init(final StateProviderInitializer initializer) {
+                m_validationMessage = initializer.computeFromProvidedState(YamlParseValidationProvider.class);
+            }
+
+            @Override
+            public Boolean computeState(final NodeParametersInput context) {
+                return m_validationMessage.get().map(m -> m.type() != MessageType.ERROR).orElse(true);
+            }
+        }
     }
 
-    interface ConvertedTomlFromYamlRef extends ParameterReference<String> {
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Lock file generation and persistence
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    @Persistor(PixiLockFilePersistor.class)
+    PixiLockFileSettings m_lockFileSettings = new PixiLockFileSettings();
+
+    static class PixiLockFileSettings implements WidgetGroup {
+
+        @ValueReference(EffectiveTOMLContentRef.class)
+        @ValueProvider(EffectiveTOMLContentValueProvider.class)
+        String m_effectiveTOMLContent = "";
+
+        @ValueProvider(TomlForLastButtonClickProvider.class)
+        @ValueReference(TomlForLastButtonClickRef.class)
+        String m_tomlForLastLockFileGeneration = "";
+
+        @ValueProvider(LockFileProvider.class)
+        @Widget(title = "Lock file content", description = "Content of the generated or loaded pixi.lock file.",
+            advanced = true)
+        @Layout(LockFileSection.class)
+        @TextAreaWidget(rows = 10)
+        String m_pixiLockFileContent = "";
+
+        @ValueReference(IsCurrentLockUpToDateWithOtherSettingsRef.class)
+        @ValueProvider(IsCurrentLockUpToDateWithOtherSettingsProvider.class)
+        boolean m_isCurrentLockUpToDateWithOtherSettings = false;
+
+        interface IsCurrentLockUpToDateWithOtherSettingsRef extends ParameterReference<Boolean> {
+        }
+
+        static class IsCurrentLockUpToDateWithOtherSettingsProvider implements StateProvider<Boolean> {
+
+            private Supplier<String> m_effectiveTOMLContentSupplier;
+
+            private Supplier<String> m_tomlForLastButtonClickSupplier;
+
+            @Override
+            public void init(final StateProviderInitializer initializer) {
+                m_effectiveTOMLContentSupplier = initializer.computeFromValueSupplier(EffectiveTOMLContentRef.class);
+                m_tomlForLastButtonClickSupplier =
+                    initializer.computeFromValueSupplier(TomlForLastButtonClickRef.class);
+            }
+
+            @Override
+            public Boolean computeState(final NodeParametersInput context) {
+                return Objects.equals(m_effectiveTOMLContentSupplier.get(), m_tomlForLastButtonClickSupplier.get());
+            }
+        }
     }
 
-    static final class InputIsYaml implements EffectPredicateProvider {
+    static class PixiLockFilePersistor implements NodeParametersPersistor<PixiLockFileSettings> {
+
         @Override
-        public EffectPredicate init(final PredicateInitializer i) {
-            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.YAML_EDITOR);
+        public PixiLockFileSettings load(final NodeSettingsRO settings) throws InvalidSettingsException {
+            var lockFileContent = settings.getString("pixiLockFileContent");
+            var tomlForLastGeneration = settings.getString("tomlForLastLockFileGeneration");
+
+            if (lockFileContent != null && !lockFileContent.isBlank()) {
+                PixiLockFileSettings loadedSettings = new PixiLockFileSettings();
+                loadedSettings.m_pixiLockFileContent = lockFileContent;
+                loadedSettings.m_isCurrentLockUpToDateWithOtherSettings = true;
+                loadedSettings.m_tomlForLastLockFileGeneration = tomlForLastGeneration;
+                return loadedSettings;
+            } else {
+                // No lock file content - return default settings with empty lock file and not up to date
+                return new PixiLockFileSettings();
+            }
+        }
+
+        @Override
+        public void save(final PixiLockFileSettings param, final NodeSettingsWO settings) {
+            if (param.m_isCurrentLockUpToDateWithOtherSettings) {
+                settings.addString("pixiLockFileContent", param.m_pixiLockFileContent);
+                settings.addString("tomlForLastLockFileGeneration", param.m_tomlForLastLockFileGeneration);
+            } else {
+                settings.addString("pixiLockFileContent", "");
+                settings.addString("tomlForLastLockFileGeneration", "");
+            }
+        }
+
+        @Override
+        public String[][] getConfigPaths() {
+            // TODO
+            return null;
         }
     }
 
-    // Lock file generation
-    @Widget(title = "Check compatibility",
-        description = "Click to check whether this environment can be constructed on all selected operating systems")
-    @Layout(lockFileSection.class)
-    @ButtonWidget(actionHandler = PixiLockActionHandler.class, updateHandler = PixiLockUpdateHandler.class)
-    @ValueReference(ButtonFieldRef.class)
-    String m_pixiLockButton;
-
-    interface ButtonFieldRef extends ParameterReference<String> {
+    interface TomlForLastButtonClickRef extends ParameterReference<String> {
     }
 
-    // Hidden field that stores lock file content from button, reset to empty when input changes
-    @ValueReference(PixiLockFileRef.class)
-    @ValueProvider(ResetLockFileProvider.class)
-    String m_pixiLockFileContent = "";
+    /** Copies effective TOML on button click */
+    static class TomlForLastButtonClickProvider implements StateProvider<String> {
 
-    interface PixiLockFileRef extends ParameterReference<String> {
-    }
-
-    // Hidden field that tracks if platform validation shows warning/error
-    @ValueReference(PlatformValidationIsWarningRef.class)
-    @ValueProvider(PlatformValidationIsWarningProvider.class)
-    Boolean m_platformValidationIsWarning = false;
-
-    interface PlatformValidationIsWarningRef extends ParameterReference<Boolean> {
-    }
-
-    @TextMessage(PlatformValidationProvider.class)
-    @Layout(tomlEditorSection.class)
-    @Effect(predicate = PlatformValidationIsWarning.class, type = EffectType.SHOW)
-    Void m_platformValidationMessage;
-
-    @TextMessage(ValidationMessageProvider.class)
-    @Layout(lockFileSection.class)
-    Void m_validationMessage;
-
-    // Read-only display of lock file content (advanced setting)
-    @Widget(title = "Lock file content", description = "Content of the generated or loaded pixi.lock file.",
-        advanced = true)
-    @Layout(lockFileSection.class)
-    @TextAreaWidget(rows = 10)
-    @Persistor(PixiParameterUtils.DoNotPersist.class)
-    @ValueProvider(LockContentDisplayProvider.class)
-    String m_lockFileDisplay = "";
-
-    static final class LockContentDisplayProvider implements StateProvider<String> {
-        private Supplier<String> m_lockContentSupplier;
+        private Supplier<String> m_effectiveTOMLContentSupplier;
 
         @Override
         public void init(final StateProviderInitializer initializer) {
-            initializer.computeOnValueChange(PixiLockFileRef.class);
-            m_lockContentSupplier = initializer.getValueSupplier(PixiLockFileRef.class);
+            initializer.computeOnButtonClick(ResolveDependenciesButtonRef.class);
+            m_effectiveTOMLContentSupplier = initializer.getValueSupplier(EffectiveTOMLContentRef.class);
         }
 
         @Override
         public String computeState(final NodeParametersInput context) {
-            final String lockContent = m_lockContentSupplier.get();
-            return (lockContent != null) ? lockContent : "";
+            return m_effectiveTOMLContentSupplier.get();
         }
     }
 
-    // Helper methods
-    String getPixiLockFileContent() {
-        return m_pixiLockFileContent;
+    interface EffectiveTOMLContentRef extends ParameterReference<String> {
     }
 
-    String getPixiTomlFileContent() {
-        return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent,
-            getConvertedTomlFromYaml(), LOGGER);
-    }
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Resolve dependencies button and lock file generation mechanism
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Package specification
-    enum PackageSource {
-            @Label("Conda")
-            CONDA, @Label("Pip")
-            PIP
-    }
+    @Widget(title = "Resolve Dependencies", description = """
+            Resolve package dependencies and generate lock file.
+            This validates that the environment can be created on all configured platforms.
+            """)
+    @SimpleButtonWidget(ref = ResolveDependenciesButtonRef.class)
+    @Layout(LockFileSection.class)
+    @Effect(predicate = ResolveButtonEnabledEffect.class, type = EffectType.ENABLE)
+    Void m_resolveDependenciesButton;
 
-    static final class PackageSpec implements NodeParameters {
-        @Widget(title = "Package name", description = "The name of the package")
-        String m_packageName = "";
-
-        @Widget(title = "Source", description = "Package source (Conda or Pip)")
-        PackageSource m_source = PackageSource.CONDA;
-
-        @Widget(title = "Min version", description = "Minimum version (inclusive, optional)")
-        String m_minVersion = "";
-
-        @Widget(title = "Max version", description = "Maximum version (exclusive, optional)")
-        String m_maxVersion = "";
-
-        PackageSpec() {
-        }
-
-        PackageSpec(final String name, final PackageSource source, final String minVersion, final String maxVersion) {
-            m_packageName = name;
-            m_source = source;
-            m_minVersion = minVersion;
-            m_maxVersion = maxVersion;
+    static class ResolveButtonEnabledEffect implements EffectPredicateProvider {
+        @Override
+        public EffectPredicate init(final PredicateInitializer i) {
+            return i.getPredicate(InputIsPackagesArray.class) //
+                .or(i.getPredicate(InputIsTomlEditor.class).and(i.getBoolean(TomlContentIsValidRef.class).isTrue())) //
+                .or(i.getPredicate(InputIsYamlEditor.class).and(i.getBoolean(YamlContentIsValidRef.class).isTrue())); //
         }
     }
 
-    // Button action handler for lock file generation
-    static final class PixiLockActionHandler
-        extends PixiParameterUtils.AbstractPixiLockActionHandler<TomlContentGetter> {
+    static final class ResolveDependenciesButtonRef implements ButtonReference {
+    }
 
-        public PixiLockActionHandler() {
-            super();
+    @DirtyTracker(DirtyOnButtonClickProvider.class)
+    Void dirtyOnButtonClick;
+
+    static class DirtyOnButtonClickProvider implements StateProvider<Boolean> {
+
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            initializer.computeOnButtonClick(ResolveDependenciesButtonRef.class);
         }
 
         @Override
-        protected String getManifestContent(final TomlContentGetter contentGetter) throws Exception {
-            return contentGetter.getTomlContent();
+        public Boolean computeState(final NodeParametersInput context) {
+            return true;
+        }
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Messages and Satus indicators
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    @TextMessage(LockFileStatusMessageProvider.class)
+    @Layout(LockFileSection.class)
+    Void m_lockFileStatusMessage;
+
+    static final class EffectiveTOMLContentValueProvider implements StateProvider<String> {
+
+        private Supplier<MainInputSource> m_inputSourceSupplier;
+
+        private Supplier<PixiPackageSpec[]> m_packagesSupplier;
+
+        private Supplier<String> m_tomlContentSupplier;
+
+        private Supplier<String> m_tomlFromYamlSupplier;
+
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            initializer.computeBeforeOpenDialog();
+            m_inputSourceSupplier = initializer.computeFromValueSupplier(MainInputSourceRef.class);
+            m_packagesSupplier = initializer.computeFromValueSupplier(PackageArrayRef.class);
+            m_tomlContentSupplier = initializer.computeFromValueSupplier(TomlContentRef.class);
+            m_tomlFromYamlSupplier = initializer.computeFromValueSupplier(TomlFromYamlRef.class);
         }
 
         @Override
-        protected String invoke(final TomlContentGetter settings, final NodeParametersInput context)
-            throws WidgetHandlerException {
-            return super.invoke(settings, context);
+        public String computeState(final NodeParametersInput context) {
+            return PixiManifestResolver.getTomlContent(m_inputSourceSupplier.get(), m_packagesSupplier.get(),
+                m_tomlContentSupplier.get(), m_tomlFromYamlSupplier.get(), LOGGER);
         }
     }
 
-    static final class TomlContentGetter {
-        @ValueReference(MainInputSourceRef.class)
-        MainInputSource m_mainInputSource;
+    static final class EffectiveTOMLContentDirtyStateProvider implements StateProvider<Boolean> {
 
-        @ValueReference(PackageArrayRef.class)
-        PackageSpec[] m_packages;
+        private Supplier<String> m_effectiveTOMLContentSupplier;
 
-        @ValueReference(TomlContentRef.class)
-        String m_pixiTomlContent;
-
-        @ValueReference(YamlContentRef.class)
-        String m_envYamlContent;
-
-        @ValueReference(ConvertedTomlFromYamlRef.class)
-        String m_convertedTomlFromYaml;
-
-        String getTomlContent() {
-            // For YAML input, convert on-the-fly if not already converted
-            final String yamlAsTOML;
-            if (m_mainInputSource == MainInputSource.YAML_EDITOR) {
-                if (m_convertedTomlFromYaml != null && !m_convertedTomlFromYaml.isEmpty()) {
-                    yamlAsTOML = m_convertedTomlFromYaml;
-                } else {
-                    yamlAsTOML = PixiYamlImporter.convertYamlToToml(m_envYamlContent);
-                }
-            } else {
-                yamlAsTOML = m_convertedTomlFromYaml;
-            }
-
-            return PixiManifestResolver.getTomlContent(m_mainInputSource, m_packages, m_pixiTomlContent, yamlAsTOML,
-                LOGGER);
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            m_effectiveTOMLContentSupplier = initializer.computeFromValueSupplier(EffectiveTOMLContentRef.class);
         }
-    }
 
-    static final class PixiLockUpdateHandler extends CancelableActionHandler.UpdateHandler<String, TomlContentGetter> {
+        @Override
+        public Boolean computeState(final NodeParametersInput context) {
+            final String effectiveToml = m_effectiveTOMLContentSupplier.get();
+            return effectiveToml != null && !effectiveToml.isBlank();
+        }
     }
 
     /**
      * Resets lock file to empty when any input content changes.
      */
-    static final class ResetLockFileProvider implements StateProvider<String> {
+    static final class LockFileProvider implements StateProvider<String> {
 
-        private Supplier<MainInputSource> m_inputSourceSupplier;
-
-        private Supplier<PackageSpec[]> m_packagesSupplier;
-
-        private Supplier<String> m_tomlContentSupplier;
-
-        private Supplier<String> m_yamlContentSupplier;
-
-        private Supplier<String> m_buttonFieldSupplier;
-
-        private MainInputSource m_lastInputSource;
-
-        private PackageSpec[] m_lastPackages;
-
-        private String m_lastTomlContent;
-
-        private String m_lastYamlContent;
+        private Supplier<String> m_effectiveTOMLContentSupplier;
 
         @Override
         public void init(final StateProviderInitializer initializer) {
-            LOGGER.debug("Initializing...");
-            initializer.computeOnValueChange(MainInputSourceRef.class);
-            initializer.computeOnValueChange(PackageArrayRef.class);
-            initializer.computeOnValueChange(TomlContentRef.class);
-            initializer.computeOnValueChange(YamlContentRef.class);
-            initializer.computeOnValueChange(ButtonFieldRef.class);
-
-            m_inputSourceSupplier = initializer.getValueSupplier(MainInputSourceRef.class);
-            m_packagesSupplier = initializer.getValueSupplier(PackageArrayRef.class);
-            m_tomlContentSupplier = initializer.getValueSupplier(TomlContentRef.class);
-            m_yamlContentSupplier = initializer.getValueSupplier(YamlContentRef.class);
-            m_buttonFieldSupplier = initializer.getValueSupplier(ButtonFieldRef.class);
+            initializer.computeOnButtonClick(ResolveDependenciesButtonRef.class);
+            m_effectiveTOMLContentSupplier = initializer.getValueSupplier(EffectiveTOMLContentRef.class);
         }
 
         @Override
-        public String computeState(final NodeParametersInput context) {
-            final MainInputSource currentInputSource = m_inputSourceSupplier.get();
-            final PackageSpec[] currentPackages = m_packagesSupplier.get();
-            final String currentTomlContent = m_tomlContentSupplier.get();
-            final String currentYamlContent = m_yamlContentSupplier.get();
-            final String buttonValue = m_buttonFieldSupplier.get();
+        public String computeState(final NodeParametersInput context) throws StateComputationFailureException {
+            Path projectDir = null;
+            try {
 
-            LOGGER.debug("Computing state for: " + currentInputSource);
-            LOGGER.debug("Button value: " + (buttonValue != null ? buttonValue.length() + " chars" : "null"));
+                // Always use a fresh temp directory during configuration
+                projectDir = PathUtils.createTempDir("pixi-envs-config");
 
-            // Check if any relevant content changed
-            boolean contentChanged =
-                hasContentChanged(currentInputSource, currentPackages, currentTomlContent, currentYamlContent);
+                // Write the TOML manifest to the temp directory
+                final Path tomlFilePath = projectDir.resolve("pixi.toml");
+                Files.writeString(tomlFilePath, m_effectiveTOMLContentSupplier.get());
 
-            // Update last values
-            m_lastInputSource = currentInputSource;
-            m_lastPackages = currentPackages;
-            m_lastTomlContent = currentTomlContent;
-            m_lastYamlContent = currentYamlContent;
+                // Run pixi lock to resolve dependencies and generate lock file
+                final String[] pixiArgs = {"--color", "never", "--no-progress", "lock"};
+                final var callResult = PixiBinary.callPixiWithCancellation(projectDir, null, () -> false, pixiArgs);
 
-            // If content changed, reset lock file; otherwise return button value
-            if (contentChanged) {
-                LOGGER.debug("Content changed - resetting lock file");
-                return "";
+                if (callResult.returnCode() != 0) {
+                    String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
+                    throw new WidgetHandlerException("Pixi lock failed:\n" + errorDetails);
+                }
+
+                // Read the generated lock file
+                final Path lockFilePath = projectDir.resolve("pixi.lock");
+                if (Files.exists(lockFilePath)) {
+                    final String lockContent = Files.readString(lockFilePath);
+                    LOGGER.warn("Lock file generated with " + lockContent.length() + " chars");
+                    return lockContent;
+                } else {
+                    throw new WidgetHandlerException("Lock file was not generated at: " + lockFilePath);
+                }
+            } catch (WidgetHandlerException e) {
+                throw e;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new WidgetHandlerException("Lock generation was cancelled");
+            } catch (Exception ex) {
+                throw new WidgetHandlerException("Failed to generate lock file: " + ex.getMessage());
+            } finally {
+                // Clean up temp directory
+                try {
+                    PathUtils.deleteDirectoryIfExists(projectDir);
+                } catch (Exception e) {
+                    // Best effort cleanup - log but don't fail
+                }
             }
-            LOGGER.debug("Content unchanged - keeping lock file");
-            return buttonValue != null ? buttonValue : "";
-        }
-
-        private boolean hasContentChanged(final MainInputSource currentInputSource, final PackageSpec[] currentPackages,
-            final String currentTomlContent, final String currentYamlContent) {
-            if (m_lastInputSource != null && currentInputSource != m_lastInputSource) {
-                LOGGER.debug("Input source changed: " + m_lastInputSource + " -> " + currentInputSource);
-                return true;
-            }
-
-            if (currentInputSource == MainInputSource.SIMPLE && m_lastPackages != null
-                && !java.util.Arrays.equals(m_lastPackages, currentPackages)) {
-                LOGGER.debug("Packages changed");
-                return true;
-            }
-
-            if (currentInputSource == MainInputSource.TOML_EDITOR && m_lastTomlContent != null
-                && !m_lastTomlContent.equals(currentTomlContent)) {
-                LOGGER.debug("TOML content changed");
-                return true;
-            }
-
-            if (currentInputSource == MainInputSource.YAML_EDITOR && m_lastYamlContent != null
-                && !m_lastYamlContent.equals(currentYamlContent)) {
-                LOGGER.debug("YAML content changed");
-                return true;
-            }
-
-            return false;
         }
     }
 
     // Validation message provider
-    static final class ValidationMessageProvider implements StateProvider<Optional<TextMessage.Message>> {
+    static final class LockFileStatusMessageProvider implements StateProvider<Optional<TextMessage.Message>> {
 
-        private Supplier<String> m_lockContentSupplier;
+        private Supplier<Boolean> m_isCurrentLockUpToDateWithOtherSettingsSupplier;
 
         @Override
         public void init(final StateProviderInitializer initializer) {
-            initializer.computeOnValueChange(PixiLockFileRef.class);
-            m_lockContentSupplier = initializer.getValueSupplier(PixiLockFileRef.class);
+            m_isCurrentLockUpToDateWithOtherSettingsSupplier =
+                initializer.computeFromValueSupplier(IsCurrentLockUpToDateWithOtherSettingsRef.class);
         }
 
         @Override
         public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
-            final String lockContent = m_lockContentSupplier.get();
-            LOGGER.debug("Lock file content: " + (lockContent == null ? "null" : lockContent.length() + " chars"));
-
-            if (lockContent == null || lockContent.isBlank()) {
+            if (!m_isCurrentLockUpToDateWithOtherSettingsSupplier.get()) {
                 LOGGER.debug("No lock file - showing info message");
                 return Optional.of(new TextMessage.Message("Lock file status",
                     "No lock file generated yet. Click 'Check compatibility' to validate the environment.",
@@ -525,81 +689,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             // If lock file exists and is not empty, it's valid
             return Optional.of(new TextMessage.Message("Environment validated",
                 "Environment validated successfully. Lock file generated.", MessageType.SUCCESS));
-        }
-    }
-
-    /**
-     * Predicate that returns true when platform validation message is a warning or error.
-     */
-    static final class PlatformValidationIsWarning implements EffectPredicateProvider {
-
-        @Override
-        public EffectPredicate init(final PredicateInitializer i) {
-            return i.getBoolean(PlatformValidationIsWarningRef.class).isTrue();
-        }
-    }
-
-    /**
-     * State provider that computes whether platform validation message is a warning or error.
-     */
-    static final class PlatformValidationIsWarningProvider implements StateProvider<Boolean> {
-
-        private Supplier<String> m_tomlContentSupplier;
-
-        private Supplier<MainInputSource> m_inputSourceSupplier;
-
-        @Override
-        public void init(final StateProviderInitializer initializer) {
-            initializer.computeOnValueChange(TomlContentRef.class);
-            initializer.computeOnValueChange(MainInputSourceRef.class);
-            initializer.computeAfterOpenDialog();
-            m_tomlContentSupplier = initializer.getValueSupplier(TomlContentRef.class);
-            m_inputSourceSupplier = initializer.getValueSupplier(MainInputSourceRef.class);
-        }
-
-        @Override
-        public Boolean computeState(final NodeParametersInput context) {
-            final MainInputSource inputSource = m_inputSourceSupplier.get();
-
-            // Only validate for TOML_EDITOR mode
-            if (inputSource != MainInputSource.TOML_EDITOR) {
-                return false;
-            }
-
-            final String tomlContent = m_tomlContentSupplier.get();
-            return PixiTomlValidator.validatePlatforms(tomlContent).isWarningOrError();
-        }
-    }
-
-    /**
-     * State provider for platform validation message.
-     */
-    static final class PlatformValidationProvider implements StateProvider<Optional<TextMessage.Message>> {
-
-        private Supplier<String> m_tomlContentSupplier;
-
-        private Supplier<MainInputSource> m_inputSourceSupplier;
-
-        @Override
-        public void init(final StateProviderInitializer initializer) {
-            initializer.computeOnValueChange(TomlContentRef.class);
-            initializer.computeOnValueChange(MainInputSourceRef.class);
-            initializer.computeAfterOpenDialog();
-            m_tomlContentSupplier = initializer.getValueSupplier(TomlContentRef.class);
-            m_inputSourceSupplier = initializer.getValueSupplier(MainInputSourceRef.class);
-        }
-
-        @Override
-        public Optional<TextMessage.Message> computeState(final NodeParametersInput context) {
-            final MainInputSource inputSource = m_inputSourceSupplier.get();
-
-            // Only validate for TOML_EDITOR mode
-            if (inputSource != MainInputSource.TOML_EDITOR) {
-                return Optional.empty();
-            }
-
-            final String tomlContent = m_tomlContentSupplier.get();
-            return PixiTomlValidator.toMessage(PixiTomlValidator.validatePlatforms(tomlContent));
         }
     }
 }

@@ -51,8 +51,7 @@ package org.knime.pixi.nodes;
 import java.io.StringWriter;
 import java.util.Arrays;
 
-import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.PackageSource;
-import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.PackageSpec;
+import org.knime.pixi.nodes.PixiPackageSpec.PackageSource;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.Config;
@@ -78,7 +77,7 @@ public final class PixiTomlBuilder {
      * @param packages the packages to include
      * @return the pixi.toml content as a string
      */
-    public static String buildPixiTomlFromPackages(final PackageSpec[] packages) {
+    public static String buildPixiTomlFromPackages(final PixiPackageSpec[] packages) {
         Config config = Config.inMemory();
 
         // [workspace] section (required by pixi)
@@ -89,7 +88,7 @@ public final class PixiTomlBuilder {
 
         // [dependencies] section for conda packages
         CommentedConfig dependencies = CommentedConfig.inMemory();
-        for (PackageSpec pkg : packages) {
+        for (PixiPackageSpec pkg : packages) {
             if (pkg.m_packageName == null || pkg.m_packageName.isBlank() || pkg.m_source == PackageSource.PIP) {
                 continue;
             }
@@ -100,7 +99,7 @@ public final class PixiTomlBuilder {
         // [pypi-dependencies] section for pip packages
         CommentedConfig pypiDependencies = CommentedConfig.inMemory();
         boolean hasPipPackages = false;
-        for (PackageSpec pkg : packages) {
+        for (PixiPackageSpec pkg : packages) {
             if (pkg.m_packageName != null && !pkg.m_packageName.isBlank() && pkg.m_source == PackageSource.PIP) {
                 pypiDependencies.set(pkg.m_packageName, formatVersionConstraint(pkg));
                 hasPipPackages = true;
@@ -125,7 +124,7 @@ public final class PixiTomlBuilder {
      * @param pkg the package specification
      * @return the formatted version constraint (e.g., ">=3.9,<=3.11" or "*")
      */
-    static String formatVersionConstraint(final PackageSpec pkg) {
+    static String formatVersionConstraint(final PixiPackageSpec pkg) {
         boolean hasMin = pkg.m_minVersion != null && !pkg.m_minVersion.isBlank();
         boolean hasMax = pkg.m_maxVersion != null && !pkg.m_maxVersion.isBlank();
 

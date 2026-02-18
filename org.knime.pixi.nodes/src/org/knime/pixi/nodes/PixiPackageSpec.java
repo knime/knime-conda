@@ -44,50 +44,44 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Jan 20, 2026 (Marc Lehner): created
+ *   Feb 19, 2026 (benjaminwilhelm): created
  */
 package org.knime.pixi.nodes;
 
-import org.knime.core.node.NodeLogger;
-import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.MainInputSource;
+import org.knime.node.parameters.NodeParameters;
+import org.knime.node.parameters.Widget;
+import org.knime.node.parameters.widget.choices.Label;
 
-/**
- * Utility class for resolving pixi.toml manifest content from various input sources.
- *
- * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
- * @since 5.11
- */
-final class PixiManifestResolver {
+final class PixiPackageSpec implements NodeParameters {
 
-    private PixiManifestResolver() {
-        // Utility class
+    // Package specification
+    enum PackageSource {
+            @Label("Conda")
+            CONDA,
+
+            @Label("Pip")
+            PIP
     }
 
-    /**
-     * Retrieves TOML manifest content from various input sources.
-     *
-     * @throws IllegalStateException if the input source is unknown
-     */
-    static String getTomlContent(final MainInputSource inputSource, final PixiPackageSpec[] packages,
-        final String tomlContent, final String yamlContentAsTOML, final NodeLogger logger) {
-        logger.debug("Getting TOML content for: " + inputSource);
-        switch (inputSource) {
-            case SIMPLE:
-                logger.debug("Building TOML from " + packages.length + " packages");
-                String result = PixiTomlBuilder.buildPixiTomlFromPackages(packages);
-                logger.debug("Generated TOML (" + result.length() + " chars)");
-                return result;
-            case TOML_EDITOR:
-                logger.debug("Using TOML from editor (" + tomlContent.length() + " chars)");
-                return tomlContent;
-            case YAML_EDITOR:
-                logger.debug("Converting YAML from editor to TOML");
-                //String toml = PixiYamlImporter.convertYamlToToml(yamlContent);
-                //logger.debug("Converted TOML (" + toml.length() + " chars)");
-                return yamlContentAsTOML;
-            default:
-                logger.error("Unknown input source: " + inputSource);
-                throw new IllegalStateException("Unknown input source: " + inputSource);
-        }
+    @Widget(title = "Package name", description = "The name of the package")
+    String m_packageName = "";
+
+    @Widget(title = "Source", description = "Package source (Conda or Pip)")
+    PackageSource m_source = PackageSource.CONDA;
+
+    @Widget(title = "Min version", description = "Minimum version (inclusive, optional)")
+    String m_minVersion = "";
+
+    @Widget(title = "Max version", description = "Maximum version (exclusive, optional)")
+    String m_maxVersion = "";
+
+    PixiPackageSpec() {
+    }
+
+    PixiPackageSpec(final String name, final PackageSource source, final String minVersion, final String maxVersion) {
+        m_packageName = name;
+        m_source = source;
+        m_minVersion = minVersion;
+        m_maxVersion = maxVersion;
     }
 }

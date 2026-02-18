@@ -136,7 +136,7 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
     private static void configure(final ConfigureInput in, final ConfigureOutput out) throws InvalidSettingsException {
         final PythonEnvironmentProviderNodeParameters params = in.getParameters();
 
-        var lockFile = params.m_pixiLockFileContent;
+        var lockFile = params.m_lockFileSettings.m_pixiLockFileContent;
         if (lockFile == null || lockFile.isBlank()) {
             throw new InvalidSettingsException("Python environment is not resolved. "
                 + "Press the \"Resolve Dependencies\" button to resolve the environment.");
@@ -150,8 +150,8 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
         final PythonEnvironmentProviderNodeParameters params = in.getParameters();
 
         final var portObject = new PythonEnvironmentPortObject( //
-            params.getPixiTomlFileContent(), //
-            params.m_pixiLockFileContent //
+            params.m_lockFileSettings.m_tomlForLastLockFileGeneration, //
+            params.m_lockFileSettings.m_pixiLockFileContent //
         );
         out.setOutData(portObject);
     }

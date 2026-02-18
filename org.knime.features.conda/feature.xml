@@ -735,7 +735,7 @@ propagated with or for interoperation with KNIME.
          unpack="false"/>
 
    <plugin
-         id="org.knime.python3.processprovider"
+         id="org.knime.externalprocessprovider"
          download-size="0"
          install-size="0"
          version="0.0.0"
@@ -754,5 +754,37 @@ propagated with or for interoperation with KNIME.
          install-size="0"
          version="0.0.0"
          unpack="false"/>
+
+   <plugin
+         id="org.knime.conda.envinstall"
+         version="0.0.0"/>
+
+   <plugin
+         id="org.knime.conda.pixi.bin.linux.x86_64"
+         os="linux"
+         arch="x86_64"
+         fragment="true"
+         version="0.0.0"/>
+  
+   <plugin
+         id="org.knime.conda.pixi.bin.win32.x86_64"
+         os="win32"
+         arch="x86_64"
+         fragment="true"
+         version="0.0.0"/>
+  
+   <plugin
+         id="org.knime.conda.pixi.bin.macosx.x86_64"
+         os="macosx"
+         arch="x86_64"
+         fragment="true"
+         version="0.0.0"/>
+  
+   <plugin
+         id="org.knime.conda.pixi.bin.macosx.aarch64"
+         os="macosx"
+         arch="aarch64"
+         fragment="true"
+         version="0.0.0"/>
 
 </feature>

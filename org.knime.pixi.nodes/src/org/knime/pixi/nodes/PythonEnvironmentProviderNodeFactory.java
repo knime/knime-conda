@@ -78,52 +78,51 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
             .shortDescription("Provides a Python environment to downstream nodes") //
             .fullDescription( //
                 """
-                                                <p>
-                                                This node provides a Python environment specification to downstream Python-aware nodes such as
-                                                Python Script nodes. The environment is defined using <a href="https://pixi.sh">pixi</a>, a
-                                                fast package manager built on top of conda-forge and PyPI that ensures reproducible Python
-                                                environments across different platforms (Windows, Linux, macOS).
-                                                </p>
-                                                <p>
-                                                The node offers three ways to specify the Python environment:
-                                                </p>
-                                                <ul>
-                                                <li><b>Packages:</b> Define packages directly in a simple table format. Specify package names,
-                                                sources (Conda or PyPI), and optional version constraints. This is the easiest method for
-                                                simple environments.</li>
-                                                <li><b>TOML editor:</b> Manually write or edit a complete pixi.toml manifest file. This provides
-                                                full control over all pixi features including channels, platforms, and complex dependency
-                                                specifications. The TOML format follows the <a href="https://pixi.sh/latest/reference/project_configuration/">pixi project specification</a>.
-                                                <br/><b>Example TOML:</b>
-                                                <pre>[workspace]
+                        <p>
+                        This node provides a Python environment specification to downstream Python-aware nodes such as
+                        Python Script nodes. The environment is defined using <a href="https://pixi.sh">pixi</a>, a
+                        fast package manager built on top of conda-forge and PyPI that ensures reproducible Python
+                        environments across different platforms (Windows, Linux, macOS).
+                        </p>
+                        <p>
+                        The node offers three ways to specify the Python environment:
+                        </p>
+                        <ul>
+                        <li><b>Packages:</b> Define packages directly in a simple table format. Specify package names,
+                        sources (Conda or PyPI), and optional version constraints. This is the easiest method for
+                        simple environments.</li>
+                        <li><b>TOML editor:</b> Manually write or edit a complete pixi.toml manifest file. This provides
+                        full control over all pixi features including channels, platforms, and complex dependency
+                        specifications. The TOML format follows the <a href="https://pixi.sh/latest/reference/project_configuration/">pixi project specification</a>.
+                        <br/><b>Example TOML:</b>
+                        <pre>[workspace]
                         channels = ["knime", "conda-forge"]
                         platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 
                         [dependencies]
                         python = "3.13.*"
                         knime-python-base = "*"</pre>
-                                                </li>
-                                                <li><b>YAML editor:</b> Import an existing conda environment.yaml file. The node automatically
-                                                converts this to pixi format and configures it for all major platforms (Windows, Linux, macOS Intel/ARM).</li>
-                                                </ul>
-                                                <p>
-                                                <b>Environment resolution:</b> After specifying the environment using any of the above methods,
-                                                                        click the "Resolve Dependencies" button. This runs pixi to resolve all package dependencies
-                                                and verify that the environment can be created on all configured platforms. The resolved
-                                                environment is stored in a lock file, ensuring that the exact same package versions are used
-                                                regardless of when or where the workflow is executed.
-                                                </p>
-                                                <p>
-                                                <b>Using the environment:</b> The output port of this node provides a Python Environment
-                                                specification that can be connected to Python Script nodes and other Python-aware KNIME nodes.
-                                                These downstream nodes will automatically use the specified environment when executing Python code.
-                                                </p>
-                                                <p>
-                                                <b>Note:</b> The actual Python environment is not created by this node. Instead, downstream
-                                                Python nodes will automatically create and cache the environment on first use based on the
-                                                lock file specification.
-                                                </p>
-                                                """) //
+                        </li>
+                        <li><b>YAML editor:</b> Import an existing conda environment.yaml file. The node automatically
+                        converts this to pixi format and configures it for all major platforms (Windows, Linux, macOS Intel/ARM).</li>
+                        </ul>
+                        <p>
+                        <b>Environment resolution:</b> After specifying the environment using any of the above methods,
+                                                click the "Resolve Dependencies" button. This runs pixi to resolve all package dependencies
+                        and verify that the environment can be created on all configured platforms. The resolved
+                        environment is stored in a lock file, ensuring that the exact same package versions are used
+                        regardless of when or where the workflow is executed.
+                        </p>
+                        <p>
+                        <b>Using the environment:</b> The output port of this node provides a Python Environment
+                        specification that can be connected to Python Script nodes and other Python-aware KNIME nodes.
+                        These downstream nodes will automatically use the specified environment when executing Python code.
+                        </p>
+                        <p>
+                        <b>Note:</b> The actual Python environment is not created by this node. Instead, downstream
+                        Python nodes will automatically create and cache the environment on first use based on the
+                        lock file specification.
+                        </p>""") //
             .sinceVersion(5, 11, 0).ports(p -> {
                 p.addOutputPort("Pixi Environment", "Pixi Python environment information",
                     PythonEnvironmentPortObject.TYPE);
@@ -137,7 +136,7 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
     private static void configure(final ConfigureInput in, final ConfigureOutput out) throws InvalidSettingsException {
         final PythonEnvironmentProviderNodeParameters params = in.getParameters();
 
-        var lockFile = params.getPixiLockFileContent();
+        var lockFile = params.m_pixiLockFileContent;
         if (lockFile == null || lockFile.isBlank()) {
             throw new InvalidSettingsException("Python environment is not resolved. "
                 + "Press the \"Resolve Dependencies\" button to resolve the environment.");
@@ -152,7 +151,7 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
 
         final var portObject = new PythonEnvironmentPortObject( //
             params.getPixiTomlFileContent(), //
-            params.getPixiLockFileContent() //
+            params.m_pixiLockFileContent //
         );
         out.setOutData(portObject);
     }

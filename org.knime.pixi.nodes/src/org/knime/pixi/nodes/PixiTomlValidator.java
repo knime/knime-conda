@@ -198,9 +198,9 @@ final class PixiTomlValidator {
      */
     static Optional<TextMessage.Message> toMessage(final PlatformValidation validation) {
         switch (validation.result()) {
-            case ALL_PLATFORMS_PRESENT:
-                return Optional.of(new TextMessage.Message("Platform configuration",
-                    "Pixi TOML is prepared for all operating systems.", MessageType.INFO));
+//            case ALL_PLATFORMS_PRESENT:
+//                return Optional.of(new TextMessage.Message("Platform configuration",
+//                    "Pixi TOML is prepared for all operating systems.", MessageType.INFO));
 
             case NO_WORKSPACE_SECTION:
                 return Optional.of(new TextMessage.Message("Platform configuration",

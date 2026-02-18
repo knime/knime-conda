@@ -87,7 +87,11 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
      * @throws IOException if the path cannot be resolved
      */
     private Path getPixiEnvironmentPath() throws IOException {
-        return PixiUtils.resolveProjectDirectory(m_pixiLockContent);
+        if (m_pixiLockContent == null || m_pixiLockContent.isBlank()) {
+            throw new IllegalArgumentException("pixi.lock content is empty.");
+        }
+        return PixiEnvMapping.resolvePixiEnvDirectory(m_pixiLockContent);
+
     }
 
     /**

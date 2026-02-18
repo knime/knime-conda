@@ -8,6 +8,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 
 import javax.swing.JComponent;
 
@@ -186,7 +187,19 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
             final Map<String, String> extraEnv = Map.of("PIXI_HOME", pixiHome.toString());
             final String[] pixiArgs = {"install", "--color", "never", "--no-progress"};
 
-            final var callResult = PixiBinary.callPixiWithExecutionMonitor(installDir, extraEnv, exec, pixiArgs);
+            BooleanSupplier cancellationCallback = () -> {
+                if (exec != null) {
+                    try {
+                        exec.checkCanceled();
+                        return false;
+                    } catch (CanceledExecutionException e) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            final var callResult =
+                PixiBinary.callPixiWithCancellation(installDir, extraEnv, cancellationCallback, pixiArgs);
 
             if (callResult.returnCode() != 0) {
                 final String errorDetails = PixiUtils.getMessageFromCallResult(callResult);

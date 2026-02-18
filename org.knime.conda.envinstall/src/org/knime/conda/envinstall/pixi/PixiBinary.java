@@ -67,8 +67,6 @@ import java.util.stream.Collectors;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.core.runtime.Platform;
-import org.knime.core.node.CanceledExecutionException;
-import org.knime.core.node.ExecutionMonitor;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
 
@@ -199,24 +197,7 @@ public final class PixiBinary {
      */
     public static CallResult callPixi(final java.nio.file.Path workingDirectory, final Map<String, String> envVars,
         final String... args) throws PixiBinaryLocationException, IOException, InterruptedException {
-        return callPixiWithCancellation(workingDirectory, envVars, () -> false, args);
-    }
-
-    public static CallResult callPixiWithExecutionMonitor(final java.nio.file.Path workingDirectory,
-        final Map<String, String> envVars, final ExecutionMonitor exec, final String... args)
-        throws PixiBinaryLocationException, IOException, InterruptedException {
-        BooleanSupplier cancellationCallback = () -> {
-            if (exec != null) {
-                try {
-                    exec.checkCanceled();
-                    return false;
-                } catch (CanceledExecutionException e) {
-                    return true;
-                }
-            }
-            return false;
-        };
-        return callPixiWithCancellation(workingDirectory, envVars, cancellationCallback, args);
+        return callPixiWithCancellation(workingDirectory, envVars, null, args);
     }
 
     /**
@@ -267,8 +248,6 @@ public final class PixiBinary {
                         // Cancellation requested - terminate the process
                         process.destroyForcibly();
                         stdStreamsReadersExec.shutdownNow();
-                        // TODO check if the thread has to be interrupted or something else
-                        Thread.currentThread().interrupt();
                         throw new InterruptedException("Pixi process was cancelled");
                     }
 

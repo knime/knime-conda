@@ -42,7 +42,7 @@
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
- * 
+ *
  * History
  *   Feb 19, 2026 (Marc Lehner): created
  */
@@ -61,11 +61,14 @@ import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
 import org.knime.node.parameters.WidgetGroup;
 import org.knime.node.parameters.layout.Layout;
+import org.knime.node.parameters.updates.Effect;
+import org.knime.node.parameters.updates.Effect.EffectType;
+import org.knime.node.parameters.updates.EffectPredicate;
+import org.knime.node.parameters.updates.EffectPredicateProvider;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
-import org.knime.node.parameters.updates.StateProvider.StateProviderInitializer;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
 import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.EffectiveTOMLContentRef;
 import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.EffectiveTOMLContentValueProvider;
@@ -90,7 +93,18 @@ class PixiLockFileSettings implements WidgetGroup {
         advanced = true)
     @Layout(LockFileSection.class)
     @TextAreaWidget(rows = 10)
+    @Effect(predicate = AlwaysTrue.class, type = EffectType.DISABLE)
     String m_pixiLockFileContent = "";
+
+    /**
+     * Predicate that always returns true, used to disable read-only fields.
+     */
+    static final class AlwaysTrue implements EffectPredicateProvider {
+        @Override
+        public EffectPredicate init(final PredicateInitializer i) {
+            return i.always();
+        }
+    }
 
     @ValueReference(IsCurrentLockUpToDateWithOtherSettingsRef.class)
     @ValueProvider(IsCurrentLockUpToDateWithOtherSettingsProvider.class)

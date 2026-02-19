@@ -134,6 +134,10 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @After(SimpleInputSection.class)
     @After(TomlEditorSection.class)
     @After(YamlEditorSection.class)
+    static final class ResolveDependenciesButtonSection {
+    }
+
+    @After(ResolveDependenciesButtonSection.class)
     static final class LockFileSection {
     }
 
@@ -209,8 +213,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                 return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.TOML_EDITOR);
             }
         }
-
-        // TOML editor input
 
         @Widget(title = "Environment specification (pixi.toml)", description = """
                 Content of the pixi.toml manifest file that describes the environment.
@@ -407,6 +409,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     //////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @Persistor(PixiLockFilePersistor.class)
+    @Layout(LockFileSection.class)
     PixiLockFileSettings m_lockFileSettings = new PixiLockFileSettings();
 
     static class PixiLockFileSettings implements WidgetGroup {
@@ -451,6 +454,69 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
                 return Objects.equals(m_effectiveTOMLContentSupplier.get(), m_tomlForLastButtonClickSupplier.get());
             }
         }
+
+        /**
+         * State provider that generates a lock file from a TOML. Writing the effective TOML content to a temp
+         * directory, running `pixi lock`, and reading the generated lock file. This is triggered when the "Resolve
+         * dependencies" button is clicked.
+         */
+        static final class LockFileProvider implements StateProvider<String> {
+
+            private Supplier<String> m_effectiveTOMLContentSupplier;
+
+            @Override
+            public void init(final StateProviderInitializer initializer) {
+                initializer.computeOnButtonClick(ResolveDependenciesButtonRef.class);
+                m_effectiveTOMLContentSupplier = initializer.getValueSupplier(EffectiveTOMLContentRef.class);
+            }
+
+            @Override
+            public String computeState(final NodeParametersInput context) throws StateComputationFailureException {
+                Path projectDir = null;
+                try {
+
+                    // Always use a fresh temp directory during configuration
+                    projectDir = PathUtils.createTempDir("pixi-envs-config");
+
+                    // Write the TOML manifest to the temp directory
+                    final Path tomlFilePath = projectDir.resolve("pixi.toml");
+                    Files.writeString(tomlFilePath, m_effectiveTOMLContentSupplier.get());
+
+                    // Run pixi lock to resolve dependencies and generate lock file
+                    final String[] pixiArgs = {"--color", "never", "--no-progress", "lock"};
+                    final var callResult = PixiBinary.callPixiWithCancellation(projectDir, null, () -> false, pixiArgs);
+
+                    if (callResult.returnCode() != 0) {
+                        String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
+                        throw new WidgetHandlerException("Pixi lock failed:\n" + errorDetails);
+                    }
+
+                    // Read the generated lock file
+                    final Path lockFilePath = projectDir.resolve("pixi.lock");
+                    if (Files.exists(lockFilePath)) {
+                        final String lockContent = Files.readString(lockFilePath);
+                        LOGGER.warn("Lock file generated with " + lockContent.length() + " chars");
+                        return lockContent;
+                    } else {
+                        throw new WidgetHandlerException("Lock file was not generated at: " + lockFilePath);
+                    }
+                } catch (WidgetHandlerException e) {
+                    throw e;
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new WidgetHandlerException("Lock generation was cancelled");
+                } catch (Exception ex) {
+                    throw new WidgetHandlerException("Failed to generate lock file: " + ex.getMessage());
+                } finally {
+                    // Clean up temp directory
+                    try {
+                        PathUtils.deleteDirectoryIfExists(projectDir);
+                    } catch (Exception e) {
+                        // Best effort cleanup - log but don't fail
+                    }
+                }
+            }
+        }
     }
 
     static class PixiLockFilePersistor implements NodeParametersPersistor<PixiLockFileSettings> {
@@ -485,8 +551,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
         @Override
         public String[][] getConfigPaths() {
-            // TODO
-            return null;
+            return new String[0][];
         }
     }
 
@@ -513,6 +578,22 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     interface EffectiveTOMLContentRef extends ParameterReference<String> {
     }
 
+    static final class EffectiveTOMLContentDirtyStateProvider implements StateProvider<Boolean> {
+
+        private Supplier<String> m_effectiveTOMLContentSupplier;
+
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            m_effectiveTOMLContentSupplier = initializer.computeFromValueSupplier(EffectiveTOMLContentRef.class);
+        }
+
+        @Override
+        public Boolean computeState(final NodeParametersInput context) {
+            final String effectiveToml = m_effectiveTOMLContentSupplier.get();
+            return effectiveToml != null && !effectiveToml.isBlank();
+        }
+    }
+
     //////////////////////////////////////////////////////////////////////////////////////////////////////
     // Resolve dependencies button and lock file generation mechanism
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -522,7 +603,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             This validates that the environment can be created on all configured platforms.
             """)
     @SimpleButtonWidget(ref = ResolveDependenciesButtonRef.class)
-    @Layout(LockFileSection.class)
+    @Layout(ResolveDependenciesButtonSection.class)
     @Effect(predicate = ResolveButtonEnabledEffect.class, type = EffectType.ENABLE)
     Void m_resolveDependenciesButton;
 
@@ -559,7 +640,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @TextMessage(LockFileStatusMessageProvider.class)
-    @Layout(LockFileSection.class)
+    @Layout(ResolveDependenciesButtonSection.class)
     Void m_lockFileStatusMessage;
 
     static final class EffectiveTOMLContentValueProvider implements StateProvider<String> {
@@ -588,82 +669,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         }
     }
 
-    static final class EffectiveTOMLContentDirtyStateProvider implements StateProvider<Boolean> {
 
-        private Supplier<String> m_effectiveTOMLContentSupplier;
-
-        @Override
-        public void init(final StateProviderInitializer initializer) {
-            m_effectiveTOMLContentSupplier = initializer.computeFromValueSupplier(EffectiveTOMLContentRef.class);
-        }
-
-        @Override
-        public Boolean computeState(final NodeParametersInput context) {
-            final String effectiveToml = m_effectiveTOMLContentSupplier.get();
-            return effectiveToml != null && !effectiveToml.isBlank();
-        }
-    }
-
-    /**
-     * Resets lock file to empty when any input content changes.
-     */
-    static final class LockFileProvider implements StateProvider<String> {
-
-        private Supplier<String> m_effectiveTOMLContentSupplier;
-
-        @Override
-        public void init(final StateProviderInitializer initializer) {
-            initializer.computeOnButtonClick(ResolveDependenciesButtonRef.class);
-            m_effectiveTOMLContentSupplier = initializer.getValueSupplier(EffectiveTOMLContentRef.class);
-        }
-
-        @Override
-        public String computeState(final NodeParametersInput context) throws StateComputationFailureException {
-            Path projectDir = null;
-            try {
-
-                // Always use a fresh temp directory during configuration
-                projectDir = PathUtils.createTempDir("pixi-envs-config");
-
-                // Write the TOML manifest to the temp directory
-                final Path tomlFilePath = projectDir.resolve("pixi.toml");
-                Files.writeString(tomlFilePath, m_effectiveTOMLContentSupplier.get());
-
-                // Run pixi lock to resolve dependencies and generate lock file
-                final String[] pixiArgs = {"--color", "never", "--no-progress", "lock"};
-                final var callResult = PixiBinary.callPixiWithCancellation(projectDir, null, () -> false, pixiArgs);
-
-                if (callResult.returnCode() != 0) {
-                    String errorDetails = PixiUtils.getMessageFromCallResult(callResult);
-                    throw new WidgetHandlerException("Pixi lock failed:\n" + errorDetails);
-                }
-
-                // Read the generated lock file
-                final Path lockFilePath = projectDir.resolve("pixi.lock");
-                if (Files.exists(lockFilePath)) {
-                    final String lockContent = Files.readString(lockFilePath);
-                    LOGGER.warn("Lock file generated with " + lockContent.length() + " chars");
-                    return lockContent;
-                } else {
-                    throw new WidgetHandlerException("Lock file was not generated at: " + lockFilePath);
-                }
-            } catch (WidgetHandlerException e) {
-                throw e;
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new WidgetHandlerException("Lock generation was cancelled");
-            } catch (Exception ex) {
-                throw new WidgetHandlerException("Failed to generate lock file: " + ex.getMessage());
-            } finally {
-                // Clean up temp directory
-                try {
-                    PathUtils.deleteDirectoryIfExists(projectDir);
-                } catch (Exception e) {
-                    // Best effort cleanup - log but don't fail
-                }
-            }
-        }
-    }
 
     // Validation message provider
     static final class LockFileStatusMessageProvider implements StateProvider<Optional<TextMessage.Message>> {

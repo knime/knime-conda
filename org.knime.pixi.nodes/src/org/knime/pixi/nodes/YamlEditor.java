@@ -42,7 +42,7 @@
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
- * 
+ *
  * History
  *   Feb 19, 2026 (Marc Lehner): created
  */
@@ -55,15 +55,13 @@ import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
 import org.knime.node.parameters.updates.Effect;
+import org.knime.node.parameters.updates.Effect.EffectType;
 import org.knime.node.parameters.updates.EffectPredicate;
 import org.knime.node.parameters.updates.EffectPredicateProvider;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
-import org.knime.node.parameters.updates.Effect.EffectType;
-import org.knime.node.parameters.updates.EffectPredicateProvider.PredicateInitializer;
-import org.knime.node.parameters.updates.StateProvider.StateProviderInitializer;
 import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.Message;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
@@ -124,7 +122,8 @@ class YamlEditor implements NodeParameters {
             try {
                 return PixiYamlImporter.convertYamlToToml(m_yamlContentSupplier.get());
             } catch (Exception e) {
-                PythonEnvironmentProviderNodeParameters.LOGGER.error("Failed to convert YAML to TOML: " + e.getMessage(), e);
+                PythonEnvironmentProviderNodeParameters.LOGGER
+                    .error("Failed to convert YAML to TOML: " + e.getMessage(), e);
                 return "ERROR";
             }
         }
@@ -146,14 +145,12 @@ class YamlEditor implements NodeParameters {
         public Optional<Message> computeState(final NodeParametersInput context) {
             if (m_tomlFromYamlSupplier.get() == null || m_tomlFromYamlSupplier.get().isBlank()
                 || m_tomlFromYamlSupplier.get().equals("ERROR")) {
-                return Optional
-                    .of(new Message("YAML Parse Error", "Could not parse YAML content.", MessageType.ERROR));
+                return Optional.of(new Message("YAML Parse Error", "Could not parse YAML content.", MessageType.ERROR));
             }
             return Optional.empty();
         }
     }
 
-    // TODO do not persist?
     @ValueReference(YamlContentIsValidRef.class)
     @ValueProvider(YamlContentIsValidProvider.class)
     boolean m_isYamlContentValid = true;

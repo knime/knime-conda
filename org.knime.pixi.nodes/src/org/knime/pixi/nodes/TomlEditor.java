@@ -60,8 +60,6 @@ import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
-import org.knime.node.parameters.updates.EffectPredicateProvider.PredicateInitializer;
-import org.knime.node.parameters.updates.StateProvider.StateProviderInitializer;
 import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.Message;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
@@ -125,8 +123,6 @@ class TomlEditor implements NodeParameters {
 
     // Reference to store whether the TOML content is valid (no errors, platforms valid).
     // This is used to enable/disable the resolve button and show messages.
-
-    // TODO do not persist?
     @ValueReference(TomlContentIsValidRef.class)
     @ValueProvider(TomlContentIsValidProvider.class)
     boolean m_isTomlContentValid = true;

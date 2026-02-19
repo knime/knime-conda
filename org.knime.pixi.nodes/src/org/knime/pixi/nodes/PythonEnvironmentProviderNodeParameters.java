@@ -158,17 +158,36 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @Effect(predicate = PackagesArray.InputIsPackagesArray.class, type = EffectType.SHOW)
     PackagesArray m_packagesArray = new PackagesArray();
 
-
-
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TOML Editor input
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @Layout(TomlEditorSection.class)
     @Effect(predicate = TomlEditor.InputIsTomlEditor.class, type = EffectType.SHOW)
+    @Persistor(TomlEditorPersistor.class)
     TomlEditor m_tomlEditor = new TomlEditor();
 
+    static class TomlEditorPersistor implements NodeParametersPersistor<TomlEditor> {
 
+        @Override
+        public TomlEditor load(final NodeSettingsRO settings) throws InvalidSettingsException {
+            var tomlContent = settings.getString("tomlContent");
+
+            TomlEditor loadedEditor = new TomlEditor();
+            loadedEditor.m_pixiTomlContent = tomlContent != null ? tomlContent : "";
+            return loadedEditor;
+        }
+
+        @Override
+        public void save(final TomlEditor param, final NodeSettingsWO settings) {
+            settings.addString("tomlContent", param.m_pixiTomlContent);
+        }
+
+        @Override
+        public String[][] getConfigPaths() {
+            return new String[0][];
+        }
+    }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // YAML Editor input
@@ -176,13 +195,37 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
     @Layout(YamlEditorSection.class)
     @Effect(predicate = YamlEditor.InputIsYamlEditor.class, type = EffectType.SHOW)
+    @Persistor(YamlEditorPersistor.class)
     YamlEditor m_yamlEditor = new YamlEditor();
 
+    static class YamlEditorPersistor implements NodeParametersPersistor<YamlEditor> {
 
+        @Override
+        public YamlEditor load(final NodeSettingsRO settings) throws InvalidSettingsException {
+            var yamlContent = settings.getString("yamlContent");
+            var tomlFromYaml = settings.getString("tomlFromYaml");
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////
+            YamlEditor loadedEditor = new YamlEditor();
+            loadedEditor.m_envYamlContent = yamlContent != null ? yamlContent : "";
+            loadedEditor.m_tomlFromYaml = tomlFromYaml != null ? tomlFromYaml : "";
+            return loadedEditor;
+        }
+
+        @Override
+        public void save(final YamlEditor param, final NodeSettingsWO settings) {
+            settings.addString("yamlContent", param.m_envYamlContent);
+            settings.addString("tomlFromYaml", param.m_tomlFromYaml);
+        }
+
+        @Override
+        public String[][] getConfigPaths() {
+            return new String[0][];
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Lock file generation and persistence
-    //////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @Persistor(PixiLockFilePersistor.class)
     @Layout(LockFileSection.class)
@@ -338,8 +381,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         }
     }
 
-
-
     // Validation message provider
     static final class LockFileStatusMessageProvider implements StateProvider<Optional<TextMessage.Message>> {
 
@@ -347,9 +388,8 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
         @Override
         public void init(final StateProviderInitializer initializer) {
-            m_isCurrentLockUpToDateWithOtherSettingsSupplier =
-                initializer
-                    .computeFromValueSupplier(PixiLockFileSettings.IsCurrentLockUpToDateWithOtherSettingsRef.class);
+            m_isCurrentLockUpToDateWithOtherSettingsSupplier = initializer
+                .computeFromValueSupplier(PixiLockFileSettings.IsCurrentLockUpToDateWithOtherSettingsRef.class);
         }
 
         @Override

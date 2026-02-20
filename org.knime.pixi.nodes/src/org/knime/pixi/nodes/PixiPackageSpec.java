@@ -48,9 +48,17 @@
  */
 package org.knime.pixi.nodes;
 
+import java.io.StringWriter;
+import java.util.Arrays;
+
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.Widget;
 import org.knime.node.parameters.widget.choices.Label;
+
+import com.electronwill.nightconfig.core.CommentedConfig;
+import com.electronwill.nightconfig.core.Config;
+import com.electronwill.nightconfig.core.io.IndentStyle;
+import com.electronwill.nightconfig.toml.TomlWriter;
 
 final class PixiPackageSpec implements NodeParameters {
 
@@ -83,5 +91,74 @@ final class PixiPackageSpec implements NodeParameters {
         m_source = source;
         m_minVersion = minVersion;
         m_maxVersion = maxVersion;
+    }
+
+    /**
+     * Build a pixi.toml manifest from an array of package specifications. Uses workspace structure with standard KNIME
+     * channels and multi-platform support.
+     *
+     * @param packages the packages to include
+     * @return the pixi.toml content as a string
+     */
+    public static String buildPixiTomlFromPackages(final PixiPackageSpec[] packages) {
+        Config config = Config.inMemory();
+
+        // [workspace] section (required by pixi)
+        CommentedConfig workspace = CommentedConfig.inMemory();
+        workspace.set("channels", Arrays.asList("knime", "conda-forge"));
+        workspace.set("platforms", Arrays.asList("win-64", "linux-64", "osx-64", "osx-arm64"));
+        config.set("workspace", workspace);
+
+        // [dependencies] section for conda packages
+        CommentedConfig dependencies = CommentedConfig.inMemory();
+        for (PixiPackageSpec pkg : packages) {
+            if (pkg.m_packageName == null || pkg.m_packageName.isBlank() || pkg.m_source == PackageSource.PIP) {
+                continue;
+            }
+            dependencies.set(pkg.m_packageName, formatVersionConstraint(pkg));
+        }
+        config.set("dependencies", dependencies);
+
+        // [pypi-dependencies] section for pip packages
+        CommentedConfig pypiDependencies = CommentedConfig.inMemory();
+        boolean hasPipPackages = false;
+        for (PixiPackageSpec pkg : packages) {
+            if (pkg.m_packageName != null && !pkg.m_packageName.isBlank() && pkg.m_source == PackageSource.PIP) {
+                pypiDependencies.set(pkg.m_packageName, formatVersionConstraint(pkg));
+                hasPipPackages = true;
+            }
+        }
+        if (hasPipPackages) {
+            config.set("pypi-dependencies", pypiDependencies);
+        }
+
+        // Write to string
+        StringWriter writer = new StringWriter();
+        TomlWriter tomlWriter = new TomlWriter();
+        tomlWriter.setIndent(IndentStyle.SPACES_2);
+        tomlWriter.setWriteTableInlinePredicate(path -> false); // Never write tables inline
+        tomlWriter.write(config, writer);
+        return writer.toString();
+    }
+
+    /**
+     * Format a version constraint string for a package specification.
+     *
+     * @param pkg the package specification
+     * @return the formatted version constraint (e.g., ">=3.9,<=3.11" or "*")
+     */
+    static String formatVersionConstraint(final PixiPackageSpec pkg) {
+        boolean hasMin = pkg.m_minVersion != null && !pkg.m_minVersion.isBlank();
+        boolean hasMax = pkg.m_maxVersion != null && !pkg.m_maxVersion.isBlank();
+
+        if (hasMin && hasMax) {
+            return ">=" + pkg.m_minVersion + ",<=" + pkg.m_maxVersion;
+        } else if (hasMin) {
+            return ">=" + pkg.m_minVersion;
+        } else if (hasMax) {
+            return "<=" + pkg.m_maxVersion;
+        } else {
+            return "*";
+        }
     }
 }

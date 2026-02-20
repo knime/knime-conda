@@ -60,6 +60,14 @@ import com.electronwill.nightconfig.core.Config;
 import com.electronwill.nightconfig.core.io.IndentStyle;
 import com.electronwill.nightconfig.toml.TomlWriter;
 
+/**
+ * Data class representing a package specification for pixi environments, including package name, source (Conda or Pip),
+ * and optional version constraints. Also includes a utility method to build a pixi.toml manifest from an array of
+ * package specifications.
+ *
+ * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
+ * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
+ */
 final class PixiPackageSpec implements NodeParameters {
 
     // Package specification

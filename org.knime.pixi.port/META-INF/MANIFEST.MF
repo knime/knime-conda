@@ -10,4 +10,4 @@ Require-Bundle: org.knime.core;bundle-version="[5.11.0,6.0.0)",
  org.knime.externalprocessprovider;bundle-version="[5.11.0,6.0.0)"
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Bundle-ActivationPolicy: lazy
-Export-Package: org.knime.pixi.port;x-friends:="org.knime.python3.scripting.nodes"
+Export-Package: org.knime.pixi.port;x-friends:="org.knime.python3.scripting.nodes,org.knime.pixi.nodes"

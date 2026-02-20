@@ -3,7 +3,7 @@
 <plugin>
       <extension
             point="org.knime.core.PortType">
-            <portObject
+            <portType
                   color="#FFDD99"
                   hidden="false"
                   name="Python Environment"
@@ -11,6 +11,6 @@
                   objectSerializer="org.knime.pixi.port.PythonEnvironmentPortObject$Serializer"
                   specClass="org.knime.pixi.port.PythonEnvironmentPortObjectSpec"
                   specSerializer="org.knime.pixi.port.PythonEnvironmentPortObjectSpec$Serializer">
-            </portObject>
+            </portType>
       </extension>
 </plugin>

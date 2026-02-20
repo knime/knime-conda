@@ -3,6 +3,9 @@ def BN = (BRANCH_NAME == 'master' || BRANCH_NAME.startsWith('releases/')) ? BRAN
 
 library "knime-pipeline@$BN"
 
+def repositoryName = 'knime-conda'
+
+
 properties([
     parameters(workflowTests.getConfigurationsAsParameters()),
     buildDiscarder(logRotator(numToKeepStr: '5')),
@@ -14,6 +17,22 @@ try {
     
     // TODO: the test currently fails, hence it is disabled for now
     //testInstallCondaEnvAction(BRANCH_NAME.startsWith('releases/') ? BRANCH_NAME : 'master')
+
+    stage('Run workflow tests') {
+        env.lastStage = env.STAGE_NAME
+        workflowTests.runTests(
+            dependencies: [
+                repositories: [
+                    'knime-python',
+                    'knime-conda-channels',
+                    'knime-python-types',
+                    'knime-core-columnar',
+                    'knime-python-legacy',
+                    repositoryName
+                    ],
+            ],
+        )
+    }
 
     stage('Sonarqube analysis') {
         env.lastStage = env.STAGE_NAME

@@ -63,12 +63,20 @@ import org.knime.node.parameters.widget.message.TextMessage.Message;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
 
+/**
+ * Node parameters class that provides a YAML editor for conda environment.yaml files and converts them to pixi.toml
+ * format.
+ *
+ * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
+ * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
+ */
 class YamlEditor implements NodeParameters {
     @Widget(title = "Environment specification (conda environment.yaml)",
         description = """
                 Content of the conda environment.yaml file that describes the environment.
                 This will be imported into pixi using `pixi init --import` and converted to a pixi.toml manifest.
-                The environment will automatically be configured to work on all major platforms (win-64, linux-64, osx-64, osx-arm64).
+                The environment will automatically be configured to work on all major platforms
+                (win-64, linux-64, osx-64, osx-arm64).
                 """)
     @TextAreaWidget(rows = 20)
     @ValueReference(YamlContentRef.class)
@@ -105,7 +113,7 @@ class YamlEditor implements NodeParameters {
         public String computeState(final NodeParametersInput context) {
             try {
                 return PixiYamlImporter.convertYamlToToml(m_yamlContentSupplier.get());
-            } catch (Exception e) {
+            } catch (Exception e) { // NOSONAR - we want to make sure we do not fail
                 PythonEnvironmentProviderNodeParameters.LOGGER
                     .error("Failed to convert YAML to TOML: " + e.getMessage(), e);
                 return "ERROR";

@@ -42,7 +42,7 @@
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
- * 
+ *
  * History
  *   Feb 19, 2026 (Marc Lehner): created
  */
@@ -63,6 +63,12 @@ import org.knime.node.parameters.widget.message.TextMessage.Message;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
 
+/**
+ * Node parameters for the TOML editor dialog. This includes the TOML content and validation messages.
+ *
+ * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
+ * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
+ */
 class TomlEditor implements NodeParameters {
     @Widget(title = "Environment specification (pixi.toml)", description = """
             Content of the pixi.toml manifest file that describes the environment.
@@ -118,8 +124,8 @@ class TomlEditor implements NodeParameters {
     }
 
     /**
-     * State provider that computes whether the TOML validation message contains an error. This is used to determine
-     * if the "Resolve dependencies" button should be enabled.
+     * State provider that computes whether the TOML validation message contains an error. This is used to determine if
+     * the "Resolve dependencies" button should be enabled.
      */
     static final class TomlContentIsValidProvider implements StateProvider<Boolean> {
 

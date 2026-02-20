@@ -79,8 +79,13 @@ import org.knime.pixi.nodes.TomlEditor.TomlContentRef;
 import org.knime.pixi.nodes.YamlEditor.TomlFromYamlRef;
 import org.knime.pixi.port.PixiUtils;
 
+/**
+ * Widget group that contains the lock file content and related settings for the Python Environment Provider node.
+ *
+ * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
+ * @author Benjamin Wilhelm, KNIME GmbH, Berlin, Germany
+ */
 class PixiLockFileSettings implements WidgetGroup {
-
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
     // Effective TOML content that is used to generate the lock file and passed to the port
@@ -114,8 +119,8 @@ class PixiLockFileSettings implements WidgetGroup {
 
         @Override
         public String computeState(final NodeParametersInput context) {
-            return getTomlContent(m_inputSourceSupplier.get(), m_packagesSupplier.get(),
-                m_tomlContentSupplier.get(), m_tomlFromYamlSupplier.get());
+            return getTomlContent(m_inputSourceSupplier.get(), m_packagesSupplier.get(), m_tomlContentSupplier.get(),
+                m_tomlFromYamlSupplier.get());
         }
 
         static String getTomlContent(final MainInputSource inputSource, final PixiPackageSpec[] packages,
@@ -127,7 +132,6 @@ class PixiLockFileSettings implements WidgetGroup {
             };
         }
     }
-
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
     // TOML content at the time of the last "Resolve dependencies" button click, used to determine if the lock file is up to date
@@ -195,8 +199,7 @@ class PixiLockFileSettings implements WidgetGroup {
         @Override
         public void init(final StateProviderInitializer initializer) {
             m_effectiveTOMLContentSupplier = initializer.computeFromValueSupplier(EffectiveTOMLContentRef.class);
-            m_tomlForLastButtonClickSupplier =
-                initializer.computeFromValueSupplier(TomlForLastButtonClickRef.class);
+            m_tomlForLastButtonClickSupplier = initializer.computeFromValueSupplier(TomlForLastButtonClickRef.class);
         }
 
         @Override
@@ -206,9 +209,9 @@ class PixiLockFileSettings implements WidgetGroup {
     }
 
     /**
-     * State provider that generates a lock file from a TOML. Writing the effective TOML content to a temp
-     * directory, running `pixi lock`, and reading the generated lock file. This is triggered when the "Resolve
-     * dependencies" button is clicked.
+     * State provider that generates a lock file from a TOML. Writing the effective TOML content to a temp directory,
+     * running `pixi lock`, and reading the generated lock file. This is triggered when the "Resolve dependencies"
+     * button is clicked.
      */
     static final class LockFileProvider implements StateProvider<String> {
 
@@ -245,7 +248,8 @@ class PixiLockFileSettings implements WidgetGroup {
                 final Path lockFilePath = projectDir.resolve("pixi.lock");
                 if (Files.exists(lockFilePath)) {
                     final String lockContent = Files.readString(lockFilePath);
-                    PythonEnvironmentProviderNodeParameters.LOGGER.warn("Lock file generated with " + lockContent.length() + " chars");
+                    PythonEnvironmentProviderNodeParameters.LOGGER
+                        .warn("Lock file generated with " + lockContent.length() + " chars");
                     return lockContent;
                 } else {
                     throw new WidgetHandlerException("Lock file was not generated at: " + lockFilePath);

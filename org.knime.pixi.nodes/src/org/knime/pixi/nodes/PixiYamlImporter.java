@@ -18,7 +18,7 @@ import org.knime.pixi.port.PixiUtils;
  * @author Carsten Haubold, KNIME GmbH, Konstanz, Germany
  * @since 5.11
  */
-public final class PixiYamlImporter {
+final class PixiYamlImporter {
 
     private PixiYamlImporter() {
         // Utility class

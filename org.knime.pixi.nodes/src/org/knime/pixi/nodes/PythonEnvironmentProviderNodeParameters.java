@@ -85,11 +85,108 @@ import org.knime.pixi.nodes.YamlEditor.YamlContentIsValidRef;
  * Node Parameters for the Python Environment Provider node. Combines input methods from array-based, TOML-based, and
  * file reader approaches.
  *
+ * <pre>
+ * ┌──────────────────────────────────────────────────────────────────────────────────────────┐
+ * │                                       USER INPUTS                                        │
+ * │                                                                                          │
+ * │  m_mainInputSource   m_packages       m_pixiTomlContent     m_envYamlContent             │
+ * │  (SIMPLE /           (PixiPackageSpec  (raw pixi.toml        (conda                      │
+ * │   TOML_EDITOR /       array)            text)                 environment.yaml)          │
+ * │   YAML_EDITOR)                                                                           │
+ * │         │                  │                  │                        │                 │
+ * │  [MainInputSourceRef] [PackageArrayRef]  [TomlContentRef]       [YamlContentRef]         │
+ * └─────────┼──────────────────┼──────────────────┼────────────────────────┼─────────────────┘
+ *           │                  │                  │                        │
+ *           │                  │   TOML VALIDATION CHAIN                   │
+ *           │                  │   ──────────────────────                  │
+ *           │                  │                  ▼                        │
+ *           │                  │   TomlParseValidationProvider             │
+ *           │                  │   (PixiTomlValidator, on change           │
+ *           │                  │    + after dialog open)                   │
+ *           │                  │           │                               │
+ *           │                  │           ├──► \@TextMessage              │
+ *           │                  │           │    (TOML parse error/warning) │
+ *           │                  │           ▼                               │
+ *           │                  │   TomlContentIsValidProvider              │
+ *           │                  │           │                               │
+ *           │                  │   [TomlContentIsValidRef]─────────────────│───────────┐
+ *           │                  │                                           │           │
+ *           │                  │          YAML CONVERSION CHAIN            │           │
+ *           │                  │          ──────────────────────           │           │
+ *           │                  │                                           ▼           │
+ *           │                  │                        TomlFromYamlProvider           │
+ *           │                  │                        (PixiYamlImporter:             │
+ *           │                  │                         pixi init --import)           │
+ *           │                  │                                │                      │
+ *           │                  │                        [TomlFromYamlRef]              │
+ *           │                  │                                │                      │
+ *           │                  │                        YamlParseValidationProvider    │
+ *           │                  │                        (checks conversion result)     │
+ *           │                  │                                │                      │
+ *           │                  │                                ├──► \@TextMessage     │
+ *           │                  │                                │    (YAML error)      │
+ *           │                  │                                ▼                      │
+ *           │                  │                        YamlContentIsValidProvider     │
+ *           │                  │                                │                      │
+ *           │                  │                        [YamlContentIsValidRef]──────────┐
+ *           │                  │                                │                      │ │
+ *           │    EFFECTIVE TOML AGGREGATION                     │                      │ │
+ *           │    ──────────────────────────                     │                      │ │
+ *           └────────┬─────────┴──────────────────────────┬─────┘                      │ │
+ *                    │   (all refs dispatched by mode)    │                            │ │
+ *                    ▼                                    │                            │ │
+ *    EffectiveTOMLContentValueProvider◄───────────────────┘                            │ │
+ *    (SIMPLE     → PixiPackageSpec.buildPixiTomlFromPackages()                         │ │
+ *     TOML_EDITOR → raw TomlContentRef value                                           │ │
+ *     YAML_EDITOR → TomlFromYamlRef value)                                             │ │
+ *                    │                                                                 │ │
+ *           [EffectiveTOMLContentRef]────────────────────────────────────────────────┐ │ │
+ *                    │                                                               │ │ │
+ *           BUTTON ENABLE PREDICATE                                                  │ │ │
+ *           ───────────────────────                                                  │ │ │
+ *           ResolveButtonEnabledEffect◄────────────────────────[TomlContentIsValidRef]─┘ │
+ *           (SIMPLE:      always enabled ◄───────────────────────[YamlContentIsValidRef]─┘
+ *            TOML_EDITOR: enabled if TomlContentIsValidRef = true                    │
+ *            YAML_EDITOR: enabled if YamlContentIsValidRef = true)                   │
+ *                    │                                                               │
+ *                    │ ENABLE                                                        │
+ *                    ▼                                                               │
+ *          ╔═════════════════════════╗                                               │
+ *          ║  Resolve Dependencies   ║                                               │
+ *          ║       [ Button ]        ║                                               │
+ *          ╚═════════════════════════╝                                               │
+ *                    │ click fires ResolveDependenciesButtonRef                      │
+ *                    │                                                               │
+ *          ┌─────────┴──────────────────────────────────┐                            │
+ *          │                                            │                            │
+ *          ▼                                            ▼                            │
+ *  LockFileProvider                     TomlForLastButtonClickProvider               │
+ *  (writes effective TOML               (snapshots current                           │
+ *   to temp dir, runs                    [EffectiveTOMLContentRef])                  │
+ *   pixi lock, reads                                │                                │
+ *   pixi.lock back)                      [TomlForLastButtonClickRef]                 │
+ *          │                                            │                            │
+ *          ▼                                            │                            │
+ *  m_pixiLockFileContent          UP-TO-DATE CHECK      │◄─[EffectiveTOMLContentRef]─┘
+ *  (read-only textarea)           ──────────────────────│──────────────────────────────
+ *                                 IsCurrentLockUpToDateWithOtherSettingsProvider
+ *                                 (effectiveTOML == snapshotTOML ?)
+ *                                               │
+ *                                 [IsCurrentLockUpToDateWithOtherSettingsRef]
+ *                                               │
+ *                                 LockFileStatusMessageProvider
+ *                                 (false → INFO:    "No lock file generated yet"
+ *                                   true → SUCCESS: "Environment validated")
+ *                                               │
+ *                                               ▼
+ *                                         \@TextMessage (status)
+ * </pre>
+ *
  * @author Marc Lehner, KNIME AG, Zurich, Switzerland
  * @since 5.11
  */
 @SuppressWarnings("restriction")
-public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
+class PythonEnvironmentProviderNodeParameters implements NodeParameters {
 
     static final NodeLogger LOGGER = NodeLogger.getLogger("PythonEnvironmentProviderNodeParameters");
 

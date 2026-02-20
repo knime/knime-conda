@@ -59,6 +59,7 @@ import org.knime.pixi.port.PythonEnvironmentPortObject;
 import org.knime.pixi.port.PythonEnvironmentPortObjectSpec;
 
 /**
+ * The Python Environment Provider node.
  *
  * @author Marc Lehner, KNIME GmbH, Zurich, Switzerland
  * @since 5.11.0
@@ -123,10 +124,10 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                         Python nodes will automatically create and cache the environment on first use based on the
                         lock file specification.
                         </p>""") //
-            .sinceVersion(5, 11, 0).ports(p -> {
-                p.addOutputPort("Pixi Environment", "Pixi Python environment information",
-                    PythonEnvironmentPortObject.TYPE);
-            }).model(modelStage -> modelStage //
+            .sinceVersion(5, 11, 0)
+            .ports(p -> p.addOutputPort("Pixi Environment", "Pixi Python environment information",
+                PythonEnvironmentPortObject.TYPE))
+            .model(modelStage -> modelStage //
                 .parametersClass(PythonEnvironmentProviderNodeParameters.class) //
                 .configure(PythonEnvironmentProviderNodeFactory::configure) //
                 .execute(PythonEnvironmentProviderNodeFactory::execute)) //

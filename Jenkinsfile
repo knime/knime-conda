@@ -28,8 +28,9 @@ try {
                     'knime-python-types',
                     'knime-core-columnar',
                     'knime-python-legacy',
+                    'knime-filehandling',
                     repositoryName
-                    ],
+                ],
             ],
         )
     }

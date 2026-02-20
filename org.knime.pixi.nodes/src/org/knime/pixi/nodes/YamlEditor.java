@@ -54,10 +54,6 @@ import java.util.function.Supplier;
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
-import org.knime.node.parameters.updates.Effect;
-import org.knime.node.parameters.updates.Effect.EffectType;
-import org.knime.node.parameters.updates.EffectPredicate;
-import org.knime.node.parameters.updates.EffectPredicateProvider;
 import org.knime.node.parameters.updates.ParameterReference;
 import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.updates.ValueProvider;
@@ -66,19 +62,8 @@ import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.Message;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
-import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.MainInputSource;
-import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.MainInputSourceRef;
 
 class YamlEditor implements NodeParameters {
-
-    // Predicate to show/hide YAML editor input
-    static final class InputIsYamlEditor implements EffectPredicateProvider {
-        @Override
-        public EffectPredicate init(final PredicateInitializer i) {
-            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.YAML_EDITOR);
-        }
-    }
-
     @Widget(title = "Environment specification (conda environment.yaml)",
         description = """
                 Content of the conda environment.yaml file that describes the environment.
@@ -87,7 +72,6 @@ class YamlEditor implements NodeParameters {
                 """)
     @TextAreaWidget(rows = 20)
     @ValueReference(YamlContentRef.class)
-    @Effect(predicate = InputIsYamlEditor.class, type = EffectType.SHOW)
     String m_envYamlContent = """
             name: myenv
             channels:

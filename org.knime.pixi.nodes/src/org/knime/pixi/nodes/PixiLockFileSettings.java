@@ -70,23 +70,96 @@ import org.knime.node.parameters.updates.StateProvider;
 import org.knime.node.parameters.updates.ValueProvider;
 import org.knime.node.parameters.updates.ValueReference;
 import org.knime.node.parameters.widget.text.TextAreaWidget;
-import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.EffectiveTOMLContentRef;
-import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.EffectiveTOMLContentValueProvider;
 import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.LockFileSection;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.MainInputSource;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.MainInputSourceRef;
+import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.PackageArrayRef;
 import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.ResolveDependenciesButtonRef;
-import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.TomlForLastButtonClickProvider;
-import org.knime.pixi.nodes.PythonEnvironmentProviderNodeParameters.TomlForLastButtonClickRef;
+import org.knime.pixi.nodes.TomlEditor.TomlContentRef;
+import org.knime.pixi.nodes.YamlEditor.TomlFromYamlRef;
 import org.knime.pixi.port.PixiUtils;
 
 class PixiLockFileSettings implements WidgetGroup {
+
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Effective TOML content that is used to generate the lock file and passed to the port
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @ValueReference(EffectiveTOMLContentRef.class)
     @ValueProvider(EffectiveTOMLContentValueProvider.class)
     String m_effectiveTOMLContent = "";
 
+    interface EffectiveTOMLContentRef extends ParameterReference<String> {
+    }
+
+    static final class EffectiveTOMLContentValueProvider implements StateProvider<String> {
+
+        private Supplier<MainInputSource> m_inputSourceSupplier;
+
+        private Supplier<PixiPackageSpec[]> m_packagesSupplier;
+
+        private Supplier<String> m_tomlContentSupplier;
+
+        private Supplier<String> m_tomlFromYamlSupplier;
+
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            initializer.computeBeforeOpenDialog();
+            m_inputSourceSupplier = initializer.computeFromValueSupplier(MainInputSourceRef.class);
+            m_packagesSupplier = initializer.computeFromValueSupplier(PackageArrayRef.class);
+            m_tomlContentSupplier = initializer.computeFromValueSupplier(TomlContentRef.class);
+            m_tomlFromYamlSupplier = initializer.computeFromValueSupplier(TomlFromYamlRef.class);
+        }
+
+        @Override
+        public String computeState(final NodeParametersInput context) {
+            return getTomlContent(m_inputSourceSupplier.get(), m_packagesSupplier.get(),
+                m_tomlContentSupplier.get(), m_tomlFromYamlSupplier.get());
+        }
+
+        static String getTomlContent(final MainInputSource inputSource, final PixiPackageSpec[] packages,
+            final String tomlContent, final String yamlContentAsTOML) {
+            return switch (inputSource) {
+                case SIMPLE -> PixiPackageSpec.buildPixiTomlFromPackages(packages);
+                case TOML_EDITOR -> tomlContent;
+                case YAML_EDITOR -> yamlContentAsTOML;
+            };
+        }
+    }
+
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+    // TOML content at the time of the last "Resolve dependencies" button click, used to determine if the lock file is up to date
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+
     @ValueProvider(TomlForLastButtonClickProvider.class)
     @ValueReference(TomlForLastButtonClickRef.class)
     String m_tomlForLastLockFileGeneration = "";
+
+    interface TomlForLastButtonClickRef extends ParameterReference<String> {
+    }
+
+    /** Copies effective TOML on button click */
+    static class TomlForLastButtonClickProvider implements StateProvider<String> {
+
+        private Supplier<String> m_effectiveTOMLContentSupplier;
+
+        @Override
+        public void init(final StateProviderInitializer initializer) {
+            initializer.computeOnButtonClick(ResolveDependenciesButtonRef.class);
+            m_effectiveTOMLContentSupplier = initializer.getValueSupplier(EffectiveTOMLContentRef.class);
+        }
+
+        @Override
+        public String computeState(final NodeParametersInput context) {
+            return m_effectiveTOMLContentSupplier.get();
+        }
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Lock file content generation and display
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @ValueProvider(LockFileProvider.class)
     @Widget(title = "Lock file content", description = "Content of the generated or loaded pixi.lock file.",

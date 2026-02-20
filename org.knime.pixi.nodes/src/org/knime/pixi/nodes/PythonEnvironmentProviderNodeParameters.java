@@ -60,6 +60,7 @@ import org.knime.core.webui.node.dialog.defaultdialog.internal.dirty.DirtyTracke
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.NodeParametersInput;
 import org.knime.node.parameters.Widget;
+import org.knime.node.parameters.array.ArrayWidget;
 import org.knime.node.parameters.layout.After;
 import org.knime.node.parameters.layout.Layout;
 import org.knime.node.parameters.persistence.NodeParametersPersistor;
@@ -76,13 +77,8 @@ import org.knime.node.parameters.widget.choices.Label;
 import org.knime.node.parameters.widget.choices.ValueSwitchWidget;
 import org.knime.node.parameters.widget.message.TextMessage;
 import org.knime.node.parameters.widget.message.TextMessage.MessageType;
-import org.knime.pixi.nodes.PackagesArray.InputIsPackagesArray;
-import org.knime.pixi.nodes.PackagesArray.PackageArrayRef;
-import org.knime.pixi.nodes.TomlEditor.InputIsTomlEditor;
+import org.knime.pixi.nodes.PixiPackageSpec.PackageSource;
 import org.knime.pixi.nodes.TomlEditor.TomlContentIsValidRef;
-import org.knime.pixi.nodes.TomlEditor.TomlContentRef;
-import org.knime.pixi.nodes.YamlEditor.InputIsYamlEditor;
-import org.knime.pixi.nodes.YamlEditor.TomlFromYamlRef;
 import org.knime.pixi.nodes.YamlEditor.YamlContentIsValidRef;
 
 /**
@@ -150,20 +146,53 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     interface MainInputSourceRef extends ParameterReference<MainInputSource> {
     }
 
+    // Predicate to show/hide simple (array based) package input
+    static final class InputIsPackagesArray implements EffectPredicateProvider {
+        @Override
+        public EffectPredicate init(final PredicateInitializer i) {
+            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.SIMPLE);
+        }
+    }
+
+    // Predicate to show/hide TOML editor input
+    static final class InputIsTomlEditor implements EffectPredicateProvider {
+        @Override
+        public EffectPredicate init(final PredicateInitializer i) {
+            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.TOML_EDITOR);
+        }
+    }
+
+    // Predicate to show/hide YAML editor input
+    static final class InputIsYamlEditor implements EffectPredicateProvider {
+        @Override
+        public EffectPredicate init(final PredicateInitializer i) {
+            return i.getEnum(MainInputSourceRef.class).isOneOf(MainInputSource.YAML_EDITOR);
+        }
+    }
+
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // PackagesArray input
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @Layout(SimpleInputSection.class)
-    @Effect(predicate = PackagesArray.InputIsPackagesArray.class, type = EffectType.SHOW)
-    PackagesArray m_packagesArray = new PackagesArray();
+    @Effect(predicate = InputIsPackagesArray.class, type = EffectType.SHOW)
+    @Widget(title = "Packages", description = "Specify the packages to include in the environment")
+    @ArrayWidget(elementLayout = ArrayWidget.ElementLayout.HORIZONTAL_SINGLE_LINE, addButtonText = "Add package")
+    @ValueReference(PackageArrayRef.class)
+    PixiPackageSpec[] m_packages = new PixiPackageSpec[]{ //
+        new PixiPackageSpec("python", PackageSource.CONDA, "3.14", "3.14"), //
+        new PixiPackageSpec("knime-python-base", PackageSource.CONDA, "5.9", "5.9") //
+    };
+
+    interface PackageArrayRef extends ParameterReference<PixiPackageSpec[]> {
+    }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TOML Editor input
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @Layout(TomlEditorSection.class)
-    @Effect(predicate = TomlEditor.InputIsTomlEditor.class, type = EffectType.SHOW)
+    @Effect(predicate = InputIsTomlEditor.class, type = EffectType.SHOW)
     @Persistor(TomlEditorPersistor.class)
     TomlEditor m_tomlEditor = new TomlEditor();
 
@@ -194,7 +223,7 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     @Layout(YamlEditorSection.class)
-    @Effect(predicate = YamlEditor.InputIsYamlEditor.class, type = EffectType.SHOW)
+    @Effect(predicate = InputIsYamlEditor.class, type = EffectType.SHOW)
     @Persistor(YamlEditorPersistor.class)
     YamlEditor m_yamlEditor = new YamlEditor();
 
@@ -267,45 +296,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
         }
     }
 
-    interface TomlForLastButtonClickRef extends ParameterReference<String> {
-    }
-
-    /** Copies effective TOML on button click */
-    static class TomlForLastButtonClickProvider implements StateProvider<String> {
-
-        private Supplier<String> m_effectiveTOMLContentSupplier;
-
-        @Override
-        public void init(final StateProviderInitializer initializer) {
-            initializer.computeOnButtonClick(ResolveDependenciesButtonRef.class);
-            m_effectiveTOMLContentSupplier = initializer.getValueSupplier(EffectiveTOMLContentRef.class);
-        }
-
-        @Override
-        public String computeState(final NodeParametersInput context) {
-            return m_effectiveTOMLContentSupplier.get();
-        }
-    }
-
-    interface EffectiveTOMLContentRef extends ParameterReference<String> {
-    }
-
-    static final class EffectiveTOMLContentDirtyStateProvider implements StateProvider<Boolean> {
-
-        private Supplier<String> m_effectiveTOMLContentSupplier;
-
-        @Override
-        public void init(final StateProviderInitializer initializer) {
-            m_effectiveTOMLContentSupplier = initializer.computeFromValueSupplier(EffectiveTOMLContentRef.class);
-        }
-
-        @Override
-        public Boolean computeState(final NodeParametersInput context) {
-            final String effectiveToml = m_effectiveTOMLContentSupplier.get();
-            return effectiveToml != null && !effectiveToml.isBlank();
-        }
-    }
-
     //////////////////////////////////////////////////////////////////////////////////////////////////////
     // Resolve dependencies button and lock file generation mechanism
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -355,31 +345,6 @@ public class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @Layout(ResolveDependenciesButtonSection.class)
     Void m_lockFileStatusMessage;
 
-    static final class EffectiveTOMLContentValueProvider implements StateProvider<String> {
-
-        private Supplier<MainInputSource> m_inputSourceSupplier;
-
-        private Supplier<PixiPackageSpec[]> m_packagesSupplier;
-
-        private Supplier<String> m_tomlContentSupplier;
-
-        private Supplier<String> m_tomlFromYamlSupplier;
-
-        @Override
-        public void init(final StateProviderInitializer initializer) {
-            initializer.computeBeforeOpenDialog();
-            m_inputSourceSupplier = initializer.computeFromValueSupplier(MainInputSourceRef.class);
-            m_packagesSupplier = initializer.computeFromValueSupplier(PackageArrayRef.class);
-            m_tomlContentSupplier = initializer.computeFromValueSupplier(TomlContentRef.class);
-            m_tomlFromYamlSupplier = initializer.computeFromValueSupplier(TomlFromYamlRef.class);
-        }
-
-        @Override
-        public String computeState(final NodeParametersInput context) {
-            return PixiManifestResolver.getTomlContent(m_inputSourceSupplier.get(), m_packagesSupplier.get(),
-                m_tomlContentSupplier.get(), m_tomlFromYamlSupplier.get(), LOGGER);
-        }
-    }
 
     // Validation message provider
     static final class LockFileStatusMessageProvider implements StateProvider<Optional<TextMessage.Message>> {

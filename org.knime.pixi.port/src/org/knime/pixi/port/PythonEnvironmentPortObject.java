@@ -6,7 +6,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
 
@@ -47,8 +49,10 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
      * Global map of installation futures keyed by installation directory path. This ensures that concurrent
      * installations to the same directory are serialized, as Pixi does not support multiple concurrent installations to
      * the same location.
+     * <p>
+     * Package-private for testing via the {@code org.knime.pixi.port.tests} fragment.
      */
-    private static final ConcurrentHashMap<Path, CompletableFuture<Void>> GLOBAL_INSTALL_FUTURES =
+    static final ConcurrentHashMap<Path, CompletableFuture<Void>> GLOBAL_INSTALL_FUTURES =
         new ConcurrentHashMap<>();
 
     private String m_pixiTomlContent;
@@ -117,26 +121,64 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
      * @throws CanceledExecutionException if the operation is canceled via the execution monitor
      */
     public void installPythonEnvironment(final ExecutionMonitor exec) throws IOException, CanceledExecutionException {
+        installPythonEnvironment(null, m_pixiTomlContent, m_pixiLockContent, exec);
+    }
 
-        // Get the installation directory - this is the global synchronization point
-        final Path installDir = getPixiEnvironmentPath();
+    /**
+     * Package-private for testing. When {@code installDir} is {@code null} the directory is resolved via
+     * {@link #getPixiEnvironmentPath()}; tests pass an explicit temporary directory to bypass the OSGi preference
+     * store.
+     */
+    static void installPythonEnvironment(final Path installDir, final String pixiTomlContent,
+        final String pixiLockContent, final ExecutionMonitor exec) throws IOException, CanceledExecutionException {
+        final Path resolvedInstallDir = installDir != null ? installDir : PixiEnvMapping.resolvePixiEnvDirectory(pixiLockContent);
 
-        var future = GLOBAL_INSTALL_FUTURES.putIfAbsent(installDir, new CompletableFuture<>());
-        if (future == null) {
-            // There was no future with this key -> we need to perform the installation
-            future = GLOBAL_INSTALL_FUTURES.get(installDir);
+        final var newFuture = new CompletableFuture<Void>();
+        final var existingFuture = GLOBAL_INSTALL_FUTURES.putIfAbsent(installDir, newFuture);
+
+        if (existingFuture == null) {
+            // No other thread is installing to this directory — we are the installer.
             try {
-                performInstallation(exec, installDir, m_pixiTomlContent, m_pixiLockContent);
-                future.complete(null);
+                performInstallation(exec, installDir, pixiTomlContent, pixiLockContent);
+                newFuture.complete(null);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                future.cancel(false);
+                System.out.println("Installation thread was interrupted.");
+                newFuture.cancel(false);
                 throw new CanceledExecutionException("Python environment installation was canceled.");
+            } catch (IOException e) {
+                // Mark future as failed AND re-throw so the caller is aware that installation did not succeed.
+                System.out.println("Installation failed with IOException: " + e.getMessage());
+                newFuture.completeExceptionally(e);
+                throw e;
             } catch (Exception e) {
-                future.completeExceptionally(e);
+                // Wrap and re-throw non-IOException failures.
+                System.out.println("Installation failed with Exception: " + e.getMessage());
+                final var ioEx = new IOException("Python environment installation failed: " + e.getMessage(), e);
+                newFuture.completeExceptionally(ioEx);
+                throw ioEx;
+            } finally {
+                // Always remove the future once done (success, failure, or cancellation) to prevent stale entries
+                // from short-circuiting future independent executions.
+                System.out.println("Cleaning up installation future for directory: " + installDir);
+                GLOBAL_INSTALL_FUTURES.remove(installDir, newFuture);
             }
         } else {
-            future.join();
+            // Another thread is already installing to this directory — wait for it.
+            try {
+                existingFuture.join();
+            } catch (CancellationException e) {
+                throw new CanceledExecutionException("Python environment installation was canceled.");
+            } catch (CompletionException e) {
+                // Unwrap and re-throw as IOException rather than letting the unchecked CompletionException escape.
+                final Throwable cause = e.getCause();
+                if (cause instanceof IOException ioe) {
+                    throw ioe;
+                }
+                throw new IOException(
+                    "Python environment installation failed: " + (cause != null ? cause.getMessage() : e.getMessage()),
+                    cause);
+            }
         }
     }
 

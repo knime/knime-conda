@@ -32,6 +32,7 @@
 		<module>org.knime.conda.pixi.bin.win32.x86_64</module>
 		<module>org.knime.externalprocessprovider</module>
 		<module>org.knime.pixi.port</module>
+		<module>org.knime.pixi.port.tests</module>
 		<module>org.knime.pixi.nodes/lib/fetch_jars</module>
 		<module>org.knime.pixi.nodes</module>
 		<module>org.knime.conda.envbundling</module>

@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: KNIME Pixi Port Tests
+Bundle-SymbolicName: org.knime.pixi.port.tests;singleton:=true
+Bundle-Version: 5.11.0.qualifier
+Bundle-ClassPath: .
+Bundle-Vendor: KNIME AG, Zurich, Switzerland
+Fragment-Host: org.knime.pixi.port;bundle-version="[5.11.0,6.0.0)"
+Require-Bundle: junit-jupiter-api;bundle-version="5.10.2"
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+Automatic-Module-Name: org.knime.pixi.port.tests

@@ -274,7 +274,7 @@ class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @Layout(SimpleInputSection.class)
     @Effect(predicate = InputIsPackagesArray.class, type = EffectType.SHOW)
     @Widget(title = "Packages", description = "Specify the packages to include in the environment")
-    @ArrayWidget(elementLayout = ArrayWidget.ElementLayout.HORIZONTAL_SINGLE_LINE, addButtonText = "Add package")
+    @ArrayWidget(elementLayout = ArrayWidget.ElementLayout.VERTICAL_CARD, addButtonText = "Add package")
     @ValueReference(PackageArrayRef.class)
     PixiPackageSpec[] m_packages = new PixiPackageSpec[]{ //
         new PixiPackageSpec("python", PackageSource.CONDA, "3.14", "3.14"), //

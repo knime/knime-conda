@@ -53,6 +53,8 @@ import java.util.Arrays;
 
 import org.knime.node.parameters.NodeParameters;
 import org.knime.node.parameters.Widget;
+import org.knime.node.parameters.layout.HorizontalLayout;
+import org.knime.node.parameters.layout.Layout;
 import org.knime.node.parameters.widget.choices.Label;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
@@ -82,14 +84,21 @@ final class PixiPackageSpec implements NodeParameters {
     @Widget(title = "Package name", description = "The name of the package")
     String m_packageName = "";
 
-    @Widget(title = "Source", description = "Package source (Conda or Pip)")
-    PackageSource m_source = PackageSource.CONDA;
+    @HorizontalLayout
+    interface PackageSpecDetailsSection {
+    }
 
+    @Layout(PackageSpecDetailsSection.class)
     @Widget(title = "Min version", description = "Minimum version (inclusive, optional)")
     String m_minVersion = "";
 
+    @Layout(PackageSpecDetailsSection.class)
     @Widget(title = "Max version", description = "Maximum version (exclusive, optional)")
     String m_maxVersion = "";
+
+    @Layout(PackageSpecDetailsSection.class)
+    @Widget(title = "Source", description = "Package source (Conda or Pip)")
+    PackageSource m_source = PackageSource.CONDA;
 
     PixiPackageSpec() {
     }

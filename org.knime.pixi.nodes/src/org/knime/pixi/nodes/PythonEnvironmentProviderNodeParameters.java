@@ -459,14 +459,14 @@ class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             if (!m_isCurrentLockUpToDateWithOtherSettingsSupplier.get()) {
                 LOGGER.debug("No lock file - showing info message");
                 return Optional.of(new TextMessage.Message("Lock file status",
-                    "No lock file generated yet. Click 'Check compatibility' to validate the environment.",
+                    "Dependencies not resolved. Click 'Resolve Dependencies' to validate the environment and generate the lock file.",
                     MessageType.INFO));
             }
 
             LOGGER.debug("Lock file present - showing success message");
             // If lock file exists and is not empty, it's valid
             return Optional.of(new TextMessage.Message("Environment validated",
-                "Environment validated successfully. Lock file generated.", MessageType.SUCCESS));
+                "Environment resolved successfully. Lock file generated.", MessageType.SUCCESS));
         }
     }
 }

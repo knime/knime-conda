@@ -125,7 +125,8 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                         lock file specification.
                         </p>""") //
             .sinceVersion(5, 11, 0)
-            .ports(p -> p.addOutputPort("Pixi Environment", "Pixi Python environment information",
+            .ports(p -> p.addOutputPort("Python Environment",
+                "Python environment information (pixi.toml and pixi.lock content)",
                 PythonEnvironmentPortObject.TYPE))
             .model(modelStage -> modelStage //
                 .parametersClass(PythonEnvironmentProviderNodeParameters.class) //

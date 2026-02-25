@@ -134,12 +134,12 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
         final Path resolvedInstallDir = installDir != null ? installDir : PixiEnvMapping.resolvePixiEnvDirectory(pixiLockContent);
 
         final var newFuture = new CompletableFuture<Void>();
-        final var existingFuture = GLOBAL_INSTALL_FUTURES.putIfAbsent(installDir, newFuture);
+        final var existingFuture = GLOBAL_INSTALL_FUTURES.putIfAbsent(resolvedInstallDir, newFuture);
 
         if (existingFuture == null) {
             // No other thread is installing to this directory — we are the installer.
             try {
-                performInstallation(exec, installDir, pixiTomlContent, pixiLockContent);
+                performInstallation(exec, resolvedInstallDir, pixiTomlContent, pixiLockContent);
                 newFuture.complete(null);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -160,8 +160,8 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
             } finally {
                 // Always remove the future once done (success, failure, or cancellation) to prevent stale entries
                 // from short-circuiting future independent executions.
-                System.out.println("Cleaning up installation future for directory: " + installDir);
-                GLOBAL_INSTALL_FUTURES.remove(installDir, newFuture);
+                System.out.println("Cleaning up installation future for directory: " + resolvedInstallDir);
+                GLOBAL_INSTALL_FUTURES.remove(resolvedInstallDir, newFuture);
             }
         } else {
             // Another thread is already installing to this directory — wait for it.

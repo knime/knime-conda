@@ -82,7 +82,7 @@ class TomlEditor implements NodeParameters {
 
             [dependencies]
             python = "3.14.*"
-            knime-python-base = "5.9.*"
+            knime-python-base = "*"
             """;
 
     interface TomlContentRef extends ParameterReference<String> {

@@ -122,7 +122,8 @@ public final class PythonEnvironmentProviderNodeFactory extends DefaultNodeFacto
                         <p>
                         <b>Note:</b> The actual Python environment is not created by this node. Instead, downstream
                         Python nodes will automatically create and cache the environment on first use based on the
-                        lock file specification.
+                        lock file specification. In the `conda` prefernce paga you can configure where the environments should be created and cached.
+                        By default, they are stored in temporary directories and automatically cleaned up. But you can also choose to store them in a fixed location.
                         </p>""") //
             .sinceVersion(5, 11, 0)
             .ports(p -> p.addOutputPort("Python Environment",

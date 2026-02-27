@@ -2,9 +2,9 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: KNIME Pixi Port
 Bundle-SymbolicName: org.knime.pixi.port;singleton:=true
-Bundle-Version: 5.11.0.qualifier
+Bundle-Version: 5.12.0.qualifier
 Bundle-Vendor: KNIME AG, Zurich, Switzerland
-Require-Bundle: org.knime.core;bundle-version="[5.11.0,6.0.0)",
+Require-Bundle: org.knime.core;bundle-version="[5.12.0,6.0.0)",
  org.knime.conda;bundle-version="[5.11.0,6.0.0)",
  org.knime.conda.envinstall;bundle-version="[5.11.0,6.0.0)",
  org.knime.externalprocessprovider;bundle-version="[5.11.0,6.0.0)"

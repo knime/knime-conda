@@ -77,11 +77,11 @@ final class PixiPackageSpec implements NodeParameters {
             @Label("Conda")
             CONDA,
 
-            @Label("Pip")
+            @Label("Pypi")
             PIP
     }
 
-    @Widget(title = "Package name", description = "The name of the package")
+    @Widget(title = "Package name", description = "The name of the package to install. E.g. 'python' or 'pandas'.")
     String m_packageName = "";
 
     @HorizontalLayout
@@ -89,25 +89,22 @@ final class PixiPackageSpec implements NodeParameters {
     }
 
     @Layout(PackageSpecDetailsSection.class)
-    @Widget(title = "Min version", description = "Minimum version (inclusive, optional)")
-    String m_minVersion = "";
+    @Widget(title = "Version",
+        description = "The version desired for this package. E.g. '3.11.*' or leave empty for no version constraint")
+    String m_version = "";
 
     @Layout(PackageSpecDetailsSection.class)
-    @Widget(title = "Max version", description = "Maximum version (exclusive, optional)")
-    String m_maxVersion = "";
-
-    @Layout(PackageSpecDetailsSection.class)
-    @Widget(title = "Source", description = "Package source (Conda or Pip)")
+    @Widget(title = "Source",
+        description = "Package source (Conda or Pypi). For control of channels, use the TOML editor mode.")
     PackageSource m_source = PackageSource.CONDA;
 
     PixiPackageSpec() {
     }
 
-    PixiPackageSpec(final String name, final PackageSource source, final String minVersion, final String maxVersion) {
+    PixiPackageSpec(final String name, final PackageSource source, final String version) {
         m_packageName = name;
         m_source = source;
-        m_minVersion = minVersion;
-        m_maxVersion = maxVersion;
+        m_version = version;
     }
 
     /**
@@ -165,17 +162,13 @@ final class PixiPackageSpec implements NodeParameters {
      * @return the formatted version constraint (e.g., ">=3.9,<=3.11" or "*")
      */
     static String formatVersionConstraint(final PixiPackageSpec pkg) {
-        boolean hasMin = pkg.m_minVersion != null && !pkg.m_minVersion.isBlank();
-        boolean hasMax = pkg.m_maxVersion != null && !pkg.m_maxVersion.isBlank();
+        boolean hasVersion = pkg.m_version != null && !pkg.m_version.isBlank();
 
-        if (hasMin && hasMax) {
-            return ">=" + pkg.m_minVersion + ",<=" + pkg.m_maxVersion;
-        } else if (hasMin) {
-            return ">=" + pkg.m_minVersion;
-        } else if (hasMax) {
-            return "<=" + pkg.m_maxVersion;
-        } else {
-            return "*";
+        if (hasVersion) {
+            // make sure version ends with ".*" to be compatible with pixi version specifiers
+            return pkg.m_version.endsWith(".*") ? pkg.m_version : pkg.m_version + ".*";
         }
+        return "*";
+
     }
 }

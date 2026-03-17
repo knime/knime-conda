@@ -90,7 +90,7 @@ final class PixiPackageSpec implements NodeParameters {
 
     @Layout(PackageSpecDetailsSection.class)
     @Widget(title = "Version",
-        description = "The version desired for this package. E.g. '3.11.*' or leave empty for no version constraint")
+        description = "The version desired for this package. E.g. '3.11.*' or leave empty for no version constraint. The version constraint can also be an operator (&lt;, &gt;, &lt;=, &gt;=) based version specifier like '&gt;=3.9,&lt;3.11'.")
     String m_version = "";
 
     @Layout(PackageSpecDetailsSection.class)

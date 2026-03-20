@@ -1,0 +1,3 @@
+Please see below the General Public License (GPL), Version 3,
+and the Additional Permissions according to Sec. 7
+applying to the files in this folder.

@@ -87,7 +87,7 @@ class YamlEditor implements NodeParameters {
               - conda-forge
             dependencies:
               - python=3.14.*
-              - knime-python-base=5.9.*
+              - knime-python-base=5.*
             """;
 
     interface YamlContentRef extends ParameterReference<String> {
@@ -95,7 +95,7 @@ class YamlEditor implements NodeParameters {
 
     @ValueProvider(TomlFromYamlProvider.class)
     @ValueReference(TomlFromYamlRef.class)
-    String m_tomlFromYaml = "ERROR";
+    String m_tomlFromYaml = "";
 
     interface TomlFromYamlRef extends ParameterReference<String> {
     }
@@ -106,6 +106,7 @@ class YamlEditor implements NodeParameters {
 
         @Override
         public void init(final StateProviderInitializer initializer) {
+            initializer.computeAfterOpenDialog();
             m_yamlContentSupplier = initializer.computeFromValueSupplier(YamlContentRef.class);
         }
 

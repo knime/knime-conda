@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>org.knime</groupId>
+    <artifactId>org.knime.pixi.port-fetch-jars</artifactId>
+    <version>${revision}${changelist}</version>
+    <packaging>pom</packaging>
+
+    <name>Jar fetcher for org.knime.pixi.port</name>
+    <description>
+        Running the maven goal &quot;package&quot; on this maven project will fetch all jars
+        required for
+        org.knime.pixi.port and put them into the lib/ directory.
+    </description>
+
+    <properties>
+        <revision>1.0.0</revision>
+        <changelist>-SNAPSHOT</changelist>
+    </properties>
+
+    <dependencies>
+        <dependency>
+		    <groupId>com.electronwill.night-config</groupId>
+		    <artifactId>toml</artifactId>
+		    <version>3.8.3</version>
+		</dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.1.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-sources</id>
+                        <configuration>
+                            <classifier>sources</classifier>
+                            <includeScope>runtime</includeScope>
+                            <outputDirectory>../</outputDirectory>
+                        </configuration>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <outputDirectory>../</outputDirectory>
+                        </configuration>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -224,7 +224,7 @@ class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     enum MainInputSource {
-            @Label("Packages")
+            @Label("Basic")
             SIMPLE,
 
             @Label("TOML editor")
@@ -234,7 +234,8 @@ class PythonEnvironmentProviderNodeParameters implements NodeParameters {
             YAML_EDITOR
     }
 
-    @Widget(title = "Input source", description = "Choose how to define the Python environment")
+    @Widget(title = "Input Mode",
+        description = "Choose how to define the Python environment (basic package list, raw TOML, or YAML environment input)")
     @Layout(MainInputSelectionSection.class)
     @ValueReference(MainInputSourceRef.class)
     @ValueSwitchWidget
@@ -277,8 +278,8 @@ class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     @ArrayWidget(elementLayout = ArrayWidget.ElementLayout.VERTICAL_CARD, addButtonText = "Add package")
     @ValueReference(PackageArrayRef.class)
     PixiPackageSpec[] m_packages = new PixiPackageSpec[]{ //
-        new PixiPackageSpec("python", PackageSource.CONDA, "3.14", "3.14"), //
-        new PixiPackageSpec("knime-python-base", PackageSource.CONDA, "5.9", "5.9") //
+        new PixiPackageSpec("python", PackageSource.CONDA, "3.14"), //
+        new PixiPackageSpec("knime-python-base", PackageSource.CONDA, "") // no version constraint for knime-python-base, to always get the latest compatible version with the KNIME version
     };
 
     interface PackageArrayRef extends ParameterReference<PixiPackageSpec[]> {

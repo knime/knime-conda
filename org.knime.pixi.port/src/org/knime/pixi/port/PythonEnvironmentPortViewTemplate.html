@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python Environment</title>
+<style>
+__STYLE__
+</style>
+</head>
+<body>
+<h3>Python Environment</h3>
+<div class="platform-selector">
+  <label for="platform">Platform:</label>
+  <select id="platform" onchange="updateView()">
+__PLATFORM_OPTIONS__
+  </select>
+</div>
+<div id="requested-section"></div>
+<div id="all-section"></div>
+<script>
+var requestedDeps = __REQUESTED_DEPS_JSON__;
+var allPackages = __ALL_PACKAGES_JSON__;
+var defaultPlatform = "__DEFAULT_PLATFORM__";
+__SCRIPT__
+</script>
+</body>
+</html>

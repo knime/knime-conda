@@ -35,6 +35,7 @@
 		<module>org.knime.pixi.nodes/lib/fetch_jars</module>
 		<module>org.knime.pixi.nodes</module>
 		<module>org.knime.pixi.nodes.tests</module>
+		<module>org.knime.pixi.nodes.yaml.tests</module>
 		<module>org.knime.conda.envbundling</module>
 		<module>org.knime.conda.envinstall</module>
 		<module>org.knime.conda.envinstall.tests</module>

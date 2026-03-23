@@ -37,6 +37,11 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
     /** The port type for Python environment port objects. */
     public static final PortType TYPE = PortTypeRegistry.getInstance().getPortType(PythonEnvironmentPortObject.class);
 
+    static {
+        // Ensure the port view factory is registered when this class is loaded
+        PythonEnvironmentPortViewFactory.ensureRegistered();
+    }
+
     private static final NodeLogger LOGGER = NodeLogger.getLogger(PythonEnvironmentPortObject.class);
 
     private static final String CFG_PIXI_TOML_CONTENT = "pixi_toml_content";
@@ -54,6 +59,20 @@ public final class PythonEnvironmentPortObject extends AbstractSimplePortObject 
     private String m_pixiTomlContent;
 
     private String m_pixiLockContent;
+
+    /**
+     * @return the raw pixi.toml content, or {@code null} if not set
+     */
+    String getPixiTomlContent() {
+        return m_pixiTomlContent;
+    }
+
+    /**
+     * @return the raw pixi.lock content, or {@code null} if not set
+     */
+    String getPixiLockContent() {
+        return m_pixiLockContent;
+    }
 
     /**
      * Serializer for {@link PythonEnvironmentPortObject}.

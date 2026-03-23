@@ -1,0 +1,12 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: KNIME Pixi YAML Importer Tests
+Bundle-SymbolicName: org.knime.pixi.nodes.yaml.tests;singleton:=true
+Bundle-Version: 5.12.0.qualifier
+Bundle-Vendor: KNIME AG, Zurich, Switzerland
+Bundle-ClassPath: .
+Fragment-Host: org.knime.pixi.nodes;bundle-version="[5.12.0,6.0.0)"
+Require-Bundle: junit-jupiter-api;bundle-version="5.10.2",
+ org.knime.conda.envinstall;bundle-version="[5.11.0,6.0.0)"
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+Automatic-Module-Name: org.knime.pixi.nodes.yaml.tests

@@ -235,7 +235,8 @@ class PythonEnvironmentProviderNodeParameters implements NodeParameters {
     }
 
     @Widget(title = "Input Mode",
-        description = "Choose how to define the Python environment (basic package list, raw TOML, or YAML environment input)")
+        description = "Choose how to define the Python environment "
+            + "(basic package list, raw TOML, or YAML environment input)")
     @Layout(MainInputSelectionSection.class)
     @ValueReference(MainInputSourceRef.class)
     @ValueSwitchWidget

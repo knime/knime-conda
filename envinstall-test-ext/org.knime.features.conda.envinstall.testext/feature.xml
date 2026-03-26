@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <feature
-      id="org.knime.features.conda.envinstall.testext"
-      label="Test Extension for Conda Environment Bundling"
-      version="5.6.0.qualifier"
-      provider-name="KNIME AG, Zurich, Switzerland">
+  id="org.knime.features.conda.envinstall.testext"
+  label="Test Extension for Conda Environment Bundling"
+  version="5.8.2.qualifier"
+  provider-name="KNIME AG, Zurich, Switzerland">
 
    <description>
       This KNIME labs extension is used to start and remote interact with a browser through KNIME.

@@ -14,7 +14,7 @@
 	<packaging>pom</packaging>
 
 	<properties>
-		<revision>5.8.1</revision>
+		<revision>5.8.2</revision>
 		<changelist>-SNAPSHOT</changelist>
 		<feature-branch-extension.branchListProperty>git.branch</feature-branch-extension.branchListProperty>
 		<feature-branch-extension.appendArtifactoryProperties>false</feature-branch-extension.appendArtifactoryProperties>
@@ -46,6 +46,11 @@
 
 	<!-- List all repositories required for compilation here. The variables are defined in knime-maven-parent/pom.xml. -->
 	<repositories>
+		<repository>
+			<id>p2-knime-product</id>
+			<layout>p2</layout>
+			<url>${knime.product.p2}</url>
+		</repository>
 		<repository>
 			<id>p2-knime-core</id>
 			<layout>p2</layout>
@@ -80,6 +85,16 @@
 			<id>p2-knime-filehandling-core</id>
 			<layout>p2</layout>
 			<url>${knime.filehandling.core.p2}</url>
+		</repository>
+		<repository>
+			<id>p2-knime-js-swt</id>
+			<layout>p2</layout>
+			<url>${knime.js.base.p2}</url>
+		</repository>
+		<repository>
+			<id>p2-knime-gateway</id>
+			<layout>p2</layout>
+			<url>${knime.gateway.p2}</url>
 		</repository>
 	</repositories>
 

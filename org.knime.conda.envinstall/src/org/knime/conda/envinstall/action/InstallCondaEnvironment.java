@@ -160,13 +160,20 @@ public final class InstallCondaEnvironment {
     /** The name of the file that contains the path to the environment location */
     public static final String ENVIRONMENT_PATH_FILE = "environment_path.txt";
 
-    /** Whether to install the conda environments on startup instead of installation time. */
-    public static final boolean INSTALL_CONDA_ENVIRONMENT_ON_STARTUP =
-        Boolean.getBoolean("knime.conda.install_envs_on_startup");
-
-    private static final String PIXI_CACHE_DIRECTORY_NAME = ".pixi-cache";
+    /** The directory name of the pixi cache directory. The directory is located inside the bundling root. */
+    public static final String PIXI_CACHE_DIRECTORY_NAME = ".pixi-cache";
 
     private InstallCondaEnvironment() {
+    }
+
+    /**
+     * Resolves the path to the actual Python environment from a pixi project root.
+     *
+     * @param pixiProjectRoot the root directory containing pixi.toml
+     * @return the path to the Python environment (pixiProjectRoot/.pixi/envs/default)
+     */
+    public static Path resolvePixiEnvironmentPath(final Path pixiProjectRoot) {
+        return pixiProjectRoot.resolve(".pixi").resolve("envs").resolve("default");
     }
 
     /* --------------------------------------------------------------------- */
@@ -345,6 +352,24 @@ public final class InstallCondaEnvironment {
      */
     public static Path installCondaEnvironment(final Path artifactLocation, final Path envDestinationRoot,
         final Path bundlingRoot) throws IOException, PixiBinaryLocationException, InterruptedException {
+        return installCondaEnvironment(artifactLocation, envDestinationRoot, bundlingRoot, null);
+    }
+
+    /**
+     * Install the Conda environment with cancellation support.
+     *
+     * @param artifactLocation the location of the fragment that contains the environment to install
+     * @param envDestinationRoot the root directory where the environment will be installed
+     * @param bundlingRoot the bundling root directory, where the pixi cache will be stored
+     * @param cancellationCallback callback to check for cancellation (may be null)
+     * @return the path to the created environment
+     * @throws IOException if the installation fails because of an I/O error
+     * @throws PixiBinaryLocationException if the pixi binary could not be located
+     * @throws InterruptedException if waiting for {@code pixi install} to finish was interrupted or cancelled
+     */
+    public static Path installCondaEnvironment(final Path artifactLocation, final Path envDestinationRoot,
+        final Path bundlingRoot, final java.util.function.BooleanSupplier cancellationCallback)
+        throws IOException, PixiBinaryLocationException, InterruptedException {
         var envResourcesFolder = artifactLocation.resolve("env");
         /* ------------------------------------------------------------- */
         /* 1) Create the environment root directory                      */
@@ -375,14 +400,14 @@ public final class InstallCondaEnvironment {
         /* ------------------------------------------------------------- */
         var pixiCacheDir = bundlingRoot.resolve(PIXI_CACHE_DIRECTORY_NAME).toAbsolutePath().toString();
         var envVars = Map.of("PIXI_CACHE_DIR", pixiCacheDir);
-        var installResult = PixiBinary.callPixi(envDestinationRoot, envVars, "install", "--frozen");
+        var installResult = PixiBinary.callPixiWithCancellation(envDestinationRoot, envVars, cancellationCallback, "install", "--frozen");
         if (!installResult.isSuccess()) {
             var failureDetails = formatPixiFailure("pixi install", installResult);
             logError(failureDetails);
             throw new IOException("Installing the Pixi environment failed: " + failureDetails);
         }
 
-        return envDestinationRoot.resolve(".pixi").resolve("envs").resolve("default");
+        return resolvePixiEnvironmentPath(envDestinationRoot);
     }
 
     /* --------------------------------------------------------------------- */
@@ -490,43 +515,24 @@ public final class InstallCondaEnvironment {
     /* Actions                                                               */
     /* --------------------------------------------------------------------- */
 
-    /** Installs the environment contained in the fragment bundle. See {@link InstallCondaEnvironment} for details. */
+    /**
+     * Was used to install the environment contained in the fragment bundle during fragment installation until 5.8.
+     * Environments are installed during startup by default since 5.8.2.
+     *
+     * However, some plug-ins might still have a call to this action in their p2.inf, and thus we keep the action as
+     * empty placeholder.
+     */
     public static final class InstallAction extends ProvisioningAction {
 
         @Override
         public IStatus execute(final Map<String, Object> parameterMap) {
-            if (INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
-                logInfo("Conda environment installation is configured to run on startup, skipping execution.");
-                return Status.OK_STATUS;
-            }
-
-            try {
-                var p = Parameters.from(parameterMap);
-                installEnvironmentFromAction(p.directory, p.name);
-            } catch (Exception e) {
-                logError("Exception while installing environment: " + e.getMessage(), e);
-                return Status.error("Running InstallCondaEnvironment action failed", e);
-            }
-
+            logInfo("Conda environment installation will run on startup, skipping it during plugin installation.");
             return Status.OK_STATUS;
         }
 
         @Override
         public IStatus undo(final Map<String, Object> parameterMap) {
-            if (INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
-                // We did not do anything on install, so we do not need to undo anything.
-                logInfo("Conda environment installation is configured to run on startup, skipping undo.");
-                return Status.OK_STATUS;
-            }
-
-            try {
-                var p = Parameters.from(parameterMap);
-                uninstallEnvironment(p.directory, p.name);
-            } catch (Exception e) {
-                logError("Exception while undoing InstallCondaEnvironment: " + e.getMessage(), e);
-                return Status.error("Undoing InstallCondaEnvironment action failed", e);
-            }
-
+            logInfo("Conda environment installation will run on startup, nothing to undo.");
             return Status.OK_STATUS;
         }
     }
@@ -536,8 +542,8 @@ public final class InstallCondaEnvironment {
 
         @Override
         public IStatus execute(final Map<String, Object> parameterMap) {
-            // NOTE: We run the uninstall action even if the environment installation is configured to run on startup.
-            // to delete the environment in the installation directory.
+            // NOTE: We run the uninstall action even though environments are installed
+            // during startup, because we want to delete the environment from the installation directory.
             try {
                 // TODO(AP-24745) check if this fails if the environment was not installed before
                 var p = Parameters.from(parameterMap);
@@ -552,15 +558,9 @@ public final class InstallCondaEnvironment {
 
         @Override
         public IStatus undo(final Map<String, Object> parameterMap) {
-            if (INSTALL_CONDA_ENVIRONMENT_ON_STARTUP) {
-                // The uninstall might have deleted the environment, but this is no problem because we are configured to
-                // install the environment on startup anyway.
-                logInfo(
-                    "Conda environment installation is configured to run on startup, skipping undoing the uninstall.");
-                return Status.OK_STATUS;
-            }
-
-            // Undo the uninstall action by installing the environment again
+            // When undoing the uninstall action, the environment needs to be re-installing immediately
+            // instead of waiting until startup, because a failed uninstallation should look to the user
+            // as if nothing has changed, including that the Python environment still exists.
             try {
                 var p = Parameters.from(parameterMap);
                 installEnvironmentFromAction(p.directory, p.name);
@@ -582,6 +582,13 @@ public final class InstallCondaEnvironment {
             + "\nSTDERR:\n" + result.stderr();
     }
 
+    /**
+     * Determines the bundling root path, respecting the KNIME_PYTHON_BUNDLING_PATH environment variable.
+     *
+     * @param installationRoot the KNIME installation root directory
+     * @return the path to the bundling root directory
+     * @throws IOException if the bundling directory cannot be created
+     */
     private static Path getBundlingRoot(final Path installationRoot) throws IOException {
         var bundlingPathFromVar = System.getenv("KNIME_PYTHON_BUNDLING_PATH");
         Path path;
